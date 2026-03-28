@@ -1,3 +1,4 @@
+/** @file Mongoose model: department document (name, head, nested teams/positions in schema). */
 import { Schema, model } from "mongoose";
 
 const TeamSchema = new Schema(

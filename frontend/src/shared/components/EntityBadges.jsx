@@ -1,0 +1,224 @@
+import {
+  Building2,
+  CheckCircle2,
+  Plane,
+  UserMinus,
+  Ban,
+  MinusCircle,
+  Shield,
+  Users,
+  Briefcase,
+  UserRound,
+  Crown,
+} from "lucide-react";
+
+/** @param {string} s */
+function hashString(s) {
+  let h = 0;
+  const str = String(s || "");
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+const DEPT_STYLES = [
+  { wrap: "bg-sky-50 text-sky-900 border-sky-200", icon: "text-sky-600" },
+  { wrap: "bg-violet-50 text-violet-900 border-violet-200", icon: "text-violet-600" },
+  { wrap: "bg-emerald-50 text-emerald-900 border-emerald-200", icon: "text-emerald-600" },
+  { wrap: "bg-amber-50 text-amber-900 border-amber-200", icon: "text-amber-600" },
+  { wrap: "bg-rose-50 text-rose-900 border-rose-200", icon: "text-rose-600" },
+  { wrap: "bg-cyan-50 text-cyan-900 border-cyan-200", icon: "text-cyan-600" },
+  { wrap: "bg-indigo-50 text-indigo-900 border-indigo-200", icon: "text-indigo-600" },
+  { wrap: "bg-fuchsia-50 text-fuchsia-900 border-fuchsia-200", icon: "text-fuchsia-600" },
+];
+
+/**
+ * Stable color per department name + building icon.
+ * @param {{ name: string, className?: string }} props
+ */
+export function DepartmentBadge({ name, className = "" }) {
+  const label = name?.trim() || "—";
+  const style = DEPT_STYLES[hashString(label) % DEPT_STYLES.length];
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium ${style.wrap} ${className}`}
+    >
+      <Building2 className={`h-3.5 w-3.5 shrink-0 ${style.icon}`} aria-hidden />
+      <span className="truncate max-w-[14rem]">{label}</span>
+    </span>
+  );
+}
+
+const STATUS_CONFIG = {
+  ACTIVE: {
+    label: "Active",
+    Icon: CheckCircle2,
+    className: "bg-emerald-50 text-emerald-900 border-emerald-200",
+    iconClass: "text-emerald-600",
+  },
+  ON_LEAVE: {
+    label: "On leave",
+    Icon: Plane,
+    className: "bg-amber-50 text-amber-900 border-amber-200",
+    iconClass: "text-amber-600",
+  },
+  RESIGNED: {
+    label: "Resigned",
+    Icon: UserMinus,
+    className: "bg-slate-100 text-slate-800 border-slate-200",
+    iconClass: "text-slate-500",
+  },
+  TERMINATED: {
+    label: "Terminated",
+    Icon: Ban,
+    className: "bg-red-50 text-red-900 border-red-200",
+    iconClass: "text-red-600",
+  },
+};
+
+/**
+ * Employment / record status with icon.
+ * @param {{ status?: string, className?: string }} props
+ */
+export function StatusBadge({ status, className = "" }) {
+  const key = status && STATUS_CONFIG[status] ? status : "_OTHER";
+  const conf =
+    key === "_OTHER"
+      ? {
+          label: status || "—",
+          Icon: MinusCircle,
+          className: "bg-zinc-100 text-zinc-700 border-zinc-200",
+          iconClass: "text-zinc-500",
+        }
+      : STATUS_CONFIG[status];
+
+  const Icon = conf.Icon;
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium capitalize ${conf.className} ${className}`}
+    >
+      <Icon className={`h-3.5 w-3.5 shrink-0 ${conf.iconClass}`} aria-hidden />
+      {conf.label}
+    </span>
+  );
+}
+
+const ROLE_CONFIG = {
+  ADMIN: {
+    label: "Admin",
+    Icon: Crown,
+    className: "bg-violet-50 text-violet-900 border-violet-200",
+    iconClass: "text-violet-600",
+    statInactive:
+      "border-violet-200 bg-violet-50/40 hover:bg-violet-50 hover:border-violet-300",
+    statActive: "border-violet-600 bg-violet-600 shadow-md",
+    statCountInactive: "text-violet-950",
+    statLabelInactive: "text-violet-700",
+  },
+  HR_STAFF: {
+    label: "HR Staff",
+    Icon: Users,
+    className: "bg-emerald-50 text-emerald-900 border-emerald-200",
+    iconClass: "text-emerald-600",
+    statInactive:
+      "border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 hover:border-emerald-300",
+    statActive: "border-emerald-600 bg-emerald-600 shadow-md",
+    statCountInactive: "text-emerald-950",
+    statLabelInactive: "text-emerald-800",
+  },
+  MANAGER: {
+    label: "Manager",
+    Icon: Briefcase,
+    className: "bg-sky-50 text-sky-900 border-sky-200",
+    iconClass: "text-sky-600",
+    statInactive: "border-sky-200 bg-sky-50/40 hover:bg-sky-50 hover:border-sky-300",
+    statActive: "border-sky-600 bg-sky-600 shadow-md",
+    statCountInactive: "text-sky-950",
+    statLabelInactive: "text-sky-800",
+  },
+  TEAM_LEADER: {
+    label: "Team Leader",
+    Icon: Shield,
+    className: "bg-amber-50 text-amber-900 border-amber-200",
+    iconClass: "text-amber-600",
+    statInactive:
+      "border-amber-200 bg-amber-50/40 hover:bg-amber-50 hover:border-amber-300",
+    statActive: "border-amber-600 bg-amber-600 shadow-md",
+    statCountInactive: "text-amber-950",
+    statLabelInactive: "text-amber-800",
+  },
+  EMPLOYEE: {
+    label: "Employee",
+    Icon: UserRound,
+    className: "bg-zinc-100 text-zinc-800 border-zinc-200",
+    iconClass: "text-zinc-500",
+    statInactive: "border-zinc-200 bg-zinc-50 hover:bg-zinc-100 hover:border-zinc-300",
+    statActive: "border-zinc-800 bg-zinc-800 shadow-md",
+    statCountInactive: "text-zinc-900",
+    statLabelInactive: "text-zinc-600",
+  },
+};
+
+function normaliseRoleKey(r) {
+  if (r === 3 || r === "ADMIN") return "ADMIN";
+  if (r === 2 || r === "MANAGER") return "MANAGER";
+  if (r === "HR_STAFF") return "HR_STAFF";
+  if (r === "TEAM_LEADER") return "TEAM_LEADER";
+  return "EMPLOYEE";
+}
+
+/**
+ * System role badge with icon (accounts / permissions).
+ * @param {{ role: string | number, className?: string }} props
+ */
+export function RoleBadge({ role, className = "" }) {
+  const key = normaliseRoleKey(role);
+  const conf = ROLE_CONFIG[key] ?? ROLE_CONFIG.EMPLOYEE;
+  const Icon = conf.Icon;
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${conf.className} ${className}`}
+    >
+      <Icon className={`h-3.5 w-3.5 shrink-0 ${conf.iconClass}`} aria-hidden />
+      {conf.label}
+    </span>
+  );
+}
+
+/**
+ * Role filter stat card (users admin).
+ * @param {{ roleKey: string, selected: boolean, count: number, onToggle: () => void }} props
+ */
+export function RoleStatCard({ roleKey, selected, count, onToggle }) {
+  const conf = ROLE_CONFIG[roleKey] ?? ROLE_CONFIG.EMPLOYEE;
+  const Icon = conf.Icon;
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`group flex flex-col gap-1 rounded-lg border p-4 text-left transition-colors ${
+        selected ? conf.statActive : conf.statInactive
+      }`}
+    >
+      <span
+        className={`flex items-center gap-2 text-2xl font-semibold tabular-nums ${
+          selected ? "text-white" : conf.statCountInactive
+        }`}
+      >
+        <Icon
+          className={`h-5 w-5 shrink-0 ${selected ? "text-white/90" : conf.iconClass}`}
+          aria-hidden
+        />
+        {count}
+      </span>
+      <span
+        className={`text-xs font-medium ${
+          selected ? "text-white/85" : conf.statLabelInactive
+        }`}
+      >
+        {conf.label}
+      </span>
+    </button>
+  );
+}
+
+export { normaliseRoleKey, ROLE_CONFIG };

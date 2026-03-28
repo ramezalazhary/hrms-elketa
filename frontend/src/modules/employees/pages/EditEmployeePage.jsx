@@ -78,7 +78,7 @@ export function EditEmployeePage() {
       }
     >
       {showResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/30 backdrop-blur-[2px] p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl relative z-10 animate-in zoom-in duration-200">
             <h2 className="text-xl font-bold text-slate-800 mb-2">Reset User Password</h2>
             <p className="text-sm text-slate-600 mb-6">

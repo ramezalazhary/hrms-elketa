@@ -1,3 +1,10 @@
+/**
+ * @file Express application entry. Loads env, connects MongoDB, mounts `/api/*` routers,
+ * applies security headers + CORS + rate limiting, and registers 404 / global error handlers.
+ *
+ * Startup flow: `dotenv` → `express()` + `express.json()` → `securityHeaders` → `cors` → `apiLimiter` →
+ * route mounts → 404 → error middleware → `connectDb()` → `listen(PORT)`.
+ */
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -11,7 +18,6 @@ import teamsRouter from "./routes/teams.js";
 import positionsRouter from "./routes/positions.js";
 import employmentsRouter from "./routes/employments.js";
 import reportsRouter from "./routes/reports.js";
-import attendanceRouter from "./routes/attendance.js";
 import { securityHeaders, apiLimiter } from "./middleware/security.js";
 
 dotenv.config();
@@ -19,10 +25,8 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// Security middleware
 app.use(securityHeaders);
 
-// CORS configuration
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:5173",
@@ -32,10 +36,8 @@ app.use(
   }),
 );
 
-// Rate limiting
 app.use("/api/", apiLimiter);
 
-// API routes
 app.use("/api/auth", authRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/permissions", permissionsRouter);
@@ -45,18 +47,19 @@ app.use("/api/positions", positionsRouter);
 app.use("/api/employees", employeesRouter);
 app.use("/api/employments", employmentsRouter);
 app.use("/api/reports", reportsRouter);
-app.use("/api/attendance", attendanceRouter);
 
-// 404 handler
+/** Unmatched `/api/*` paths return JSON 404 (does not catch non-API routes if added later). */
 app.use("/api/*", (req, res) => {
   res.status(404).json({ error: "API endpoint not found" });
 });
 
-// Global error handler
+/**
+ * Express error handler: logs stack in development, generic message in production.
+ * @param {Error} err
+ */
 app.use((err, req, res, next) => {
   console.error("Global error:", err);
 
-  // Don't leak error details in production
   const isDevelopment = process.env.NODE_ENV !== "production";
 
   res.status(err.status || 500).json({
@@ -65,7 +68,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-const port = Number(process.env.PORT) || 5000;
+const port = Number(process.env.PORT) || 5050;
 
 connectDb()
   .then(() => {

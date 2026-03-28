@@ -168,7 +168,7 @@ export function ReportsPage() {
                 render: (row) => (
                   <a
                     href={`/employments/assign?employeeId=${row.id || row._id}`}
-                    className="text-blue-600"
+                    className="text-zinc-800 hover:underline"
                   >
                     Assign Now
                   </a>

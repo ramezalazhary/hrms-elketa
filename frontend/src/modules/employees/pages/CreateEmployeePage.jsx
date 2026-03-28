@@ -4,7 +4,7 @@ import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { createEmployeeThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 
 export function CreateEmployeePage() {
@@ -18,34 +18,82 @@ export function CreateEmployeePage() {
     dispatch(fetchDepartmentsThunk());
   }, [dispatch]);
 
+  const devDemoFill = useMemo(() => {
+    if (!import.meta.env.DEV) return undefined;
+    return {
+      label: "Fill demo data",
+      getValues: () => {
+        const d = departments[0];
+        const teamName = d?.teams?.[0]?.name ?? "";
+        return {
+          fullName: "Demo Employee",
+          dateOfBirth: "1990-06-15",
+          gender: "MALE",
+          maritalStatus: "SINGLE",
+          nationality: "Demo",
+          idNumber: "",
+          email: `demo.employee.${Date.now()}@example.com`,
+          workEmail: "",
+          phoneNumber: "+10000000000",
+          address: "123 Demo Street",
+          employeeCode: "",
+          position: "Software Engineer",
+          department: d?.name ?? "",
+          team: teamName,
+          workLocation: "Remote",
+          onlineStorageLink: "",
+          dateOfHire: new Date().toISOString().slice(0, 10),
+          employmentType: "FULL_TIME",
+          status: "ACTIVE",
+          insuranceProvider: "Demo Insurance",
+          insurancePolicy: "POL-DEMO-001",
+          insuranceCoverage: "HEALTH",
+          baseSalary: "75000",
+          currency: "USD",
+        };
+      },
+    };
+  }, [departments]);
+
   if (provisionedData) {
     return (
-      <Layout title="Employee Created Successfully">
-        <div className="rounded-lg bg-green-50 p-6 shadow-sm border border-green-200">
-          <h2 className="text-xl font-bold text-green-800 mb-4">Account Auto-Provisioned!</h2>
-          <p className="mb-2 text-green-900">
-            A secure user vault has been automatically generated for <strong>{provisionedData.email}</strong>.
-          </p>
-          <div className="bg-white p-4 rounded border border-green-300 my-4 flex justify-between items-center">
-             <div>
-                <p className="text-sm text-slate-500 uppercase tracking-wider">Temporary Password</p>
-                <p className="font-mono text-xl font-bold">{provisionedData.defaultPassword}</p>
-             </div>
-             <button 
-                onClick={() => navigator.clipboard.writeText(provisionedData.defaultPassword)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium transition-colors"
-              >
-                Copy
-              </button>
+      <Layout
+        title="Employee created"
+        description="A login was created with a temporary password."
+      >
+        <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-card space-y-5 max-w-xl">
+          <div>
+            <p className="text-sm text-zinc-700">
+              Sign-in was enabled for <span className="font-medium text-zinc-900">{provisionedData.email}</span>.
+              Share the temporary password through a secure channel (not email, if possible).
+            </p>
           </div>
-          <p className="text-sm text-green-700 italic mb-6">
-            Please securely share this password with the employee. They will be forced to change it upon their first login.
-          </p>
-          <button 
+          <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Temporary password</p>
+              <p className="font-mono text-lg font-medium text-zinc-900 mt-1">{provisionedData.defaultPassword}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText(provisionedData.defaultPassword);
+              }}
+              className="px-3 py-2 rounded-md border border-zinc-200 bg-white text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+            >
+              Copy
+            </button>
+          </div>
+          <ol className="text-sm text-zinc-600 space-y-2 list-decimal list-inside border-t border-zinc-100 pt-4">
+            <li>They open <strong>Sign in</strong> and use this email and temporary password.</li>
+            <li>They are taken to <strong>Change password</strong> and must pick a new password before using the app.</li>
+            <li>If they forget before changing it, they can use <strong>Forgot password</strong> so an admin can set another temporary password.</li>
+          </ol>
+          <button
+            type="button"
             onClick={() => navigate("/employees")}
-            className="w-full sm:w-auto px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium transition-colors"
+            className="w-full sm:w-auto px-4 py-2 bg-zinc-900 text-white rounded-md hover:bg-zinc-800 text-sm font-medium"
           >
-            Acknowledge & Return to Directory
+            Back to employees
           </button>
         </div>
       </Layout>
@@ -59,6 +107,7 @@ export function CreateEmployeePage() {
     >
       <FormBuilder
         onCancel={() => navigate("/employees")}
+        devDemoFill={devDemoFill}
         fields={[
           { type: "section", label: "1. Personal Information" },
           { name: "fullName", label: "Full Name", type: "text", required: true },
@@ -161,19 +210,32 @@ export function CreateEmployeePage() {
         submitLabel="Create Employee"
         onSubmit={async (values) => {
           try {
-            const payload = { ...values };
+            const {
+              insuranceProvider,
+              insurancePolicy,
+              insuranceCoverage,
+              baseSalary,
+              currency,
+              ...rest
+            } = values;
+
+            const payload = { ...rest };
+            for (const key of ["dateOfBirth", "dateOfHire"]) {
+              if (payload[key] === "") delete payload[key];
+            }
+
             payload.insurance = {
-              provider: values.insuranceProvider || undefined,
-              policyNumber: values.insurancePolicy || undefined,
-              coverageType: values.insuranceCoverage || 'HEALTH'
+              provider: insuranceProvider || undefined,
+              policyNumber: insurancePolicy || undefined,
+              coverageType: insuranceCoverage || "HEALTH",
             };
             payload.financial = {
-              baseSalary: Number(values.baseSalary) || undefined,
-              currency: values.currency || 'USD'
+              baseSalary: baseSalary === "" ? undefined : Number(baseSalary),
+              currency: currency || "USD",
             };
 
             const response = await dispatch(createEmployeeThunk(payload)).unwrap();
-            
+
             if (response.userProvisioned) {
               setProvisionedData({ email: values.email, defaultPassword: response.defaultPassword });
             } else {
@@ -182,7 +244,12 @@ export function CreateEmployeePage() {
             }
           } catch (error) {
             console.error(error);
-            showToast("Failed to create employee", "error");
+            const msg =
+              error?.error ||
+              error?.message ||
+              (typeof error === "string" ? error : null) ||
+              "Failed to create employee";
+            showToast(msg, "error");
           }
         }}
       />

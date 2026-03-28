@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "seed": "node src/seedUsers.js",
+    "test:permissions": "node scripts/permission-smoke.mjs",
     "start": "node src/index.js"
   },
   "dependencies": {

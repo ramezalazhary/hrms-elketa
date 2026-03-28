@@ -6,14 +6,17 @@ import { Pagination } from "@/shared/components/Pagination";
 import { Link } from "react-router-dom";
 import { useAppSelector, useAppDispatch } from "@/shared/hooks/reduxHooks";
 import { fetchPositionsThunk } from "../store";
+import { DepartmentBadge, StatusBadge } from "@/shared/components/EntityBadges";
 
 export function PositionsListPage() {
   const dispatch = useAppDispatch();
   const positions = useAppSelector((state) => state.positions?.items || []);
   const departments = useAppSelector((state) => state.departments?.items || []);
   const teams = useAppSelector((state) => state.teams?.items || []);
-  const isLoading = useAppSelector((state) => state.positions?.isLoading || false);
-  
+  const isLoading = useAppSelector(
+    (state) => state.positions?.isLoading || false,
+  );
+
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 5;
@@ -35,15 +38,15 @@ export function PositionsListPage() {
             ? teams.find((t) => t.id === position.teamId)?.name
             : "—",
       })),
-    [positions, departments, teams]
+    [positions, departments, teams],
   );
 
   const filtered = useMemo(
     () =>
       positionsWithNames.filter((position) =>
-        position.title.toLowerCase().includes(search.toLowerCase())
+        position.title.toLowerCase().includes(search.toLowerCase()),
       ),
-    [positionsWithNames, search]
+    [positionsWithNames, search],
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -62,17 +65,25 @@ export function PositionsListPage() {
         />
         <Link
           to="/positions/create"
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          className="px-3 py-2 bg-zinc-900 text-white text-sm font-medium rounded-md hover:bg-zinc-800"
         >
           + Create Position
         </Link>
       </div>
 
       {isLoading ? (
-        <div className="text-center py-8 text-gray-600">Loading positions...</div>
+        <div className="text-center py-8 text-gray-600">
+          Loading positions...
+        </div>
       ) : positions.length === 0 ? (
         <div className="text-center py-8 text-gray-600">
-          No positions found. <Link to="/positions/create" className="text-blue-500 hover:underline">Create one</Link>
+          No positions found.{" "}
+          <Link
+            to="/positions/create"
+            className="text-zinc-700 hover:underline"
+          >
+            Create one
+          </Link>
         </div>
       ) : (
         <>
@@ -91,7 +102,7 @@ export function PositionsListPage() {
               {
                 key: "departmentName",
                 header: "Department",
-                render: (row) => row.departmentName,
+                render: (row) => <DepartmentBadge name={row.departmentName} />,
               },
               {
                 key: "teamName",
@@ -101,17 +112,7 @@ export function PositionsListPage() {
               {
                 key: "status",
                 header: "Status",
-                render: (row) => (
-                  <span
-                    className={`px-2 py-1 rounded text-sm ${
-                      row.status === "ACTIVE"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-gray-100 text-gray-800"
-                    }`}
-                  >
-                    {row.status}
-                  </span>
-                ),
+                render: (row) => <StatusBadge status={row.status} />,
               },
               {
                 key: "actions",
@@ -119,7 +120,7 @@ export function PositionsListPage() {
                 render: (row) => (
                   <Link
                     to={`/positions/${row.id}/edit`}
-                    className="text-blue-500 hover:underline"
+                    className="text-zinc-700 hover:underline"
                   >
                     Edit
                   </Link>
@@ -135,10 +136,6 @@ export function PositionsListPage() {
           />
         </>
       )}
-    </Layout>
-  );
-}
-      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </Layout>
   );
 }

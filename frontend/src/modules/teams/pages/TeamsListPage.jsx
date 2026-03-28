@@ -6,6 +6,7 @@ import { Pagination } from "@/shared/components/Pagination";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { fetchTeamsThunk } from "../store";
+import { DepartmentBadge, StatusBadge } from "@/shared/components/EntityBadges";
 
 export function TeamsListPage() {
   const dispatch = useAppDispatch();
@@ -53,21 +54,27 @@ export function TeamsListPage() {
           {
             key: "department",
             header: "Department",
-            render: (row) => row.departmentId?.name || "-",
+            render: (row) => (
+              <DepartmentBadge name={row.departmentId?.name || "—"} />
+            ),
           },
           {
             key: "managerEmail",
             header: "Manager",
             render: (row) => row.managerEmail || "-",
           },
-          { key: "status", header: "Status", render: (row) => row.status },
+          {
+            key: "status",
+            header: "Status",
+            render: (row) => <StatusBadge status={row.status} />,
+          },
           {
             key: "actions",
             header: "Actions",
             render: (row) => (
               <button
                 onClick={() => navigate(`/teams/${row.id}/edit`)}
-                className="text-blue-600"
+                className="text-zinc-800 hover:underline"
               >
                 Edit
               </button>

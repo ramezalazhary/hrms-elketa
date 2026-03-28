@@ -7,6 +7,7 @@ import { Pagination } from "@/shared/components/Pagination";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { useToast } from "@/shared/components/ToastProvider";
 import { fetchEmployeesThunk, deleteEmployeeThunk } from "../store";
+import { DepartmentBadge, StatusBadge } from "@/shared/components/EntityBadges";
 
 export function EmployeesListPage() {
   const dispatch = useAppDispatch();
@@ -65,7 +66,7 @@ export function EmployeesListPage() {
     actions={
         (["ADMIN", "HR_STAFF", "MANAGER", 2, 3].includes(role)) ? (
           <Link
-            className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/30"
+            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-card transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400"
             to="/employees/create"
           >
             + Create Employee
@@ -131,14 +132,23 @@ export function EmployeesListPage() {
             header: "Name",
             render: (row) => (
               <Link className="underline underline-offset-4" to={`/employees/${row.id}`}>
-                <span className="font-medium text-blue-700 hover:text-blue-800">
+                <span className="font-medium text-zinc-900 hover:underline">
                   {row.fullName}
                 </span>
               </Link>
             ),
           },
           { key: "email", header: "Email", render: (row) => row.email },
-          { key: "department", header: "Department", render: (row) => row.department },
+          {
+            key: "department",
+            header: "Department",
+            render: (row) => <DepartmentBadge name={row.department || "—"} />,
+          },
+          {
+            key: "status",
+            header: "Status",
+            render: (row) => <StatusBadge status={row.status} />,
+          },
           { key: "position", header: "Position", render: (row) => row.position },
           {
             key: "actions",
@@ -146,7 +156,7 @@ export function EmployeesListPage() {
             render: (row) => (
               <div className="flex gap-3">
                 <Link className="underline underline-offset-4" to={`/employees/${row.id}`}>
-                  <span className="text-blue-700 hover:text-blue-800 font-medium">View</span>
+                  <span className="text-zinc-800 hover:underline font-medium">View</span>
                 </Link>
                 {(["ADMIN", "HR_STAFF", 3].includes(role)) ? (
                   <>

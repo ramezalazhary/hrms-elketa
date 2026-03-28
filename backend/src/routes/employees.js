@@ -1,3 +1,7 @@
+/**
+ * @file `/api/employees` — CRUD on `Employee` with **scope** derived from org role (Admin, HR head,
+ * department head, team leader, self). Mutations check `resolveEmployeeAccess` actions + department rules.
+ */
 import { Router } from "express";
 import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
@@ -8,6 +12,21 @@ import { hashPassword } from "../middleware/auth.js";
 
 const router = Router();
 
+/** Empty strings from JSON must not be cast to Date (Mongoose CastError). */
+function optionalDate(value) {
+  if (value == null || value === "") return undefined;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? undefined : value;
+}
+
+/**
+ * Computes `{ scope, actions[, teams] }` for listing/mutating employees.
+ * @param {{ id: string, email: string, role: string }} user From `req.user` after `requireAuth`.
+ * @returns {Promise<{ scope: 'all'|'department'|'team'|'self', actions: string[], teams?: string[] }>}
+ *
+ * Data flow: Admin → full actions + `all`; HR dept head → same; dept head / MANAGER → department + view/create;
+ * team manager → team names + view; else self + view only.
+ */
 async function resolveEmployeeAccess(user) {
   // 1. Admin gets EVERYTHING
   if (user.role === "ADMIN" || user.role === 3) {
@@ -44,7 +63,12 @@ async function resolveEmployeeAccess(user) {
   return { scope: "self", actions: ["view"] };
 }
 
-// Ensure the user's scope allows access to the target department
+/**
+ * Whether `userEmail` may act inside `targetDepartment` (owns dept as head or works there).
+ * @param {string} userEmail
+ * @param {string} targetDepartment Department name string on Employee / Department.
+ * @returns {Promise<boolean>}
+ */
 async function checkScopeDepartment(userEmail, targetDepartment) {
   const employeeRecord = await Employee.findOne({ email: userEmail });
   let deptNames = await Department.find({ head: userEmail }).distinct("name");
@@ -124,7 +148,8 @@ router.post("/", requireAuth, async (req, res) => {
     workEmail, phoneNumber, address, additionalContact,
     dateOfHire, workLocation, onlineStorageLink,
     education, trainingCourses, skills, languages,
-    financial
+    financial,
+    insurance,
   } = req.body;
   if (!fullName || !email || !department || !position) {
     return res.status(400).json({ error: "Required fields are missing" });
@@ -142,57 +167,87 @@ router.post("/", requireAuth, async (req, res) => {
   const existing = await Employee.findOne({ email });
   if (existing) return res.status(409).json({ error: "Employee already exists" });
 
-  const newEmployee = new Employee({ 
-    fullName, 
-    email, 
-    department, 
-    team: team || null,
-    position,
-    status: status || "ACTIVE",
-    employmentType: employmentType || "FULL_TIME",
-    managerId: managerId || null,
-    employeeCode: employeeCode || `EMP-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
-    gender: gender || "MALE",
-    maritalStatus: maritalStatus || "SINGLE",
-    age: age || null,
-    dateOfBirth, nationality, idNumber, profilePicture,
-    workEmail, phoneNumber, address, additionalContact,
-    dateOfHire, workLocation, onlineStorageLink,
-    education, trainingCourses, skills, languages,
-    financial
-  });
-  await newEmployee.save();
-
-  // ----- Auto Provision User Account -----
-  const existingUser = await User.findOne({ email });
-  let provisionalRole = "EMPLOYEE";
-  let userProvisioned = false;
-  
-  // Super simple role inference for HR Staff vs Manager (In an advanced system, this would be explicitly managed via permissions)
-  if (department === "HR") provisionalRole = "HR_STAFF";
-  
-  if (!existingUser) {
-    const passwordHash = await hashPassword("Welcome123!");
-    const newUser = new User({
-      email: email,
-      passwordHash,
-      role: provisionalRole,
-      employeeId: newEmployee._id,
-      requirePasswordChange: true,
+  try {
+    const newEmployee = new Employee({ 
+      fullName, 
+      email, 
+      department, 
+      team: team || null,
+      position,
+      status: status || "ACTIVE",
+      employmentType: employmentType || "FULL_TIME",
+      managerId: managerId || null,
+      employeeCode: employeeCode || `EMP-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+      gender: gender || "MALE",
+      maritalStatus: maritalStatus || "SINGLE",
+      age: age || null,
+      dateOfBirth: optionalDate(dateOfBirth),
+      nationality,
+      idNumber,
+      profilePicture,
+      workEmail,
+      phoneNumber,
+      address,
+      additionalContact,
+      dateOfHire: optionalDate(dateOfHire),
+      workLocation,
+      onlineStorageLink,
+      education,
+      trainingCourses,
+      skills,
+      languages,
+      financial,
+      insurance: insurance && typeof insurance === "object"
+        ? {
+            provider: insurance.provider || undefined,
+            policyNumber: insurance.policyNumber || undefined,
+            coverageType: insurance.coverageType || "HEALTH",
+            validUntil: optionalDate(insurance.validUntil),
+          }
+        : undefined,
     });
-    await newUser.save();
-    userProvisioned = true;
-  } else if (!existingUser.employeeId) {
-    existingUser.employeeId = newEmployee._id;
-    await existingUser.save();
-  }
+    await newEmployee.save();
 
-  return res.status(201).json({
-    message: "Employee created successfully",
-    employee: newEmployee,
-    userProvisioned,
-    defaultPassword: userProvisioned ? "Welcome123!" : null,
-  });
+    // ----- Auto Provision User Account -----
+    const existingUser = await User.findOne({ email });
+    let provisionalRole = "EMPLOYEE";
+    let userProvisioned = false;
+    
+    // Super simple role inference for HR Staff vs Manager (In an advanced system, this would be explicitly managed via permissions)
+    if (department === "HR") provisionalRole = "HR_STAFF";
+    
+    if (!existingUser) {
+      const passwordHash = await hashPassword("Welcome123!");
+      const newUser = new User({
+        email: email,
+        passwordHash,
+        role: provisionalRole,
+        employeeId: newEmployee._id,
+        requirePasswordChange: true,
+      });
+      await newUser.save();
+      userProvisioned = true;
+    } else if (!existingUser.employeeId) {
+      existingUser.employeeId = newEmployee._id;
+      await existingUser.save();
+    }
+
+    return res.status(201).json({
+      message: "Employee created successfully",
+      employee: newEmployee,
+      userProvisioned,
+      defaultPassword: userProvisioned ? "Welcome123!" : null,
+    });
+  } catch (err) {
+    if (err?.name === "ValidationError") {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err?.code === 11000) {
+      return res.status(409).json({ error: "Employee already exists" });
+    }
+    console.error("POST /employees:", err);
+    return res.status(500).json({ error: "Failed to create employee" });
+  }
 });
 
 router.put("/:id", requireAuth, async (req, res) => {
@@ -206,7 +261,8 @@ router.put("/:id", requireAuth, async (req, res) => {
     workEmail, phoneNumber, address, additionalContact,
     dateOfHire, workLocation, onlineStorageLink,
     education, trainingCourses, skills, languages,
-    financial 
+    financial,
+    insurance,
   } = req.body;
   const employee = await Employee.findById(req.params.id);
 
@@ -240,7 +296,7 @@ router.put("/:id", requireAuth, async (req, res) => {
   if (maritalStatus !== undefined) employee.maritalStatus = maritalStatus;
   if (age !== undefined) employee.age = age;
 
-  if (dateOfBirth !== undefined) employee.dateOfBirth = dateOfBirth;
+  if (dateOfBirth !== undefined) employee.dateOfBirth = optionalDate(dateOfBirth);
   if (nationality !== undefined) employee.nationality = nationality;
   if (idNumber !== undefined) employee.idNumber = idNumber;
   if (profilePicture !== undefined) employee.profilePicture = profilePicture;
@@ -248,7 +304,7 @@ router.put("/:id", requireAuth, async (req, res) => {
   if (phoneNumber !== undefined) employee.phoneNumber = phoneNumber;
   if (address !== undefined) employee.address = address;
   if (additionalContact !== undefined) employee.additionalContact = additionalContact;
-  if (dateOfHire !== undefined) employee.dateOfHire = dateOfHire;
+  if (dateOfHire !== undefined) employee.dateOfHire = optionalDate(dateOfHire);
   if (workLocation !== undefined) employee.workLocation = workLocation;
   if (onlineStorageLink !== undefined) employee.onlineStorageLink = onlineStorageLink;
   if (education !== undefined) employee.education = education;
@@ -292,10 +348,16 @@ router.delete("/:id", requireAuth, async (req, res) => {
     return res.status(403).json({ error: "Scope 'self' cannot delete records." });
   }
 
+  const loginUser = await User.findOne({
+    $or: [{ employeeId: employee._id }, { email: employee.email }],
+  });
+
   await Employee.findByIdAndDelete(req.params.id);
-  
-  // Cascade Deletion to User Authentication (Disable login fully)
-  await User.updateOne({ employeeId: req.params.id }, { $set: { isActive: false } });
+
+  if (loginUser) {
+    await UserPermission.deleteMany({ userId: loginUser._id.toString() });
+    await User.deleteOne({ _id: loginUser._id });
+  }
 
   return res.json({ success: true });
 });

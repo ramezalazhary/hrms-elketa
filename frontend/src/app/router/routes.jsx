@@ -12,6 +12,7 @@ import { ChangePasswordPage } from "@/modules/identity/pages/ChangePasswordPage"
 import { HomePage } from "@/pages/home/HomePage";
 import { PasswordRequestsPage } from "@/pages/admin/PasswordRequestsPage";
 import { ForgotPasswordPage } from "@/modules/identity/pages/ForgotPasswordPage";
+import { RequireAdminOrHrHead } from "@/shared/routing/RequireAdminOrHrHead";
 
 export const appRoutes = [
   {
@@ -44,9 +45,9 @@ export const appRoutes = [
       {
         path: "/admin/password-requests",
         element: (
-          <RequireRole roles={[3, "ADMIN"]}>
+          <RequireAdminOrHrHead>
             <PasswordRequestsPage />
-          </RequireRole>
+          </RequireAdminOrHrHead>
         ),
       },
       {

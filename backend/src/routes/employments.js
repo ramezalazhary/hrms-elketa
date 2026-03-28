@@ -1,3 +1,6 @@
+/**
+ * @file `/api/employments` — assign/unassign employees to department/team/position; restricted to Admin + HR_STAFF.
+ */
 import { Router } from "express";
 import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
@@ -8,7 +11,10 @@ import { strictLimiter } from "../middleware/security.js";
 
 const router = Router();
 
-// Helper: Check if user can manage employments
+/**
+ * @param {{ role: string|number }} user
+ * @returns {boolean}
+ */
 function canManageEmployments(user) {
   return user.role === 3 || user.role === "ADMIN" || user.role === "HR_STAFF";
 }

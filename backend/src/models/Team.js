@@ -1,3 +1,4 @@
+/** @file Mongoose model: team belonging to a department (`departmentId` ref). */
 import mongoose, { Schema, model } from "mongoose";
 
 const TeamSchema = new Schema(

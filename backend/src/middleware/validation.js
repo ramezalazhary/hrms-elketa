@@ -1,7 +1,16 @@
-import { body, param, query, validationResult } from "express-validator";
+import { body, param, validationResult } from "express-validator";
 import Joi from "joi";
 
-// Express-validator middleware
+/**
+ * Express-validator: if any prior rule failed, respond 400 with details; else `next()`.
+ *
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} next
+ * @returns {void}
+ *
+ * Data flow: `validationResult(req)` → non-empty → 400 JSON; else `next()`.
+ */
 export const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -13,7 +22,7 @@ export const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-// User validation rules
+/** Chain: email/password/role rules for registering a user via validation middleware. */
 export const validateUserCreation = [
   body("email")
     .isEmail()
@@ -32,6 +41,7 @@ export const validateUserCreation = [
   handleValidationErrors,
 ];
 
+/** Chain: login body (email + password). */
 export const validateLogin = [
   body("email")
     .isEmail()
@@ -41,13 +51,17 @@ export const validateLogin = [
   handleValidationErrors,
 ];
 
-// Department validation rules
+/** Chain: POST /departments body fields. */
 export const validateDepartmentCreation = [
   body("name")
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage("Department name must be between 1 and 100 characters"),
-  body("head").optional().isEmail().withMessage("Head must be a valid email"),
+  // Empty string from HTML selects must skip email check (optional() alone only skips undefined/null).
+  body("head")
+    .optional({ values: "falsy" })
+    .isEmail()
+    .withMessage("Head must be a valid email"),
   body("positions")
     .optional()
     .isArray()
@@ -65,13 +79,14 @@ export const validateDepartmentCreation = [
   handleValidationErrors,
 ];
 
+/** Chain: PUT /departments/:id — includes MongoId on `id` param plus creation fields. */
 export const validateDepartmentUpdate = [
   param("id").isMongoId().withMessage("Invalid department ID"),
-  ...validateDepartmentCreation.slice(0, -1), // Remove handleValidationErrors, add it back
+  ...validateDepartmentCreation.slice(0, -1),
   handleValidationErrors,
 ];
 
-// Employee validation rules
+/** Chain: minimal fields for creating an employee record. */
 export const validateEmployeeCreation = [
   body("fullName")
     .trim()
@@ -92,11 +107,11 @@ export const validateEmployeeCreation = [
   handleValidationErrors,
 ];
 
-// Permission validation rules
+/** Chain: POST/upsert permission row body. */
 export const validatePermissionCreation = [
   body("userId").isString().notEmpty().withMessage("User ID is required"),
   body("module")
-    .isIn(["recruitment", "payroll", "attendance", "employees", "departments"])
+    .isIn(["recruitment", "payroll", "employees", "departments"])
     .withMessage("Invalid module"),
   body("actions")
     .isArray({ min: 1 })
@@ -110,7 +125,7 @@ export const validatePermissionCreation = [
   handleValidationErrors,
 ];
 
-// Joi schemas for more complex validation
+/** Joi schema: auth register alternative path. */
 export const userCreationSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string()
@@ -123,13 +138,14 @@ export const userCreationSchema = Joi.object({
     }),
   role: Joi.alternatives().try(
     Joi.number().integer().min(1).max(3),
-    Joi.string().valid("EMPLOYEE", "MANAGER", "HR_STAFF", "ADMIN")
+    Joi.string().valid("EMPLOYEE", "MANAGER", "HR_STAFF", "ADMIN"),
   ).required(),
 });
 
+/** Joi schema: department payload. */
 export const departmentCreationSchema = Joi.object({
   name: Joi.string().min(1).max(100).required(),
-  head: Joi.string().email(),
+  head: Joi.alternatives().try(Joi.string().email(), Joi.string().valid("")).optional(),
   positions: Joi.array().items(
     Joi.object({
       title: Joi.string().min(1).max(100).required(),
@@ -138,7 +154,14 @@ export const departmentCreationSchema = Joi.object({
   ),
 });
 
-// Validation middleware using Joi
+/**
+ * Factory: Joi-based body validation middleware.
+ *
+ * @param {import("joi").ObjectSchema} schema
+ * @returns {import("express").RequestHandler}
+ *
+ * Data flow: `schema.validate(req.body)` → errors mapped to 400 JSON; else `next()`.
+ */
 export const validateWithJoi = (schema) => {
   return (req, res, next) => {
     const { error } = schema.validate(req.body, { abortEarly: false });

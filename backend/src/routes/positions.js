@@ -1,3 +1,6 @@
+/**
+ * @file `/api/positions` — CRUD-ish on job positions; writes allowed for Admin + `HR_STAFF` via `canManagePositions`.
+ */
 import { Router } from "express";
 import { Position } from "../models/Position.js";
 import { Department } from "../models/Department.js";
@@ -8,7 +11,10 @@ import { strictLimiter } from "../middleware/security.js";
 
 const router = Router();
 
-// Helper: Check if user is Admin or HR_STAFF
+/**
+ * @param {{ role: string|number }} user
+ * @returns {boolean}
+ */
 function canManagePositions(user) {
   return user.role === 3 || user.role === "ADMIN" || user.role === "HR_STAFF";
 }

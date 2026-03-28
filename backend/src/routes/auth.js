@@ -1,3 +1,8 @@
+/**
+ * @file Authentication & account-maintenance HTTP routes under `/api/auth`.
+ * Rate-limited via `authLimiter`. Most handlers read JSON bodies; several decode
+ * Bearer JWT from `Authorization` (some use `jwt.decode` for role checks — consider aligning with `requireAuth`).
+ */
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import { User } from "../models/User.js";
@@ -10,6 +15,8 @@ import {
   verifyPassword,
 } from "../middleware/auth.js";
 import { authLimiter } from "../middleware/security.js";
+import { requireAuth } from "../middleware/auth.js";
+import { requireAdminOrHrHead } from "../middleware/rbac.js";
 import {
   validateLogin,
   validateUserCreation,
@@ -20,14 +27,15 @@ import { PasswordResetRequest } from "../models/PasswordResetRequest.js";
 
 const router = Router();
 
-// Apply rate limiting to auth routes
 router.use(authLimiter);
 
-// Login endpoint
+/**
+ * POST /login — Body: `{ email, password }` (validated).
+ * @flow Body → `User.findOne` → bcrypt verify → issue access + refresh JWTs → JSON `{ accessToken, refreshToken, user }`.
+ */
 router.post("/login", validateLogin, async (req, res) => {
   try {
     const { email, password } = req.body;
-console.log(email, 'email from router')
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
@@ -64,7 +72,10 @@ console.log(email, 'email from router')
   }
 });
 
-// Refresh token endpoint
+/**
+ * POST /refresh — Body: `{ refreshToken }`.
+ * @flow Verify refresh token → load user → emit new access + refresh pair.
+ */
 router.post("/refresh", async (req, res) => {
   try {
     const { refreshToken } = req.body;
@@ -93,7 +104,10 @@ router.post("/refresh", async (req, res) => {
   }
 });
 
-// Logout endpoint
+/**
+ * POST /logout — Header: `Authorization: Bearer <access_token>`.
+ * @flow Blacklist token in `TokenBlacklist` until expiry.
+ */
 router.post("/logout", async (req, res) => {
   try {
     const header = req.headers.authorization;
@@ -117,7 +131,10 @@ router.post("/logout", async (req, res) => {
   }
 });
 
-// Register endpoint (admin only - you might want to protect this)
+/**
+ * POST /register — Public registration with Joi-validated body (`email`, `password`, `role`).
+ * @flow Duplicate check → hash password → `User.create` → 201 + slim user JSON.
+ */
 router.post(
   "/register",
   validateWithJoi(userCreationSchema),
@@ -160,7 +177,10 @@ router.post(
   },
 );
 
-// Change password endpoint
+/**
+ * POST /change-password — Bearer access token + `{ currentPassword, newPassword }`.
+ * @flow Verify JWT → load user → verify old hash → validate new password → save → blacklist old token.
+ */
 router.post("/change-password", async (req, res) => {
   try {
     const header = req.headers.authorization;
@@ -231,7 +251,9 @@ router.post("/change-password", async (req, res) => {
   }
 });
 
-// Forgot password request
+/**
+ * POST /forgot-password — `{ email }`; creates `PasswordResetRequest` if user exists (response always generic).
+ */
 router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
@@ -257,45 +279,33 @@ router.post("/forgot-password", async (req, res) => {
   }
 });
 
-// Admin list password requests
-router.get("/password-requests", async (req, res) => {
+/**
+ * GET /password-requests — Verified JWT; Admin or Head of HR only.
+ * @returns JSON list of pending `PasswordResetRequest` documents.
+ */
+router.get(
+  "/password-requests",
+  requireAuth,
+  requireAdminOrHrHead,
+  async (_req, res) => {
+    try {
+      const requests = await PasswordResetRequest.find({ status: "PENDING" }).sort({
+        createdAt: -1,
+      });
+      res.json(requests);
+    } catch (error) {
+      console.error("Password requests extraction error:", error);
+      res.status(500).json({ error: "Failed to load requests" });
+    }
+  },
+);
+
+/**
+ * POST /reset-password — Admin or Head of HR. Body: `targetUserId` or `targetEmail`, `newPassword`.
+ * @flow Resolve target user → validate password strength → update hash → mark pending reset requests resolved.
+ */
+router.post("/reset-password", requireAuth, requireAdminOrHrHead, async (req, res) => {
   try {
-    const header = req.headers.authorization;
-    if (!header || !header.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Authentication required" });
-    }
-
-    const token = header.slice("Bearer ".length);
-    const decoded = jwt.decode(token);
-    
-    if (!decoded || decoded.role !== "ADMIN") {
-      return res.status(403).json({ error: "Only admins can view password requests" });
-    }
-
-    const requests = await PasswordResetRequest.find({ status: "PENDING" }).sort({ createdAt: -1 });
-    res.json(requests);
-  } catch (error) {
-    console.error("Password requests extraction error:", error);
-    res.status(500).json({ error: "Failed to load requests" });
-  }
-});
-
-// Admin password reset
-router.post("/reset-password", async (req, res) => {
-  try {
-    const header = req.headers.authorization;
-    if (!header || !header.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Authentication required" });
-    }
-
-    const token = header.slice("Bearer ".length);
-    const decoded = jwt.decode(token);
-    
-    // We trust that the token is somewhat valid (real routes would verify it), but let's check role at least
-    if (!decoded || decoded.role !== "ADMIN") {
-      return res.status(403).json({ error: "Only admins can reset user passwords" });
-    }
-
     const { targetUserId, targetEmail, newPassword } = req.body;
     if (!newPassword) {
       return res.status(400).json({ error: "newPassword is required" });
@@ -345,7 +355,10 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
-// Admin manual status toggle
+/**
+ * PUT /:id/status — Admin-only. Body: `{ isActive: boolean }`.
+ * @flow Find user by `req.params.id` → set `isActive` → save → JSON confirmation.
+ */
 router.put("/:id/status", async (req, res) => {
   try {
     const header = req.headers.authorization;

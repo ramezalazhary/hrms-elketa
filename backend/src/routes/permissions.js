@@ -1,9 +1,13 @@
+/**
+ * @file `/api/permissions` — granular `UserPermission` documents per user.
+ * Admin or HR Head; HR Head restricted to HR employees and stricter PUT rules.
+ */
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { requireAdminOrHrHead, isHrDepartmentHead } from "../middleware/rbac.js";
 import { UserPermission } from "../models/Permission.js";
 import { User } from "../models/User.js";
 import { Employee } from "../models/Employee.js";
-import { Department } from "../models/Department.js";
 import { validatePermissionCreation } from "../middleware/validation.js";
 import { strictLimiter } from "../middleware/security.js";
 
@@ -11,34 +15,25 @@ const router = Router();
 
 const HR_DEPARTMENT_NAME = process.env.HR_DEPARTMENT_NAME || "HR";
 
-async function isHrHead(email) {
-  const dep = await Department.findOne({
-    name: HR_DEPARTMENT_NAME,
-    head: email,
-  }).select("_id");
-  return Boolean(dep);
-}
+/**
+ * Middleware: after `requireAdminOrHrHead`, ensures non-admins only target users in the HR department.
+ * @param {import("express").Request} req expects `params.userId`
+ * @returns {Promise<void>} `next()` or 403/404 JSON.
+ */
+async function restrictHrHeadToHrEmployees(req, res, next) {
+  if (req.user.role === "ADMIN" || req.user.role === 3) return next();
 
-async function ensureCanManageTarget(req, res, next) {
-  // Only admins can manage permissions at all.
-  if (!req.user || (req.user.role !== 3 && req.user.role !== "ADMIN"))
-    return res.status(403).json({ error: "Forbidden" });
-
-  // Directors (or any non-HR-head admin) can manage anyone.
-  const hrHead = await isHrHead(req.user.email);
-  if (!hrHead) return next();
-
-  // HR Head can only manage permissions for HR employees.
   const targetUser = await User.findById(req.params.userId).select("email");
   if (!targetUser) return res.status(404).json({ error: "User not found" });
 
   const targetEmployee = await Employee.findOne({
     email: targetUser.email,
   }).select("department");
-  if (!targetEmployee)
+  if (!targetEmployee) {
     return res
       .status(403)
       .json({ error: "Target user is not an employee record" });
+  }
 
   if (targetEmployee.department !== HR_DEPARTMENT_NAME) {
     return res
@@ -49,32 +44,37 @@ async function ensureCanManageTarget(req, res, next) {
   return next();
 }
 
-// Get permissions for a user (admin-only)
-router.get("/:userId", requireAuth, requireRole(3), async (req, res) => {
-  try {
-    const permissions = await UserPermission.find({
-      userId: req.params.userId,
-    }).sort({ module: 1 });
-    return res.json(
-      permissions.map((p) => ({
-        id: p._id.toString(),
-        userId: p.userId,
-        module: p.module,
-        actions: p.actions,
-        scope: p.scope,
-      })),
-    );
-  } catch (error) {
-    console.error("Error fetching permissions:", error);
-    res.status(500).json({ error: "Failed to fetch permissions" });
-  }
-});
+router.get(
+  "/:userId",
+  requireAuth,
+  requireAdminOrHrHead,
+  restrictHrHeadToHrEmployees,
+  async (req, res) => {
+    try {
+      const permissions = await UserPermission.find({
+        userId: req.params.userId,
+      }).sort({ module: 1 });
+      return res.json(
+        permissions.map((p) => ({
+          id: p._id.toString(),
+          userId: p.userId,
+          module: p.module,
+          actions: p.actions,
+          scope: p.scope,
+        })),
+      );
+    } catch (error) {
+      console.error("Error fetching permissions:", error);
+      res.status(500).json({ error: "Failed to fetch permissions" });
+    }
+  },
+);
 
-// Create or update a specific permission (admin-only)
 router.post(
   "/:userId",
   requireAuth,
-  requireRole(3),
+  requireAdminOrHrHead,
+  restrictHrHeadToHrEmployees,
   strictLimiter,
   validatePermissionCreation,
   async (req, res) => {
@@ -82,13 +82,11 @@ router.post(
       const { userId } = req.params;
       const { module, actions, scope } = req.body;
 
-      // Check if user exists
       const user = await User.findById(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
 
-      // Upsert permission
       const permission = await UserPermission.findOneAndUpdate(
         { userId, module },
         { userId, module, actions, scope },
@@ -115,11 +113,11 @@ router.post(
   },
 );
 
-// Replace all permissions for a user (admin-only)
 router.put(
   "/:userId",
   requireAuth,
-  requireRole(3),
+  requireAdminOrHrHead,
+  restrictHrHeadToHrEmployees,
   strictLimiter,
   async (req, res) => {
     try {
@@ -129,15 +127,11 @@ router.put(
       if (!items)
         return res.status(400).json({ error: "permissions array is required" });
 
-      // If the actor is HR Head, only allow:
-      // - HR modules (recruitment/payroll/attendance) with any actions
-      // - System modules (employees/departments) with EDIT-only permissions (no create/delete)
-      const hrHead = await isHrHead(req.user.email);
+      const hrHead = await isHrDepartmentHead(req.user.email);
       if (hrHead) {
         const allowedModules = new Set([
           "recruitment",
           "payroll",
-          "attendance",
           "employees",
           "departments",
         ]);
@@ -155,7 +149,6 @@ router.put(
           const moduleName = String(p.module);
           if (!systemModules.has(moduleName)) return false;
           const actions = Array.isArray(p.actions) ? p.actions.map(String) : [];
-          // allow only view/edit on system modules
           return actions.some((a) => a !== "view" && a !== "edit");
         });
         if (forbiddenSystemAction) {
@@ -165,10 +158,8 @@ router.put(
         }
       }
 
-      // Delete existing permissions
       await UserPermission.deleteMany({ userId: req.params.userId });
 
-      // Insert new permissions
       const docs = items.map((p) => ({
         userId: req.params.userId,
         module: String(p.module),
@@ -188,11 +179,11 @@ router.put(
   },
 );
 
-// Delete a specific permission
 router.delete(
   "/:userId/:permissionId",
   requireAuth,
-  requireRole(3),
+  requireAdminOrHrHead,
+  restrictHrHeadToHrEmployees,
   strictLimiter,
   async (req, res) => {
     try {
@@ -215,11 +206,11 @@ router.delete(
   },
 );
 
-// Delete all permissions for a user (admin-only)
 router.delete(
   "/:userId",
   requireAuth,
-  requireRole(3),
+  requireAdminOrHrHead,
+  restrictHrHeadToHrEmployees,
   strictLimiter,
   async (req, res) => {
     try {

@@ -102,7 +102,6 @@ interface IUserPermission {
   module:
     | "recruitment"
     | "payroll"
-    | "attendance"
     | "employees"
     | "departments";
   actions: ("view" | "create" | "edit" | "delete" | "approve" | "export")[];

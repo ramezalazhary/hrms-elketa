@@ -100,7 +100,10 @@ export function EditDepartmentPage() {
           },
           {
             name: "head",
-            label: "Department Manager",
+            label:
+              employeeOptions.length > 0
+                ? "Department manager (optional)"
+                : "Department manager (optional — add employees to choose one)",
             type: "select",
             options: employeeOptions,
           },
@@ -127,10 +130,15 @@ export function EditDepartmentPage() {
             }));
 
           try {
+            const head =
+              values.head && String(values.head).trim()
+                ? String(values.head).trim()
+                : null;
             await dispatch(
               updateDepartmentThunk({
                 ...department,
                 ...values,
+                head,
                 positions: validPositions,
                 teams: teams.filter(t => t.name),
               }),
@@ -149,8 +157,8 @@ export function EditDepartmentPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between border-b pb-4 mb-4">
             <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wide">Department Positions</h3>
-            <button type="button" onClick={addPosition} className="rounded-xl bg-indigo-50 text-indigo-700 px-4 py-2 text-sm font-bold hover:bg-indigo-100 transition">
-              + Add Position
+            <button type="button" onClick={addPosition} className="rounded-md border border-zinc-200 bg-white text-zinc-800 px-3 py-1.5 text-sm font-medium hover:bg-zinc-50 transition">
+              + Add position
             </button>
           </div>
           <div className="space-y-4">

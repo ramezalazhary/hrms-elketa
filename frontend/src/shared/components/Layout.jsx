@@ -1,16 +1,16 @@
-export function Layout({ title, description, actions, children }) {
+export function Layout({ title, description, actions, children, className = "max-w-6xl" }) {
   return (
-    <section className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className={`space-y-8 ${className}`}>
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-zinc-200 pb-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
+          <h1 className="text-lg font-medium tracking-tight text-zinc-900">{title}</h1>
           {description ? (
-            <p className="mt-1 text-sm text-slate-600">{description}</p>
+            <p className="mt-1 text-sm text-zinc-500 font-normal">{description}</p>
           ) : null}
         </div>
-        <div>{actions}</div>
+        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
       </header>
-      <div>{children}</div>
+      <div className="text-zinc-800">{children}</div>
     </section>
-  )
+  );
 }

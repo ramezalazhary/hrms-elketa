@@ -10,20 +10,45 @@ const JWT_REFRESH_SECRET =
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "2h";
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || "7d";
 
+/**
+ * Sends a 401 JSON error.
+ * @param {import("express").Response} res
+ * @param {string} [message]
+ * @returns {import("express").Response}
+ */
 function unauthorized(res, message = "Unauthorized") {
   return res.status(401).json({ error: message });
 }
 
+/**
+ * Sends a 403 JSON error.
+ * @param {import("express").Response} res
+ * @param {string} [message]
+ * @returns {import("express").Response}
+ */
 function forbidden(res, message = "Forbidden") {
   return res.status(403).json({ error: message });
 }
 
+/** Maps legacy numeric JWT roles to string roles used in the app. */
 const ROLE_MAP = {
   1: "EMPLOYEE",
   2: "MANAGER",
-  3: "ADMIN"
+  3: "ADMIN",
 };
 
+/**
+ * Express middleware: validates `Authorization: Bearer <access_token>`, blacklist, and signature.
+ *
+ * @param {import("express").Request} req `req.user` set to `{ id, email, role }` on success.
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} next
+ * @returns {Promise<void>}
+ *
+ * Data flow: header → extract token → `TokenBlacklist` lookup → `jwt.verify` →
+ * normalize numeric `role` via ROLE_MAP → assign `req.user` → `next()`;
+ * any failure → 401 with a specific message when possible.
+ */
 export async function requireAuth(req, res, next) {
   const header = req.headers.authorization;
   if (!header || !header.startsWith("Bearer ")) return unauthorized(res);
@@ -31,15 +56,13 @@ export async function requireAuth(req, res, next) {
   const token = header.slice("Bearer ".length);
 
   try {
-    // Check if token is blacklisted
     const blacklisted = await TokenBlacklist.findOne({ token });
     if (blacklisted) {
       return unauthorized(res, "Token has been revoked");
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    
-    // Abstract the role mapping dynamically
+
     let resolvedRole = decoded.role;
     if (typeof resolvedRole === "number") {
       resolvedRole = ROLE_MAP[resolvedRole] || "EMPLOYEE";
@@ -70,8 +93,14 @@ export async function requireAuth(req, res, next) {
   }
 }
 
-
-// Generate access token
+/**
+ * Creates a short-lived access JWT.
+ *
+ * @param {{ id: string, email: string, role: string|number }} user Payload fields.
+ * @returns {string} Signed JWT (`sub`, `email`, `role`, `type: "access"`).
+ *
+ * Data flow: payload + `JWT_SECRET` + expiry → compact token string.
+ */
 export function generateAccessToken(user) {
   return jwt.sign(
     {
@@ -85,7 +114,12 @@ export function generateAccessToken(user) {
   );
 }
 
-// Generate refresh token
+/**
+ * Creates a long-lived refresh JWT.
+ *
+ * @param {{ id: string, email: string, role: string|number }} user
+ * @returns {string} Signed JWT (`type: "refresh"`).
+ */
 export function generateRefreshToken(user) {
   return jwt.sign(
     {
@@ -99,7 +133,16 @@ export function generateRefreshToken(user) {
   );
 }
 
-// Verify refresh token
+/**
+ * Validates a refresh token and loads the current user from DB.
+ *
+ * @param {string} token Refresh JWT string.
+ * @returns {Promise<{ id: string, email: string, role: string } | null>}
+ *   User shape if valid and user exists; `null` if invalid/expired/missing user.
+ *
+ * Data flow: `jwt.verify` with refresh secret → check `type === "refresh"` →
+ * `User.findById` → return slim object or null.
+ */
 export async function verifyRefreshToken(token) {
   try {
     const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
@@ -108,7 +151,6 @@ export async function verifyRefreshToken(token) {
       return null;
     }
 
-    // Check if user still exists
     const user = await User.findById(decoded.sub);
     if (!user) {
       return null;
@@ -124,14 +166,20 @@ export async function verifyRefreshToken(token) {
   }
 }
 
-// Logout - blacklist the token
+/**
+ * Invalidates an access token by storing it in `TokenBlacklist` until expiry.
+ *
+ * @param {string} token Raw JWT (access).
+ * @returns {Promise<boolean>} `true` if stored; `false` on error (logged).
+ *
+ * Data flow: `jwt.decode` for `exp` → `TokenBlacklist.create({ token, expiresAt })`.
+ */
 export async function logout(token) {
   try {
-    // Decode token to get expiry
     const decoded = jwt.decode(token);
     const expiresAt = decoded?.exp
       ? new Date(decoded.exp * 1000)
-      : new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours default
+      : new Date(Date.now() + 2 * 60 * 60 * 1000);
 
     await TokenBlacklist.create({
       token,
@@ -145,28 +193,45 @@ export async function logout(token) {
   }
 }
 
-// Password utilities
+/**
+ * @param {string} password Plain text.
+ * @returns {Promise<string>} bcrypt hash (12 rounds).
+ */
 export async function hashPassword(password) {
   const saltRounds = 12;
   return bcrypt.hash(password, saltRounds);
 }
 
+/**
+ * @param {string} password Plain text.
+ * @param {string} hash Stored hash.
+ * @returns {Promise<boolean>} bcrypt compare result.
+ */
 export async function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
-// Role-based middleware
+/**
+ * Role guard factory. Two modes:
+ * - **Numeric** (legacy): minimum role weight (EMPLOYEE=1, MANAGER=2, ADMIN=3).
+ * - **Array / string**: explicit allowed roles; `ADMIN` always passes.
+ *
+ * @param {number|string|string[]} allowedRoles
+ * @returns {import("express").RequestHandler}
+ *
+ * Data flow: no `req.user` → 401; numeric path compares `roleWeight`; array path uses `includes`;
+ * success → `next()`.
+ */
 export function requireRole(allowedRoles) {
   return (req, res, next) => {
     const user = req.user;
     if (!user) return unauthorized(res);
 
     if (typeof allowedRoles === "number") {
-      // Legacy backwards-compatibility
       const roleWeight = {
-        "EMPLOYEE": 1,
-        "MANAGER": 2,
-        "ADMIN": 3
+        EMPLOYEE: 1,
+        MANAGER: 2,
+        ADMIN: 3,
       };
       if ((roleWeight[user.role] || 1) < allowedRoles) {
         return forbidden(res, "Insufficient permissions (Legacy Numeric)");
@@ -175,7 +240,7 @@ export function requireRole(allowedRoles) {
     }
 
     if (!Array.isArray(allowedRoles)) {
-       allowedRoles = [allowedRoles];
+      allowedRoles = [allowedRoles];
     }
 
     if (!allowedRoles.includes(user.role) && user.role !== "ADMIN") {

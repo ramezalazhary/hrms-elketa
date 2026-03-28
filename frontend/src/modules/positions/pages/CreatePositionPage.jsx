@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { FormBuilder } from "@/shared/components/FormBuilder";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { createPositionThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
@@ -49,6 +49,31 @@ export function CreatePositionPage() {
       )
     : [];
 
+  const devDemoFill = useMemo(() => {
+    if (!import.meta.env.DEV) return undefined;
+    return {
+      getValues: () => {
+        const firstDeptId = departments[0]?.id || departments[0]?._id || "";
+        const deptTeams = teams.filter(
+          (t) =>
+            t.departmentId === firstDeptId ||
+            t.departmentId?._id === firstDeptId,
+        );
+        const firstTeamId = deptTeams[0]?.id || deptTeams[0]?._id || "";
+        return {
+          title: `Demo Position ${Date.now().toString(36).slice(-5)}`,
+          level: "Mid",
+          departmentId: firstDeptId,
+          teamId: firstTeamId || "",
+          description: "Demo position for UI testing.",
+        };
+      },
+      afterFill: (patch) => {
+        if (patch.departmentId) setSelectedDept(patch.departmentId);
+      },
+    };
+  }, [departments, teams]);
+
   return (
     <Layout
       title="Create Position"
@@ -56,6 +81,8 @@ export function CreatePositionPage() {
     >
       <FormBuilder
         onCancel={() => navigate("/positions")}
+        submitLabel="Create Position"
+        devDemoFill={devDemoFill}
         onSubmit={handleSubmit}
         fields={[
           {
@@ -85,7 +112,7 @@ export function CreatePositionPage() {
               label: d.name,
               value: d.id || d._id,
             })),
-            onChange: (value) => setSelectedDept(value),
+            onChange: (value) => setSelectedDept(value || null),
           },
           {
             name: "teamId",

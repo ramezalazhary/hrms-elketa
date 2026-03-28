@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { FormBuilder } from "@/shared/components/FormBuilder";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { createDepartmentThunk } from "../store";
@@ -29,6 +29,7 @@ export function CreateDepartmentPage() {
     >
       <FormBuilder
         onCancel={() => navigate("/departments")}
+        devDemoFill={devDemoFill}
         fields={[
           {
             name: "name",
@@ -48,7 +49,10 @@ export function CreateDepartmentPage() {
           },
           {
             name: "head",
-            label: "Department Manager",
+            label:
+              employeeOptions.length > 0
+                ? "Department manager (optional)"
+                : "Department manager (optional — add employees to choose one)",
             type: "select",
             options: employeeOptions,
           },
@@ -62,9 +66,14 @@ export function CreateDepartmentPage() {
         submitLabel="Create Department"
         onSubmit={async (values) => {
           try {
+            const head =
+              values.head && String(values.head).trim()
+                ? String(values.head).trim()
+                : undefined;
             await dispatch(
               createDepartmentThunk({
                 ...values,
+                head,
                 positions: [],
                 teams: [],
               }),

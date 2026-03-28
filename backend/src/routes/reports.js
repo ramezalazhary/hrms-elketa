@@ -1,3 +1,6 @@
+/**
+ * @file `/api/reports` — aggregated dashboards; gated by `canViewReports` (Admin + HR_STAFF).
+ */
 import { Router } from "express";
 import { Department } from "../models/Department.js";
 import { Team } from "../models/Team.js";
@@ -7,7 +10,10 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = Router();
 
-// Helper: Check if user can view reports
+/**
+ * @param {{ role: string|number }} user
+ * @returns {boolean}
+ */
 function canViewReports(user) {
   return user.role === 3 || user.role === "ADMIN" || user.role === "HR_STAFF";
 }

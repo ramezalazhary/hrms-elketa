@@ -1,3 +1,6 @@
+/**
+ * @file `/api/teams` — list/read for authenticated users; mutations gated by `isAdmin` / `requireRole(3)`.
+ */
 import { Router } from "express";
 import { Team } from "../models/Team.js";
 import { Department } from "../models/Department.js";
@@ -7,7 +10,10 @@ import { strictLimiter } from "../middleware/security.js";
 
 const router = Router();
 
-// Helper function for role checking
+/**
+ * @param {{ role: string|number }} user `req.user`
+ * @returns {boolean} True for numeric 3 or `"ADMIN"` string.
+ */
 function isAdmin(user) {
   return user.role === 3 || user.role === "ADMIN";
 }

@@ -1,3 +1,4 @@
+/** @file Mongoose model: `UserPermission` — module + actions + scope per userId. */
 import { Schema, model } from "mongoose";
 
 const UserPermissionSchema = new Schema(

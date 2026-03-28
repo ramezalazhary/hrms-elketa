@@ -20,6 +20,7 @@ const initialState = {
   accessToken: storedAuth?.accessToken ?? null,
   refreshToken: storedAuth?.refreshToken ?? null,
   isRefreshing: false,
+  isLoginPending: false,
 };
 
 export const loginThunk = createAsyncThunk(
@@ -73,6 +74,7 @@ const identitySlice = createSlice({
       state.accessToken = null;
       state.refreshToken = null;
       state.isRefreshing = false;
+      state.isLoginPending = false;
       try {
         localStorage.removeItem("auth");
       } catch {
@@ -93,11 +95,15 @@ const identitySlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      .addCase(loginThunk.pending, (state) => {
+        state.isLoginPending = true;
+      })
       .addCase(loginThunk.fulfilled, (state, action) => {
         state.accessToken = action.payload.accessToken;
         state.refreshToken = action.payload.refreshToken;
         state.currentUser = action.payload.user;
         state.isRefreshing = false;
+        state.isLoginPending = false;
         localStorage.setItem(
           "auth",
           JSON.stringify({
@@ -106,6 +112,9 @@ const identitySlice = createSlice({
             refreshToken: action.payload.refreshToken,
           }),
         );
+      })
+      .addCase(loginThunk.rejected, (state) => {
+        state.isLoginPending = false;
       })
       .addCase(refreshTokenThunk.pending, (state) => {
         state.isRefreshing = true;

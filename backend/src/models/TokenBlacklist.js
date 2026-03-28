@@ -1,3 +1,4 @@
+/** @file Mongoose model: revoked JWT strings with TTL for cleanup. */
 import { Schema, model } from "mongoose";
 
 const TokenBlacklistSchema = new Schema({

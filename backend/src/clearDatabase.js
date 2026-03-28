@@ -1,6 +1,6 @@
 /**
- * clearDatabase.js
- * Wipes all data in the DB collections found in models/ and re-creates the default admin user.
+ * @file Dev utility: wipes core Collections and inserts a single ADMIN user for recovery.
+ * Run: `node src/clearDatabase.js` from `backend/`.
  */
 import dotenv from "dotenv";
 dotenv.config();
@@ -13,20 +13,19 @@ import { Employee } from "./models/Employee.js";
 import { Department } from "./models/Department.js";
 import { Team } from "./models/Team.js";
 import { Position } from "./models/Position.js";
-import { AttendanceEvent } from "./models/AttendanceEvent.js";
-import { AttendanceDaily } from "./models/AttendanceDaily.js";
-import { AttendancePolicy } from "./models/AttendancePolicy.js";
-import { AttendanceMetric } from "./models/AttendanceMetric.js";
 import { PasswordResetRequest } from "./models/PasswordResetRequest.js";
 import { UserPermission } from "./models/Permission.js";
 import { TokenBlacklist } from "./models/TokenBlacklist.js";
 
+/**
+ * Connects to MongoDB, `deleteMany` on each model in order, inserts `admin@hr.local`, disconnects.
+ * @returns {Promise<void>}
+ */
 async function run() {
   await connectDb();
   console.log("🧹 Wiping database collections...");
 
   const collections = [
-    AttendanceDaily, AttendanceEvent, AttendanceMetric, AttendancePolicy,
     Department, Team, Position, User, Employee,
     PasswordResetRequest, UserPermission, TokenBlacklist
   ];

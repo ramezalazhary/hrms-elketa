@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { FormBuilder } from "@/shared/components/FormBuilder";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { createTeamThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
@@ -41,6 +41,8 @@ export function CreateTeamPage() {
     <Layout title="Create Team" description="Add a new team to a department.">
       <FormBuilder
         onCancel={() => navigate("/teams")}
+        submitLabel="Create Team"
+        devDemoFill={devDemoFill}
         onSubmit={handleSubmit}
         fields={[
           { name: "name", label: "Team Name", type: "text", required: true },

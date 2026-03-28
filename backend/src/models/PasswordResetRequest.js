@@ -1,3 +1,4 @@
+/** @file Mongoose model: pending admin-handled password reset requests. */
 import mongoose from 'mongoose';
 
 const passwordResetRequestSchema = new mongoose.Schema(

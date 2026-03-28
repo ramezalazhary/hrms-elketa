@@ -1,3 +1,4 @@
+/** @file Mongoose model: job position tied to department/team. */
 import mongoose, { Schema, model } from "mongoose";
 
 const PositionSchema = new Schema(

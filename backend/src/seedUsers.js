@@ -1,3 +1,8 @@
+/**
+ * @file Seeds org structure (departments, teams), employees, and users into MongoDB.
+ * Clears Users, Employees, Departments, Teams, password/ token collections first.
+ * Run: `npm run seed` or `node src/seedUsers.js`.
+ */
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
@@ -62,6 +67,10 @@ const SEED_DATA = {
   ]
 };
 
+/**
+ * Entry: connect → wipe collections → insert departments/teams → employees → users with bcrypt hashes.
+ * @returns {Promise<void>}
+ */
 async function main() {
   await connectDb();
 

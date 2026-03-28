@@ -6,7 +6,6 @@ import { employeesReducer } from "@/modules/employees/store";
 import { identityReducer } from "@/modules/identity/store";
 import { positionsReducer } from "@/modules/positions/store";
 import { teamsReducer } from "@/modules/teams/store";
-import { attendanceReducer } from "@/modules/attendance/store";
 
 export const store = configureStore({
   reducer: {
@@ -17,6 +16,5 @@ export const store = configureStore({
     positions: positionsReducer,
     employments: employmentsReducer,
     contracts: contractsReducer,
-    attendance: attendanceReducer,
   },
 });

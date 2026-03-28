@@ -1,5 +1,4 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { createId } from "@/shared/utils/id";
 import {
   createEmployeeApi,
   getEmployeesApi,
@@ -19,8 +18,7 @@ export const fetchEmployeesThunk = createAsyncThunk(
 
 export const createEmployeeThunk = createAsyncThunk(
   "employees/create",
-  async (payload) =>
-    createEmployeeApi({ ...payload, id: createId() }),
+  async (payload) => createEmployeeApi(payload),
 );
 
 export const deleteEmployeeThunk = createAsyncThunk(
@@ -49,7 +47,11 @@ const employeesSlice = createSlice({
       state.isLoading = false;
     });
     builder.addCase(createEmployeeThunk.fulfilled, (state, action) => {
-      state.items.unshift(action.payload);
+      const data = action.payload;
+      const emp = data?.employee ?? data;
+      if (emp && (emp.id ?? emp._id)) {
+        state.items.unshift(emp);
+      }
     });
     builder.addCase(updateEmployeeThunk.fulfilled, (state, action) => {
       state.items = state.items.map((item) =>

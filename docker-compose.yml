@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: hrms-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: hrms
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - hrms-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  hrms-network:
+    driver: bridge

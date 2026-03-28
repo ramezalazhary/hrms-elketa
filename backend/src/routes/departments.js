@@ -1,8 +1,10 @@
+/**
+ * @file `/api/departments` — read filtered by role; create/update/delete require legacy `requireRole(3)` (Admin numeric gate).
+ */
 import { Router } from "express";
 import { Department } from "../models/Department.js";
 import { Employee } from "../models/Employee.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { checkPermission } from "../middleware/permissions.js";
 import {
   validateDepartmentCreation,
   validateDepartmentUpdate,
@@ -89,9 +91,12 @@ router.post(
         return res.status(409).json({ error: "Department already exists" });
       }
 
+      const headEmail =
+        head && typeof head === "string" && head.trim() ? head.trim() : undefined;
+
       const newDepartment = new Department({
         name,
-        head,
+        ...(headEmail ? { head: headEmail } : {}),
         description,
         type: type || "PERMANENT",
         status: status || "ACTIVE",
@@ -125,7 +130,10 @@ router.put(
       }
 
       department.name = name ?? department.name;
-      department.head = head ?? department.head;
+      if (head !== undefined) {
+        department.head =
+          head && typeof head === "string" && head.trim() ? head.trim() : null;
+      }
       department.description = description ?? department.description;
       department.type = type ?? department.type;
       department.status = status ?? department.status;

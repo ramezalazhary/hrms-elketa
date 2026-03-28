@@ -1,3 +1,4 @@
+/** @file Mongoose model: HR employee profile and org fields (department, team, etc.). */
 import { Schema, model } from "mongoose";
 
 const EmployeeSchema = new Schema(

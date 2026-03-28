@@ -1,75 +1,40 @@
 import { store } from "@/app/store";
 import { refreshTokenThunk } from "@/modules/identity/store";
 
-let isRefreshing = false;
-let refreshPromise = null;
-
+/**
+ * Reads the access token from the Redux `identity` slice.
+ * @returns {string|null|undefined}
+ */
 export function getAuthToken() {
   return store.getState().identity.accessToken;
 }
 
+/**
+ * Reads the refresh token from the Redux `identity` slice.
+ * @returns {string|null|undefined}
+ */
 export function getRefreshToken() {
   return store.getState().identity.refreshToken;
 }
 
+/**
+ * Builds headers for authenticated requests (`Authorization: Bearer …`) if a token exists.
+ * @returns {Record<string, string>} Empty object or single-key Authorization header.
+ */
 export function getAuthHeaders() {
   const token = getAuthToken();
-  return token
-    ? { Authorization: `Bearer ${token}` }
-    : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// Check if token is expired (basic check - you might want more sophisticated JWT parsing)
-function isTokenExpired(token) {
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    const currentTime = Date.now() / 1000;
-    return payload.exp < currentTime;
-  } catch {
-    return true; // If we can't parse, assume expired
-  }
-}
-
-// Refresh token and retry the request
-async function refreshTokenAndRetry(originalRequest) {
-  if (isRefreshing) {
-    // Wait for ongoing refresh
-    await refreshPromise;
-  } else {
-    // Start refresh
-    isRefreshing = true;
-    refreshPromise = store.dispatch(refreshTokenThunk());
-
-    try {
-      await refreshPromise;
-    } catch (error) {
-      isRefreshing = false;
-      refreshPromise = null;
-      throw error;
-    }
-
-    isRefreshing = false;
-    refreshPromise = null;
-  }
-
-  // Retry with new token
-  const newToken = getAuthToken();
-  if (newToken) {
-    const newRequest = new Request(originalRequest.url, {
-      ...originalRequest,
-      headers: {
-        ...Object.fromEntries(originalRequest.headers),
-        Authorization: `Bearer ${newToken}`,
-      },
-    });
-    return fetch(newRequest);
-  }
-
-  throw new Error("Failed to refresh token");
-}
-
+/**
+ * `fetch` wrapper: injects Bearer token; on **401** attempts one refresh via `refreshTokenThunk` and retries.
+ * @param {RequestInfo} input URL or Request
+ * @param {RequestInit} [init] Standard fetch options (headers merged).
+ * @returns {Promise<Response>} Final HTTP response (caller still checks `ok`).
+ *
+ * Data flow: merge `Authorization` → `fetch` → if 401 and refresh token exists → dispatch thunk unwrap → retry with new header.
+ */
 export async function fetchWithAuth(input, init) {
-  // Add auth headers if we have a token
   const token = getAuthToken();
   const headers = new Headers(init?.headers);
 
@@ -84,13 +49,10 @@ export async function fetchWithAuth(input, init) {
 
   let response = await fetch(input, requestInit);
 
-  // If unauthorized and we have a refresh token, try to refresh
   if (response.status === 401 && getRefreshToken()) {
     try {
-      // Wait for refresh to complete
       await store.dispatch(refreshTokenThunk()).unwrap();
 
-      // Retry with new token
       const newToken = getAuthToken();
       if (newToken) {
         headers.set("Authorization", `Bearer ${newToken}`);
@@ -100,7 +62,6 @@ export async function fetchWithAuth(input, init) {
         });
       }
     } catch (refreshError) {
-      // Refresh failed, the store should handle logout
       console.error("Token refresh failed:", refreshError);
       throw refreshError;
     }

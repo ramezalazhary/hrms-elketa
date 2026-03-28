@@ -1,3 +1,9 @@
+/**
+ * @file Admin UI for login accounts (`/admin/users`): loads users when actor is Admin or Head of HR,
+ * employee directory for broader roles, permission matrix modal, and HR-only onboarding actions.
+ * Data flow: Redux `identity` → parallel REST (`getUsersApi`, `getDepartmentsApi`, `getEmployeesApi`) →
+ * local React state for filters, tabs, selected user, permission rows → save via users/permissions APIs.
+ */
 import { useEffect, useMemo, useState } from "react";
 import { Layout } from "@/shared/components/Layout";
 import { Modal } from "@/shared/components/Modal";
@@ -16,51 +22,35 @@ import {
   replaceUserPermissionsApi,
 } from "@/modules/permissions/api";
 import { getPasswordRequestsApi, forceResetPasswordApi } from "@/modules/users/api";
+import {
+  RoleBadge,
+  RoleStatCard,
+  ROLE_CONFIG,
+  normaliseRoleKey,
+  DepartmentBadge,
+} from "@/shared/components/EntityBadges";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const ROLE_META = {
-  ADMIN:       { label: "Admin",       color: "bg-violet-100 text-violet-700 border-violet-200",  dot: "bg-violet-500" },
-  HR_STAFF:    { label: "HR Staff",    color: "bg-emerald-100 text-emerald-700 border-emerald-200",dot: "bg-emerald-500" },
-  MANAGER:     { label: "Manager",     color: "bg-blue-100 text-blue-700 border-blue-200",         dot: "bg-blue-500" },
-  TEAM_LEADER: { label: "Team Leader", color: "bg-amber-100 text-amber-700 border-amber-200",      dot: "bg-amber-500" },
-  EMPLOYEE:    { label: "Employee",    color: "bg-slate-100 text-slate-600 border-slate-200",      dot: "bg-slate-400" },
-};
-
-function normaliseRole(r) {
-  if (r === 3 || r === "ADMIN")    return "ADMIN";
-  if (r === 2 || r === "MANAGER")  return "MANAGER";
-  if (r === "HR_STAFF")            return "HR_STAFF";
-  if (r === "TEAM_LEADER")         return "TEAM_LEADER";
-  return "EMPLOYEE";
-}
-
-function RoleBadge({ role }) {
-  const key  = normaliseRole(role);
-  const meta = ROLE_META[key] ?? ROLE_META.EMPLOYEE;
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.color}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-      {meta.label}
-    </span>
-  );
-}
-
 function Avatar({ email }) {
   const letter = (email || "?")[0].toUpperCase();
-  const colors = [
-    "bg-violet-500","bg-blue-500","bg-emerald-500","bg-amber-500",
-    "bg-rose-500","bg-cyan-500","bg-indigo-500","bg-pink-500",
+  const shades = [
+    "bg-zinc-700",
+    "bg-zinc-600",
+    "bg-zinc-500",
+    "bg-zinc-800",
   ];
-  const idx   = email ? email.charCodeAt(0) % colors.length : 0;
+  const idx = email ? email.charCodeAt(0) % shades.length : 0;
   return (
-    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white shadow-sm ${colors[idx]}`}>
+    <div
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-xs font-medium text-white ${shades[idx]}`}
+    >
       {letter}
     </div>
   );
 }
 
-const MODULES = ["employees","departments","recruitment","payroll","attendance"];
+const MODULES = ["employees","departments","recruitment","payroll"];
 const ACTIONS  = ["view","create","edit","delete","approve","export"];
 
 // ─── Main component ──────────────────────────────────────────────────────────
@@ -69,7 +59,7 @@ export function UsersAdminPage() {
   const { showToast } = useToast();
   const currentRole  = useAppSelector(s => s.identity.currentUser?.role);
   const currentEmail = useAppSelector(s => s.identity.currentUser?.email);
-  const isAdmin      = currentRole === 3 || currentRole === "ADMIN";
+  const isFullAdmin  = currentRole === 3 || currentRole === "ADMIN";
 
   /* ── data ── */
   const [isLoading,        setLoading]        = useState(false);
@@ -92,22 +82,35 @@ export function UsersAdminPage() {
   /* ── tabs ── */
   const [tab, setTab] = useState("users"); // "users" | "directory"
 
-  /* ── HR head check ── */
+  /* ── Head of HR (email matches HR department head), independent of admin role ── */
   const isHrHead = useMemo(() => {
-    if (!isAdmin || !currentEmail) return false;
+    if (!currentEmail || !departments.length) return false;
     return departments.some(d => d.name === "HR" && d.head === currentEmail);
-  }, [currentEmail, departments, isAdmin]);
+  }, [currentEmail, departments]);
+
+  const canLoadUsers = isFullAdmin || (currentRole === "HR_STAFF" && isHrHead);
+  const showAccountsTab = canLoadUsers;
+  const showAdminNav =
+    showAccountsTab || ["MANAGER", "HR_STAFF"].includes(currentRole);
+  /** HR Heads (without system Admin) cannot assign roles — backend enforces the same. */
+  const hideRoleControls = isHrHead && !isFullAdmin;
 
   /* ── load ── */
   useEffect(() => {
-    if (isAdmin) {
+    if (canLoadUsers) {
       setLoading(true);
       getUsersApi()
         .then(d => setUsers(d))
         .catch(e => { console.error(e); showToast("Failed to load users","error"); })
         .finally(() => setLoading(false));
+    } else {
+      setUsers([]);
     }
-  }, [isAdmin, showToast]);
+  }, [canLoadUsers, showToast]);
+
+  useEffect(() => {
+    if (!showAccountsTab && tab === "users") setTab("directory");
+  }, [showAccountsTab, tab]);
 
   useEffect(() => {
     setDeptLoading(true);
@@ -135,7 +138,7 @@ export function UsersAdminPage() {
     const q = search.toLowerCase();
     return rows.filter(u => {
       const matchSearch = !q || u.email.toLowerCase().includes(q);
-      const matchRole   = filterRole === "ALL" || normaliseRole(u.effectiveRole) === filterRole;
+      const matchRole   = filterRole === "ALL" || normaliseRoleKey(u.effectiveRole) === filterRole;
       return matchSearch && matchRole;
     });
   }, [rows, search, filterRole]);
@@ -161,7 +164,7 @@ export function UsersAdminPage() {
       const resp = await updateUserRoleApi(row.id, row.effectiveRole);
       setUsers(prev => prev.map(u => u.id === resp.user.id ? resp.user : u));
       setPendingRoles(prev => { const n = { ...prev }; delete n[row.id]; return n; });
-      showToast(`Role updated to ${ROLE_META[normaliseRole(resp.user.role)]?.label}`, "success");
+      showToast(`Role updated to ${ROLE_CONFIG[normaliseRoleKey(resp.user.role)]?.label}`, "success");
     } catch(err) { console.error(err); showToast("Failed to update role","error"); }
   }
 
@@ -215,46 +218,39 @@ export function UsersAdminPage() {
       description="Manage system accounts, roles and granular module permissions."
     >
       {/* ── Stats bar ── */}
-      {isAdmin && !isLoading && (
+      {showAccountsTab && !isLoading && (
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-          {Object.entries(ROLE_META).map(([key, meta]) => {
-            const count = users.filter(u => normaliseRole(u.role) === key).length;
+          {Object.keys(ROLE_CONFIG).map((key) => {
+            const count = users.filter((u) => normaliseRoleKey(u.role) === key).length;
             return (
-              <button
+              <RoleStatCard
                 key={key}
-                type="button"
-                onClick={() => setFilterRole(old => old === key ? "ALL" : key)}
-                className={`group flex flex-col gap-1 rounded-2xl border p-4 text-left transition-all duration-200 hover:shadow-md active:scale-95 ${
-                  filterRole === key
-                    ? "border-slate-900 bg-slate-900 shadow-md"
-                    : "border-white/60 bg-white/70 backdrop-blur hover:border-slate-200"
-                }`}
-              >
-                <span className={`text-2xl font-extrabold ${filterRole === key ? "text-white" : "text-slate-900"}`}>
-                  {count}
-                </span>
-                <span className={`text-xs font-semibold ${filterRole === key ? "text-slate-300" : "text-slate-500"}`}>
-                  {meta.label}
-                </span>
-              </button>
+                roleKey={key}
+                selected={filterRole === key}
+                count={count}
+                onToggle={() => setFilterRole((old) => (old === key ? "ALL" : key))}
+              />
             );
           })}
         </div>
       )}
 
       {/* ── Tabs + Search ── */}
-      {isAdmin && (
+      {showAdminNav && (
         <div className="flex flex-wrap items-center gap-3 mb-5">
-          <div className="flex rounded-xl border border-slate-200 bg-white/70 backdrop-blur p-1 gap-1">
-            {[["users","👥 Accounts"],["directory","🏢 Directory"]].map(([id,label]) => (
+          <div className="flex rounded-md border border-zinc-200 bg-zinc-50/80 p-0.5 gap-0.5">
+            {[
+              ...(showAccountsTab ? [["users", "Accounts"]] : []),
+              ["directory", "Directory"],
+            ].map(([id, label]) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => setTab(id)}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
                   tab === id
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100"
+                    ? "bg-white text-zinc-900 shadow-sm border border-zinc-200"
+                    : "text-zinc-600 hover:text-zinc-900"
                 }`}
               >
                 {label}
@@ -272,7 +268,7 @@ export function UsersAdminPage() {
               placeholder={tab === "users" ? "Search by email…" : "Search by name or email…"}
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white/80 py-2 pl-9 pr-4 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
+              className="w-full rounded-md border border-zinc-200 bg-white py-2 pl-9 pr-4 text-sm text-zinc-900 placeholder-zinc-400 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
             />
           </div>
 
@@ -281,10 +277,10 @@ export function UsersAdminPage() {
             <select
               value={filterRole}
               onChange={e => setFilterRole(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
+              className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
             >
               <option value="ALL">All Roles</option>
-              {Object.entries(ROLE_META).map(([key,m]) => (
+              {Object.entries(ROLE_CONFIG).map(([key, m]) => (
                 <option key={key} value={key}>{m.label}</option>
               ))}
             </select>
@@ -295,7 +291,7 @@ export function UsersAdminPage() {
             <select
               value={filterDept}
               onChange={e => setFilterDept(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
+              className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
             >
               <option value="all">{deptLoading ? "Loading…" : "All Departments"}</option>
               {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
@@ -305,19 +301,18 @@ export function UsersAdminPage() {
       )}
 
       {/* ── ACCOUNTS TAB ── */}
-      {isAdmin && tab === "users" && (
-        <div className="overflow-hidden rounded-2xl border border-white/60 bg-white/70 backdrop-blur shadow-sm">
+      {showAccountsTab && tab === "users" && (
+        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-card">
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <div className="flex flex-col items-center gap-3">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
-                <p className="text-sm text-slate-500">Loading accounts…</p>
+                <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
+                <p className="text-sm text-zinc-500">Loading accounts…</p>
               </div>
             </div>
           ) : filteredUsers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="text-4xl mb-3">🔍</div>
-              <p className="font-semibold text-slate-700">No users match</p>
+              <p className="font-medium text-zinc-800">No users match</p>
               <p className="text-sm text-slate-500 mt-1">Try a different search or filter.</p>
             </div>
           ) : (
@@ -326,7 +321,7 @@ export function UsersAdminPage() {
                 <tr className="border-b border-slate-100 bg-slate-50/80">
                   <th className="px-5 py-3.5 text-left font-semibold text-slate-600">Account</th>
                   <th className="px-5 py-3.5 text-left font-semibold text-slate-600">Current Role</th>
-                  {!isHrHead && <th className="px-5 py-3.5 text-left font-semibold text-slate-600">Change Role</th>}
+                  {!hideRoleControls && <th className="px-5 py-3.5 text-left font-semibold text-slate-600">Change Role</th>}
                   <th className="px-5 py-3.5 text-right font-semibold text-slate-600">Actions</th>
                 </tr>
               </thead>
@@ -334,7 +329,7 @@ export function UsersAdminPage() {
                 {filteredUsers.map(row => {
                   const isDirty = row.effectiveRole !== row.role;
                   return (
-                    <tr key={row.id} className="group transition-colors hover:bg-blue-50/40">
+                    <tr key={row.id} className="group transition-colors hover:bg-zinc-50/80">
                       {/* Account */}
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
@@ -354,10 +349,10 @@ export function UsersAdminPage() {
                       </td>
 
                       {/* Dropdown */}
-                      {!isHrHead && (
+                      {!hideRoleControls && (
                         <td className="px-5 py-3.5">
                           <select
-                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
+                            className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
                             value={row.effectiveRole}
                             onChange={e => setPendingRoles(prev => ({ ...prev, [row.id]: e.target.value }))}
                           >
@@ -373,12 +368,12 @@ export function UsersAdminPage() {
                       {/* Actions */}
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-end gap-2">
-                          {!isHrHead && (
+                          {!hideRoleControls && (
                             <button
                               type="button"
                               disabled={!isDirty}
                               onClick={() => handleSaveRole(row)}
-                              className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                               Save
                             </button>
@@ -386,7 +381,7 @@ export function UsersAdminPage() {
                           <button
                             type="button"
                             onClick={() => handleOpenPermissions(row.id)}
-                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:border-zinc-300"
                           >
                             Permissions
                           </button>
@@ -403,7 +398,7 @@ export function UsersAdminPage() {
             <div className="border-t border-slate-100 px-5 py-3 text-xs text-slate-400 flex items-center justify-between">
               <span>Showing <strong className="text-slate-600">{filteredUsers.length}</strong> of <strong className="text-slate-600">{users.length}</strong> accounts</span>
               {filterRole !== "ALL" && (
-                <button type="button" onClick={() => setFilterRole("ALL")} className="text-blue-500 hover:underline font-medium">
+                <button type="button" onClick={() => setFilterRole("ALL")} className="text-zinc-600 hover:underline text-xs font-medium">
                   Clear filter
                 </button>
               )}
@@ -414,18 +409,17 @@ export function UsersAdminPage() {
 
       {/* ── DIRECTORY TAB ── */}
       {tab === "directory" && (
-        <div className="overflow-hidden rounded-2xl border border-white/60 bg-white/70 backdrop-blur shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-card">
           {empLoading ? (
             <div className="flex items-center justify-center py-20">
               <div className="flex flex-col items-center gap-3">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
-                <p className="text-sm text-slate-500">Loading directory…</p>
+                <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
+                <p className="text-sm text-zinc-500">Loading directory…</p>
               </div>
             </div>
           ) : filteredEmployees.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="text-4xl mb-3">📭</div>
-              <p className="font-semibold text-slate-700">No employees found</p>
+              <p className="font-medium text-zinc-800">No employees found</p>
               <p className="text-sm text-slate-500 mt-1">Try a different search or department.</p>
             </div>
           ) : (
@@ -435,7 +429,7 @@ export function UsersAdminPage() {
                   <th className="px-5 py-3.5 text-left font-semibold text-slate-600">Employee</th>
                   <th className="px-5 py-3.5 text-left font-semibold text-slate-600">Department</th>
                   <th className="px-5 py-3.5 text-left font-semibold text-slate-600">Position</th>
-                  {isAdmin && filterDept === "HR" && (
+                  {(isFullAdmin || isHrHead) && filterDept === "HR" && (
                     <th className="px-5 py-3.5 text-right font-semibold text-slate-600">HR Permissions</th>
                   )}
                 </tr>
@@ -444,7 +438,7 @@ export function UsersAdminPage() {
                 {filteredEmployees.map(emp => {
                   const userId = emailToUserId.get(emp.email);
                   return (
-                    <tr key={emp.id} className="group transition-colors hover:bg-blue-50/40">
+                    <tr key={emp.id} className="group transition-colors hover:bg-zinc-50/80">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <Avatar email={emp.email} />
@@ -455,19 +449,17 @@ export function UsersAdminPage() {
                         </div>
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                          {emp.department || "—"}
-                        </span>
+                        <DepartmentBadge name={emp.department || "—"} />
                       </td>
                       <td className="px-5 py-3.5 text-slate-600">{emp.position || "—"}</td>
-                      {isAdmin && filterDept === "HR" && (
+                      {(isFullAdmin || isHrHead) && filterDept === "HR" && (
                         <td className="px-5 py-3.5">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               type="button"
                               disabled={!userId}
                               onClick={() => userId && handleOpenPermissions(userId)}
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-card transition hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed"
                               title={userId ? "Manage permissions" : "Create login first"}
                             >
                               Permissions
@@ -533,7 +525,7 @@ export function UsersAdminPage() {
               <button
                 type="button"
                 onClick={handleSavePermissions}
-                className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600"
+                className="rounded-md bg-zinc-900 px-5 py-2 text-sm font-medium text-white shadow-card transition hover:bg-zinc-800"
               >
                 Save Changes
               </button>
@@ -542,7 +534,7 @@ export function UsersAdminPage() {
 
           {permissionsLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
+              <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-slate-100 shadow-sm">
@@ -565,16 +557,16 @@ export function UsersAdminPage() {
                       };
                       const systemEditOnly = isHrHead && (m === "employees" || m === "departments");
                       return (
-                        <tr key={m} className="transition-colors hover:bg-blue-50/30 group">
+                        <tr key={m} className="transition-colors hover:bg-zinc-50/80 group">
                           <td className="px-5 py-4">
                             <span className="inline-flex items-center gap-2 font-semibold text-slate-800 capitalize">
-                              <span className="h-2 w-2 rounded-full bg-blue-500 opacity-70 group-hover:opacity-100 transition-opacity" />
+                              <span className="h-2 w-2 rounded-full bg-zinc-400 opacity-70 group-hover:opacity-100 transition-opacity" />
                               {m}
                             </span>
                           </td>
                           <td className="px-5 py-4">
                             <select
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
+                              className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400"
                               value={row.scope}
                               onChange={e => {
                                 const scope = e.target.value;
@@ -600,7 +592,7 @@ export function UsersAdminPage() {
                                     checked={checked}
                                     disabled={disabled}
                                     onChange={() => togglePermAction(m, a)}
-                                    className="h-4 w-4 rounded border-slate-300 text-blue-600 shadow-sm focus:ring-blue-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                    className="h-4 w-4 rounded border-zinc-300 text-zinc-900 shadow-sm focus:ring-zinc-400 disabled:opacity-40 disabled:cursor-not-allowed"
                                   />
                                 </label>
                               </td>

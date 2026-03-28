@@ -7,6 +7,7 @@ import { Pagination } from "@/shared/components/Pagination";
 import { useToast } from "@/shared/components/ToastProvider";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { fetchDepartmentsThunk, deleteDepartmentThunk } from "../store";
+import { DepartmentBadge } from "@/shared/components/EntityBadges";
 
 export function DepartmentsListPage() {
   const dispatch = useAppDispatch();
@@ -39,7 +40,7 @@ export function DepartmentsListPage() {
       actions={
         (role === 3 || role === "ADMIN") ? (
           <Link
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800"
             to="/departments/create"
           >
             + Add Department
@@ -54,7 +55,11 @@ export function DepartmentsListPage() {
       />
       <DataTable
         columns={[
-          { key: "name", header: "Name", render: (row) => row.name },
+          {
+            key: "name",
+            header: "Name",
+            render: (row) => <DepartmentBadge name={row.name} className="max-w-xs" />,
+          },
           {
             key: "type",
             header: "Type",

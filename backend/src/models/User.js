@@ -1,3 +1,4 @@
+/** @file Mongoose model: authentication account (email, role, link to Employee). */
 import { Schema, model } from "mongoose";
 
 const UserSchema = new Schema(
