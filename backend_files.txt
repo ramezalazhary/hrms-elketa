@@ -1,0 +1,17 @@
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\config\db.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\middleware\auth.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\middleware\permissions.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\middleware\security.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\middleware\validation.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\models\Department.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\models\Employee.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\models\Permission.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\models\TokenBlacklist.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\models\User.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\routes\auth.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\routes\departments.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\routes\employees.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\routes\permissions.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\routes\users.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\index.ts
+C:\Users\COMPUMARTS\OneDrive\Desktop\my-react-app\backend\src\seedUsers.ts
