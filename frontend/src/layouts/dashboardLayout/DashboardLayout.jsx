@@ -20,6 +20,7 @@ import {
   FileKey,
   Menu,
   X,
+  CalendarRange,
 } from "lucide-react";
 
 /** Minimal dashboard chrome: neutral sidebar, hairline borders, no heavy shadows. */
@@ -76,17 +77,25 @@ export function DashboardLayout() {
   };
 
   const navStructure = [{ type: "link", to: "/", label: "Home", icon: Home }];
-
+  
   if (currentRole === "TEAM_LEADER") {
     navStructure.push({
       type: "link",
       to: "/dashboard",
-      label: "Dashboard",
+      label: "My Team",
+      icon: Users,
+    });
+  } else if (currentRole === "MANAGER") {
+    navStructure.push({
+      type: "link",
+      to: "/dashboard",
+      label: "My Department",
       icon: LayoutDashboard,
     });
   }
 
-  if (isManager) {
+  // Organizations & Employees restricted to HR/Admin
+  if (isHR) {
     navStructure.push({
       type: "group",
       label: "Organizations",
@@ -95,8 +104,11 @@ export function DashboardLayout() {
         { type: "link", to: "/organizations", label: "Structure", icon: Network },
         { type: "link", to: "/employees", label: "Employees", icon: Users },
         { type: "link", to: "/departments", label: "Departments", icon: Briefcase },
+        { type: "link", to: "/attendance", label: "Attendance", icon: CalendarRange },
       ],
     });
+  } else if (currentRole === "MANAGER") {
+    // Managers no longer have Employees/Departments links as requested
   }
 
   return (
@@ -280,7 +292,7 @@ function SidebarLink({ to, label, icon: Icon, isCollapsed, closeMobile }) {
         `flex items-center gap-2.5 px-2 py-2 rounded-md text-xs font-medium transition-colors
         ${
           isActive
-            ? "bg-zinc-100 text-zinc-900"
+            ? "bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100"
             : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
         }`
       }

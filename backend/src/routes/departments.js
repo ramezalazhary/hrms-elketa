@@ -4,6 +4,7 @@
 import { Router } from "express";
 import { Department } from "../models/Department.js";
 import { Employee } from "../models/Employee.js";
+import { Team } from "../models/Team.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   validateDepartmentCreation,
@@ -25,10 +26,13 @@ router.get("/", requireAuth, async (req, res) => {
       const employee = await Employee.findOne({ email: user.email });
       if (!employee) return res.json([]);
       departments = await Department.find({ name: employee.department });
-    } else if (user.role === 2 || user.role === "MANAGER" || user.role === "HR_STAFF") {
-      // Manager/HR: see departments they manage or all if HR
+    } else if (user.role === 2 || user.role === "MANAGER" || user.role === "HR_STAFF" || user.role === "TEAM_LEADER") {
+      // Manager/HR/Leader: see departments they manage or all if HR
       if (user.role === "HR_STAFF") {
         departments = await Department.find();
+      } else if (user.role === "TEAM_LEADER") {
+        // Special: Team Leader sees departments where they lead a team
+        departments = await Department.find({ "teams.leaderEmail": user.email });
       } else {
         departments = await Department.find({ head: user.email });
       }
@@ -37,7 +41,19 @@ router.get("/", requireAuth, async (req, res) => {
       departments = await Department.find();
     }
 
-    res.json(departments);
+    // After fetching departments, merge standalone teams if they've migrated
+    const allTeams = await Team.find({ status: "ACTIVE" });
+    const departmentsWithTeams = departments.map(dept => {
+      const deptObj = dept.toObject();
+      // If dept already has teams or hasMigratedTeams is false, we might still have standalone teams
+      const standalone = allTeams.filter(t => t.departmentId.toString() === deptObj.id);
+      if (standalone.length > 0) {
+        deptObj.teams = [...(deptObj.teams || []), ...standalone];
+      }
+      return deptObj;
+    });
+
+    res.json(departmentsWithTeams);
   } catch (error) {
     console.error("Error fetching departments:", error);
     res.status(500).json({ error: "Failed to fetch departments" });
@@ -67,7 +83,13 @@ router.get("/:id", requireAuth, async (req, res) => {
     }
     // Admin has access to all
 
-    res.json(department);
+    const standaloneTeams = await Team.find({ departmentId: department._id, status: "ACTIVE" });
+    const deptObj = department.toObject();
+    if (standaloneTeams.length > 0) {
+      deptObj.teams = [...(deptObj.teams || []), ...standaloneTeams];
+    }
+
+    res.json(deptObj);
   } catch (error) {
     console.error("Error fetching department:", error);
     res.status(500).json({ error: "Failed to fetch department" });
@@ -83,12 +105,26 @@ router.post(
   validateDepartmentCreation,
   async (req, res) => {
     try {
-      const { name, head, positions, description, type, status, teams } = req.body;
+      const { name, code, head, headTitle, headResponsibility, positions, description, type, status, teams } = req.body;
 
-      // Check if department already exists
-      const existing = await Department.findOne({ name });
+      // Check if department or code already exists
+      const existing = await Department.findOne({ $or: [{ name }, { code }] });
       if (existing) {
-        return res.status(409).json({ error: "Department already exists" });
+        return res.status(409).json({ error: "Department or code already exists" });
+      }
+
+      if (head) {
+        const headEmp = await Employee.findOne({ email: head });
+        if (!headEmp) {
+          return res.status(400).json({ error: `Leader with email ${head} not found.` });
+        }
+        // For new departments, the employee might not have the department name set yet.
+        // We'll check if they are explicitly assigned to ANOTHER existing department.
+        if (headEmp.department && headEmp.department !== name) {
+          // If the department name matches what we ARE creating, it's fine.
+          // Otherwise, they are in a different department.
+          return res.status(400).json({ error: `Leader ${head} belongs to ${headEmp.department}, not ${name}.` });
+        }
       }
 
       const headEmail =
@@ -96,12 +132,20 @@ router.post(
 
       const newDepartment = new Department({
         name,
-        ...(headEmail ? { head: headEmail } : {}),
+        code,
+        head: headEmail,
+        headTitle: headTitle || "Department Leader",
+        headResponsibility: headResponsibility || "",
         description,
         type: type || "PERMANENT",
         status: status || "ACTIVE",
         positions: positions || [],
-        teams: teams || [],
+        teams: (teams || []).map(t => ({
+          ...t,
+          leaderEmail: t.leaderEmail || t.manager || t.managerEmail,
+          leaderTitle: t.leaderTitle || "Team Leader",
+          leaderResponsibility: t.leaderResponsibility || ""
+        })),
       });
 
       await newDepartment.save();
@@ -122,25 +166,90 @@ router.put(
   validateDepartmentUpdate,
   async (req, res) => {
     try {
-      const { name, head, positions, description, type, status, teams } = req.body;
+      const { name, code, head, headTitle, headResponsibility, positions, description, type, status, teams } = req.body;
 
       const department = await Department.findById(req.params.id);
       if (!department) {
         return res.status(404).json({ error: "Department not found" });
       }
 
-      department.name = name ?? department.name;
+      const currentName = name ?? department.name;
+
+      if (head !== undefined && head !== null && head !== "") {
+        const headEmp = await Employee.findOne({ email: head });
+        if (!headEmp) {
+          return res.status(400).json({ error: `Leader with email ${head} not found.` });
+        }
+        // Support renaming: Allow if the employee is already assigned to this department (by ID or legacy name)
+        if (headEmp.departmentId?.toString() !== req.params.id && headEmp.department !== department.name && name !== headEmp.department) {
+          return res.status(400).json({ error: `Leader ${head} belongs to ${headEmp.department}, not ${currentName}.` });
+        }
+      }
+
+      department.name = currentName;
+      if (code !== undefined) department.code = code;
       if (head !== undefined) {
         department.head =
           head && typeof head === "string" && head.trim() ? head.trim() : null;
       }
+      if (headTitle !== undefined) department.headTitle = headTitle;
+      if (headResponsibility !== undefined) department.headResponsibility = headResponsibility;
+
       department.description = description ?? department.description;
       department.type = type ?? department.type;
       department.status = status ?? department.status;
       department.positions = Array.isArray(positions) ? positions : department.positions;
-      department.teams = Array.isArray(teams) ? teams : department.teams;
 
+      if (Array.isArray(teams)) {
+        // Validate team leaders and members departmental integrity
+        for (const t of teams) {
+          const leaderEmail = t.leaderEmail || t.manager || t.managerEmail;
+          if (leaderEmail) {
+            const leader = await Employee.findOne({ email: leaderEmail });
+            if (!leader || (leader.department !== currentName && leader.departmentId?.toString() !== req.params.id)) {
+              return res.status(400).json({
+                error: `Team leader ${leaderEmail} must belong to department ${currentName}`
+              });
+            }
+          }
+
+          if (Array.isArray(t.members)) {
+            for (const memberEmail of t.members) {
+              const member = await Employee.findOne({ email: memberEmail });
+              if (!member || (member.department !== currentName && member.departmentId?.toString() !== req.params.id)) {
+                return res.status(400).json({
+                  error: `Team member ${memberEmail} must belong to department ${currentName}`
+                });
+              }
+            }
+          }
+        }
+
+        department.teams = teams.map(t => ({
+          ...t,
+          leaderEmail: t.leaderEmail || t.manager || t.managerEmail || "",
+          leaderTitle: t.leaderTitle || "Team Leader",
+          leaderResponsibility: t.leaderResponsibility || "",
+          members: Array.isArray(t.members) ? t.members : []
+        }));
+      }
+
+      const isRenaming = name && name !== department.name;
       await department.save();
+
+      // If renaming, synchronize the department name for all assigned employees
+      if (isRenaming) {
+        await Employee.updateMany(
+          { departmentId: department._id },
+          { $set: { department: department.name } }
+        );
+        // Also update legacy-style assignments that might not have ID yet
+        await Employee.updateMany(
+          { department: department._id?.toString() }, // some legacy code uses ID in the name field
+          { $set: { department: department.name, departmentId: department._id } }
+        );
+      }
+
       res.json(department);
     } catch (error) {
       console.error("Error updating department:", error);
@@ -157,12 +266,44 @@ router.delete(
   strictLimiter,
   async (req, res) => {
     try {
-      const department = await Department.findByIdAndDelete(req.params.id);
+      const departmentId = req.params.id;
+      const department = await Department.findById(departmentId);
+
       if (!department) {
         return res.status(404).json({ error: "Department not found" });
       }
 
-      res.json({ message: "Department deleted successfully" });
+      const deptName = department.name;
+
+      // 1. Update all employees to be "Unassigned / Unemployed"
+      // We check both departmentId (new system) and department name (legacy compatibility)
+      await Employee.updateMany(
+        {
+          $or: [
+            { departmentId: departmentId },
+            { department: deptName }
+          ]
+        },
+        {
+          $set: {
+            departmentId: null,
+            department: "Unassigned / Unemployed",
+            teamId: null,
+            team: null,
+            managerId: null
+          }
+        }
+      );
+
+      // 2. Delete associated teams in the standalone Team collection
+      await Team.deleteMany({ departmentId: departmentId });
+
+      // 3. Finally delete the department
+      await Department.findByIdAndDelete(departmentId);
+
+      res.json({
+        message: "Department deleted successfully. All assigned employees have been transitioned to 'Unassigned / Unemployed' status."
+      });
     } catch (error) {
       console.error("Error deleting department:", error);
       res.status(500).json({ error: "Failed to delete department" });

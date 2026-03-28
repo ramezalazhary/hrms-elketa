@@ -57,6 +57,12 @@ export const validateDepartmentCreation = [
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage("Department name must be between 1 and 100 characters"),
+  body("code")
+    .trim()
+    .isLength({ min: 2, max: 10 })
+    .withMessage("Department code must be between 2 and 10 characters")
+    .matches(/^[A-Z0-9]+$/)
+    .withMessage("Department code must be alphanumeric and uppercase"),
   // Empty string from HTML selects must skip email check (optional() alone only skips undefined/null).
   body("head")
     .optional({ values: "falsy" })
@@ -145,6 +151,7 @@ export const userCreationSchema = Joi.object({
 /** Joi schema: department payload. */
 export const departmentCreationSchema = Joi.object({
   name: Joi.string().min(1).max(100).required(),
+  code: Joi.string().alphanum().uppercase().min(2).max(10).required(),
   head: Joi.alternatives().try(Joi.string().email(), Joi.string().valid("")).optional(),
   positions: Joi.array().items(
     Joi.object({

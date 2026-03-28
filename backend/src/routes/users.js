@@ -1,6 +1,7 @@
 /**
- * @file `/api/users` — login accounts (not employee HR records). Access: `requireAdminOrHrHead`;
- * HR Head sees users whose emails match HR department employees only and cannot change roles.
+ * @file `/api/users` — login accounts. Since User and Employee are merged,
+ * this now manages auth fields on the Employee model.
+ * Access: `requireAdminOrHrHead`; HR Head sees HR department employees only.
  */
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
@@ -8,7 +9,6 @@ import {
   requireAdminOrHrHead,
   isHrDepartmentHead,
 } from "../middleware/rbac.js";
-import { User } from "../models/User.js";
 import { Employee } from "../models/Employee.js";
 import bcrypt from "bcryptjs";
 
@@ -17,8 +17,14 @@ const router = Router();
 const HR_DEPARTMENT_NAME = process.env.HR_DEPARTMENT_NAME || "HR";
 
 const VALID_USER_ROLES = [
-  1, 2, 3,
-  "EMPLOYEE", "MANAGER", "HR_STAFF", "ADMIN", "TEAM_LEADER",
+  1,
+  2,
+  3,
+  "EMPLOYEE",
+  "MANAGER",
+  "HR_STAFF",
+  "ADMIN",
+  "TEAM_LEADER",
 ];
 
 // List users (admin or Head of HR — HR sees HR accounts only)
@@ -26,30 +32,26 @@ router.get("/", requireAuth, requireAdminOrHrHead, async (_req, res) => {
   const hrHead = await isHrDepartmentHead(_req.user.email);
 
   if (hrHead) {
-    const hrEmployeeEmails = await Employee.find({
+    const hrEmployees = await Employee.find({
       department: HR_DEPARTMENT_NAME,
-    }).distinct("email");
-    const users = await User.find({ email: { $in: hrEmployeeEmails } })
-      .select("_id email role")
-      .sort({ email: 1 });
+    }).select("_id email role");
     return res.json(
-      users.map((u) => ({
-        id: u._id.toString(),
-        email: u.email,
-        role: u.role,
+      hrEmployees.map((e) => ({
+        id: e._id.toString(),
+        email: e.email,
+        role: e.role,
       })),
     );
   }
 
-  const employeeEmails = await Employee.find().distinct("email");
-  const users = await User.find({ email: { $in: employeeEmails } })
+  const employees = await Employee.find()
     .select("_id email role")
     .sort({ email: 1 });
   return res.json(
-    users.map((u) => ({
-      id: u._id.toString(),
-      email: u.email,
-      role: u.role,
+    employees.map((e) => ({
+      id: e._id.toString(),
+      email: e.email,
+      role: e.role,
     })),
   );
 });
@@ -58,7 +60,9 @@ router.get("/", requireAuth, requireAdminOrHrHead, async (_req, res) => {
 router.put("/:id/role", requireAuth, requireAdminOrHrHead, async (req, res) => {
   const hrHead = await isHrDepartmentHead(req.user.email);
   if (hrHead) {
-    return res.status(403).json({ error: "HR Head cannot change system roles" });
+    return res
+      .status(403)
+      .json({ error: "HR Head cannot change system roles" });
   }
 
   const { role } = req.body ?? {};
@@ -66,15 +70,19 @@ router.put("/:id/role", requireAuth, requireAdminOrHrHead, async (req, res) => {
     return res.status(400).json({ error: "Invalid role" });
   }
 
-  const user = await User.findById(req.params.id);
-  if (!user) return res.status(404).json({ error: "User not found" });
+  const employee = await Employee.findById(req.params.id);
+  if (!employee) return res.status(404).json({ error: "User not found" });
 
-  user.role = role;
-  await user.save();
+  employee.role = role;
+  await employee.save();
 
   return res.json({
     success: true,
-    user: { id: user._id.toString(), email: user.email, role: user.role },
+    user: {
+      id: employee._id.toString(),
+      email: employee.email,
+      role: employee.role,
+    },
   });
 });
 
@@ -90,7 +98,9 @@ router.post("/", requireAuth, requireAdminOrHrHead, async (req, res) => {
 
   const employee = await Employee.findOne({ email }).select("department");
   if (!employee) {
-    return res.status(400).json({ error: "Employee record not found for email" });
+    return res
+      .status(400)
+      .json({ error: "Employee record not found for email" });
   }
 
   if (hrHead && employee.department !== HR_DEPARTMENT_NAME) {
@@ -99,9 +109,9 @@ router.post("/", requireAuth, requireAdminOrHrHead, async (req, res) => {
       .json({ error: "HR Head can only create accounts for HR employees" });
   }
 
-  const existing = await User.findOne({ email });
-  if (existing) {
-    return res.status(409).json({ error: "User already exists" });
+  // Check if employee already has password set
+  if (employee.passwordHash) {
+    return res.status(409).json({ error: "User already has an account" });
   }
 
   const chosenRole = hrHead
@@ -111,10 +121,18 @@ router.post("/", requireAuth, requireAdminOrHrHead, async (req, res) => {
       : "EMPLOYEE";
 
   const passwordHash = await bcrypt.hash(String(password), 10);
-  const user = await User.create({ email, passwordHash, role: chosenRole });
+  employee.passwordHash = passwordHash;
+  employee.role = chosenRole;
+  employee.requirePasswordChange = false;
+  employee.isActive = true;
+  await employee.save();
 
   return res.status(201).json({
-    user: { id: user._id.toString(), email: user.email, role: user.role },
+    user: {
+      id: employee._id.toString(),
+      email: employee.email,
+      role: employee.role,
+    },
   });
 });
 

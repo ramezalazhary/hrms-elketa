@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { User } from "../models/User.js";
+import { Employee } from "../models/Employee.js";
 import { TokenBlacklist } from "../models/TokenBlacklist.js";
 
 // Development fallback to avoid a hard failure before you create `.env`.
@@ -134,14 +134,14 @@ export function generateRefreshToken(user) {
 }
 
 /**
- * Validates a refresh token and loads the current user from DB.
+ * Validates a refresh token and loads the current employee from DB.
  *
  * @param {string} token Refresh JWT string.
  * @returns {Promise<{ id: string, email: string, role: string } | null>}
- *   User shape if valid and user exists; `null` if invalid/expired/missing user.
+ *   Employee shape if valid and employee exists; `null` if invalid/expired/missing employee.
  *
  * Data flow: `jwt.verify` with refresh secret → check `type === "refresh"` →
- * `User.findById` → return slim object or null.
+ * `Employee.findById` → return slim object or null.
  */
 export async function verifyRefreshToken(token) {
   try {
@@ -151,15 +151,15 @@ export async function verifyRefreshToken(token) {
       return null;
     }
 
-    const user = await User.findById(decoded.sub);
-    if (!user) {
+    const employee = await Employee.findById(decoded.sub);
+    if (!employee) {
       return null;
     }
 
     return {
-      id: user.id,
-      email: user.email,
-      role: user.role,
+      id: employee.id,
+      email: employee.email,
+      role: employee.role,
     };
   } catch (error) {
     return null;

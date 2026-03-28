@@ -9,9 +9,10 @@ const PositionSchema = new Schema(
     },
     level: {
       type: String,
-      enum: ["Junior", "Mid", "Senior", "Lead", "Executive"],
-      default: "Mid",
+      enum: ["Junior", "Mid", "Senior", "Lead", "Executive", ""],
+      default: "",
     },
+    responsibility: { type: String },
     departmentId: {
       type: Schema.Types.ObjectId,
       ref: "Department",

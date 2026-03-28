@@ -13,6 +13,7 @@ export function CreateEmployeePage() {
   const { showToast } = useToast();
   const departments = useAppSelector((state) => state.departments.items);
   const [provisionedData, setProvisionedData] = useState(null);
+  const role = useAppSelector((state) => state.identity.currentUser?.role);
 
   useEffect(() => {
     dispatch(fetchDepartmentsThunk());
@@ -163,6 +164,25 @@ export function CreateEmployeePage() {
           },
           { name: "workLocation", label: "Work Location", type: "text" },
           { name: "onlineStorageLink", label: "Online Storage Link", type: "text" },
+          {
+            name: "role",
+            label: "Privilege Level",
+            type: "select",
+            required: true,
+            options: role === "ADMIN" || role === "HR_STAFF" || role === 3
+              ? [
+                  { label: "Employee", value: "EMPLOYEE" },
+                  { label: "Team Leader", value: "TEAM_LEADER" },
+                  { label: "Manager", value: "MANAGER" },
+                  { label: "HR Staff", value: "HR_STAFF" },
+                  { label: "Admin", value: "ADMIN" },
+                ]
+              : [
+                  { label: "Employee", value: "EMPLOYEE" },
+                  { label: "Team Leader", value: "TEAM_LEADER" },
+                  { label: "Manager", value: "MANAGER" },
+                ]
+          },
           { name: "dateOfHire", label: "Date of Hire", type: "date" },
           {
             name: "employmentType",

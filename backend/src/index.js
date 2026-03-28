@@ -18,6 +18,8 @@ import teamsRouter from "./routes/teams.js";
 import positionsRouter from "./routes/positions.js";
 import employmentsRouter from "./routes/employments.js";
 import reportsRouter from "./routes/reports.js";
+import attendanceRouter from "./routes/attendance.js";
+import managementRequestsRouter from "./routes/managementRequests.js";
 import { securityHeaders, apiLimiter } from "./middleware/security.js";
 
 dotenv.config();
@@ -27,14 +29,24 @@ app.use(express.json());
 
 app.use(securityHeaders);
 
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
+// CORS: allow specific origin in production, permissive in development
+const corsOptions =
+  process.env.NODE_ENV === "production"
+    ? {
+        origin: process.env.FRONTEND_URL || "http://localhost:5173",
+        credentials: true,
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+      }
+    : {
+        // In development allow any origin (useful when Vite picks different ports)
+        origin: (origin, cb) => cb(null, true),
+        credentials: true,
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+      };
+
+app.use(cors(corsOptions));
 
 app.use("/api/", apiLimiter);
 
@@ -47,6 +59,8 @@ app.use("/api/positions", positionsRouter);
 app.use("/api/employees", employeesRouter);
 app.use("/api/employments", employmentsRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/attendance", attendanceRouter);
+app.use("/api/management-requests", managementRequestsRouter);
 
 /** Unmatched `/api/*` paths return JSON 404 (does not catch non-API routes if added later). */
 app.use("/api/*", (req, res) => {

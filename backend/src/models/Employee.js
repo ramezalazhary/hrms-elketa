@@ -3,6 +3,16 @@ import { Schema, model } from "mongoose";
 
 const EmployeeSchema = new Schema(
   {
+    // Authentication / Account (merged from `User` model)
+    passwordHash: { type: String },
+    role: {
+      type: String,
+      enum: ["EMPLOYEE", "TEAM_LEADER", "MANAGER", "HR_STAFF", "ADMIN"],
+      default: "EMPLOYEE",
+    },
+    requirePasswordChange: { type: Boolean, default: false },
+    isActive: { type: Boolean, default: true },
+
     // Personal Information
     fullName: { type: String, required: true },
     dateOfBirth: { type: Date },
@@ -34,7 +44,9 @@ const EmployeeSchema = new Schema(
     employeeCode: { type: String, unique: true },
     position: { type: String, required: true },
     department: { type: String, required: true },
+    departmentId: { type: Schema.Types.ObjectId, ref: "Department" },
     team: { type: String }, // Sub-unit within department
+    teamId: { type: Schema.Types.ObjectId, ref: "Team" },
     managerId: { type: String }, // Direct Manager
     dateOfHire: { type: Date },
     employmentType: {
@@ -77,15 +89,19 @@ const EmployeeSchema = new Schema(
     insurance: {
       provider: { type: String },
       policyNumber: { type: String },
-      coverageType: { type: String, enum: ["HEALTH", "LIFE", "DENTAL", "VISION", "COMPREHENSIVE"], default: "HEALTH" },
-      validUntil: { type: Date }
+      coverageType: {
+        type: String,
+        enum: ["HEALTH", "LIFE", "DENTAL", "VISION", "COMPREHENSIVE"],
+        default: "HEALTH",
+      },
+      validUntil: { type: Date },
     },
 
     // Financial Information (Expansion-ready)
     financial: {
       bankAccount: { type: String },
       baseSalary: { type: Number },
-      currency: { type: String, default: 'USD' },
+      currency: { type: String, default: "USD" },
       allowances: { type: Number },
       socialSecurity: { type: String },
       lastSalaryIncrease: { type: Date },
@@ -132,6 +148,7 @@ const EmployeeSchema = new Schema(
     ],
   },
   {
+    timestamps: true,
     // Ensure frontend can reliably use `id` (instead of Mongo `_id`)
     toJSON: {
       transform: (_doc, ret) => {

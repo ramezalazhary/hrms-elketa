@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SearchableSelect } from "./SearchableSelect";
 
 export function FormBuilder({
   fields,
@@ -88,6 +89,22 @@ export function FormBuilder({
                     </option>
                   ))}
                 </select>
+              ) : field.type === "searchableSelect" ? (
+                <SearchableSelect
+                  options={field.options.map(opt => ({
+                    id: opt.value, 
+                    label: opt.label,
+                    sublabel: opt.sublabel
+                  }))}
+                  value={values[field.name]}
+                  multiple={field.multiple}
+                  placeholder={field.placeholder || "Start typing to search..."}
+                  disabled={disabled || field.disabled}
+                  onChange={(v) => {
+                    setValues((prev) => ({ ...prev, [field.name]: v }));
+                    field.onChange?.(v);
+                  }}
+                />
               ) : field.type === "textarea" ? (
                 <textarea
                   className={inputClass}

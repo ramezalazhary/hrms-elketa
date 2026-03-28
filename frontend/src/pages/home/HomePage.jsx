@@ -6,8 +6,8 @@ import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { fetchTeamsThunk } from "@/modules/teams/store";
 import { LeadershipOrgOverview } from "./LeadershipOrgOverview";
 
-function isEmployeeOnlyRole(role) {
-  return role === 1 || role === "EMPLOYEE";
+function isPersonalHomeRole(role) {
+  return ["EMPLOYEE", "TEAM_LEADER", "MANAGER"].includes(role) || role === 1 || role === 2;
 }
 
 /**
@@ -22,7 +22,7 @@ export function HomePage() {
   const employeesLoading = useAppSelector((state) => state.employees.isLoading);
 
   const role = currentUser?.role;
-  const showAnalytics = !isEmployeeOnlyRole(role);
+  const showAnalytics = !isPersonalHomeRole(role);
 
   useEffect(() => {
     if (!showAnalytics) return;

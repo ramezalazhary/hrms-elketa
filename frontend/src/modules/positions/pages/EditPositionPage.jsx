@@ -44,7 +44,8 @@ export function EditPositionPage() {
         updatePositionThunk({
           id: positionId,
           title: formData.title,
-          level: formData.level || "Mid",
+          level: formData.level || "",
+          responsibility: formData.responsibility || "",
           departmentId: formData.departmentId,
           teamId: formData.teamId || null,
           description: formData.description || "",
@@ -82,7 +83,8 @@ export function EditPositionPage() {
         onSubmit={handleSubmit}
         initialValues={{
           title: position.title,
-          level: position.level || "Mid",
+          level: position.level || "",
+          responsibility: position.responsibility || "",
           departmentId:
             position.departmentId?.id ||
             position.departmentId?._id ||
@@ -107,12 +109,20 @@ export function EditPositionPage() {
             label: "Seniority Level",
             type: "select",
             options: [
+              { label: "None / Optional", value: "" },
               { label: "Junior", value: "Junior" },
               { label: "Mid", value: "Mid" },
               { label: "Senior", value: "Senior" },
               { label: "Lead", value: "Lead" },
               { label: "Executive", value: "Executive" },
             ],
+          },
+          {
+            name: "responsibility",
+            label: "Responsibility / Key Duties",
+            type: "textarea",
+            placeholder: "Summarize the primary responsibilities and goals for this position.",
+            fullWidth: true,
           },
           {
             name: "departmentId",

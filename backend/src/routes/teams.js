@@ -82,7 +82,10 @@ router.post(
       const {
         name,
         departmentId,
-        managerEmail,
+        leaderEmail,
+        leaderTitle,
+        leaderResponsibility,
+        members,
         description,
         positions,
         status,
@@ -108,6 +111,31 @@ router.post(
         return res.status(404).json({ error: "Department not found" });
       }
 
+      // Strict Departmental Validation
+      const deptName = department.name;
+      
+      if (leaderEmail) {
+        const leaderEmp = await Employee.findOne({ email: leaderEmail });
+        if (!leaderEmp) {
+          return res.status(400).json({ error: `Leader with email ${leaderEmail} not found.` });
+        }
+        if (leaderEmp.department !== deptName && leaderEmp.departmentId?.toString() !== departmentId) {
+          return res.status(400).json({ error: `Leader ${leaderEmail} does not belong to the ${deptName} department.` });
+        }
+      }
+
+      if (members && Array.isArray(members)) {
+        for (const email of members) {
+          const memberEmp = await Employee.findOne({ email });
+          if (!memberEmp) {
+            return res.status(400).json({ error: `Member with email ${email} not found.` });
+          }
+          if (memberEmp.department !== deptName && memberEmp.departmentId?.toString() !== departmentId) {
+            return res.status(400).json({ error: `Member ${email} does not belong to the ${deptName} department.` });
+          }
+        }
+      }
+
       // Check if team name already exists in this department
       const existingTeam = await Team.findOne({
         name: name.trim(),
@@ -122,7 +150,10 @@ router.post(
       const newTeam = new Team({
         name: name.trim(),
         departmentId,
-        managerEmail,
+        leaderEmail,
+        leaderTitle: leaderTitle || "Team Leader",
+        leaderResponsibility: leaderResponsibility || "",
+        members: members || [],
         description,
         positions: positions || [],
         status: status || "ACTIVE",
@@ -159,7 +190,33 @@ router.put(
         return res.status(404).json({ error: "Team not found" });
       }
 
-      const { name, managerEmail, description, positions, status } = req.body;
+      const { name, leaderEmail, leaderTitle, leaderResponsibility, members, description, positions, status } = req.body;
+
+      // Validation for Leader/Members if they are being updated
+      const department = await Department.findById(team.departmentId);
+      const deptName = department.name;
+
+      if (leaderEmail !== undefined && leaderEmail !== "") {
+        const leaderEmp = await Employee.findOne({ email: leaderEmail });
+        if (!leaderEmp) {
+          return res.status(400).json({ error: `Leader with email ${leaderEmail} not found.` });
+        }
+        if (leaderEmp.department !== deptName && leaderEmp.departmentId?.toString() !== team.departmentId.toString()) {
+          return res.status(400).json({ error: `Leader ${leaderEmail} does not belong to the ${deptName} department.` });
+        }
+      }
+
+      if (members !== undefined && Array.isArray(members)) {
+        for (const email of members) {
+          const memberEmp = await Employee.findOne({ email });
+          if (!memberEmp) {
+            return res.status(400).json({ error: `Member with email ${email} not found.` });
+          }
+          if (memberEmp.department !== deptName && memberEmp.departmentId?.toString() !== team.departmentId.toString()) {
+            return res.status(400).json({ error: `Member ${email} does not belong to the ${deptName} department.` });
+          }
+        }
+      }
 
       // Update fields
       if (name !== undefined) {
@@ -182,9 +239,13 @@ router.put(
         team.name = name.trim();
       }
 
-      if (managerEmail !== undefined) team.managerEmail = managerEmail;
+      if (leaderEmail !== undefined) team.leaderEmail = leaderEmail;
+      if (leaderTitle !== undefined) team.leaderTitle = leaderTitle;
+      if (leaderResponsibility !== undefined) team.leaderResponsibility = leaderResponsibility;
+      if (members !== undefined) team.members = Array.isArray(members) ? members : [];
       if (description !== undefined) team.description = description;
-      if (positions !== undefined) team.positions = positions;
+      if (positions !== undefined) team.positions = Array.isArray(positions) ? positions : team.positions;
+      
       if (status !== undefined) {
         if (!["ACTIVE", "ARCHIVED"].includes(status)) {
           return res.status(400).json({ error: "Invalid status value" });

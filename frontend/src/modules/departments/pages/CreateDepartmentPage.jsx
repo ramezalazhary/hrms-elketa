@@ -19,7 +19,8 @@ export function CreateDepartmentPage() {
 
   const employeeOptions = employees.map((emp) => ({
     value: emp.email,
-    label: `${emp.fullName} (${emp.position})`,
+    label: emp.fullName,
+    sublabel: emp.department // Show department to disambiguate
   }));
 
   return (
@@ -29,13 +30,19 @@ export function CreateDepartmentPage() {
     >
       <FormBuilder
         onCancel={() => navigate("/departments")}
-        devDemoFill={devDemoFill}
         fields={[
           {
             name: "name",
             label: "Department Name",
             type: "text",
             required: true,
+          },
+          {
+            name: "code",
+            label: "Department Code (e.g., HR, ENG)",
+            type: "text",
+            required: true,
+            placeholder: "Used as prefix for employee IDs (#ENG-001)",
           },
           {
             name: "type",
@@ -49,16 +56,26 @@ export function CreateDepartmentPage() {
           },
           {
             name: "head",
-            label:
-              employeeOptions.length > 0
-                ? "Department manager (optional)"
-                : "Department manager (optional — add employees to choose one)",
-            type: "select",
+            label: "Department Leader (Optional)",
+            type: "searchableSelect",
+            placeholder: "Search for an employee to lead this department...",
             options: employeeOptions,
           },
           {
+            name: "headTitle",
+            label: "Leader Title",
+            type: "text",
+            placeholder: "e.g. Head of HR, Director of Operations",
+          },
+          {
+            name: "headResponsibility",
+            label: "Leader Primary Responsibility",
+            type: "textarea",
+            fullWidth: true,
+          },
+          {
             name: "description",
-            label: "Description",
+            label: "General Description",
             type: "textarea",
             fullWidth: true,
           },

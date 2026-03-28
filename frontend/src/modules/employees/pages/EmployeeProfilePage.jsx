@@ -1,23 +1,46 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Layout } from '@/shared/components/Layout'
-import { useAppSelector } from '@/shared/hooks/reduxHooks'
+import { useAppDispatch, useAppSelector } from '@/shared/hooks/reduxHooks'
 import { useToast } from '@/shared/components/ToastProvider'
 import { FormBuilder } from '@/shared/components/FormBuilder'
 import { StatusBadge, DepartmentBadge } from '@/shared/components/EntityBadges'
+import { fetchDepartmentsThunk } from '@/modules/departments/store'
 
 export function EmployeeProfilePage() {
   const { employeeId } = useParams()
   const { showToast } = useToast()
   const employees = useAppSelector((state) => state.employees.items)
+  const departments = useAppSelector((state) => state.departments.items)
   const currentUser = useAppSelector((state) => state.identity.currentUser)
   const accessToken = useAppSelector((state) => state.identity.accessToken)
   const [showResetModal, setShowResetModal] = useState(false)
+
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    if (!departments.length) {
+      void dispatch(fetchDepartmentsThunk());
+    }
+  }, [dispatch, departments.length]);
 
   const employee = useMemo(
     () => employees.find((item) => item.id === employeeId),
     [employeeId, employees],
   )
+
+  const assignedTeams = useMemo(() => {
+    if (!employee || !departments.length) return [];
+    const found = [];
+    departments.forEach(dept => {
+      (dept.teams || []).forEach(team => {
+        if ((team.members || []).includes(employee.email) || team.leaderEmail === employee.email) {
+          found.push({ name: team.name, id: team.id, deptName: dept.name });
+        }
+      });
+    });
+    return found;
+  }, [employee, departments]);
 
   const handleResetPassword = async (values) => {
     try {
@@ -91,7 +114,20 @@ export function EmployeeProfilePage() {
             <p><span className="block text-xs font-semibold text-slate-500 uppercase">Hire Date</span> <span className="text-slate-900">{employee.dateOfHire ? new Date(employee.dateOfHire).toLocaleDateString() : "N/A"}</span></p>
             <p><span className="block text-xs font-semibold text-slate-500 uppercase">Job Title</span> <span className="text-slate-900">{employee.position}</span></p>
             <p className="flex flex-col gap-1"><span className="block text-xs font-semibold text-slate-500 uppercase">Department</span> <DepartmentBadge name={employee.department || "—"} /></p>
-            <p><span className="block text-xs font-semibold text-slate-500 uppercase">Team / Unit</span> <span className="text-slate-900">{employee.team || "None"}</span></p>
+            <p className="flex flex-col gap-1">
+              <span className="block text-xs font-semibold text-slate-500 uppercase">Team / Unit</span> 
+              <div className="flex flex-wrap gap-1">
+                {assignedTeams.length > 0 ? (
+                  assignedTeams.map(t => (
+                    <span key={t.id ?? t.name} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-xs font-bold">
+                      {t.name}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-slate-400 italic text-sm">No team assigned</span>
+                )}
+              </div>
+            </p>
             <p><span className="block text-xs font-semibold text-slate-500 uppercase">Contract</span> <span className="text-slate-900 capitalize">{employee.employmentType?.replace('_', ' ').toLowerCase()}</span></p>
             <p><span className="block text-xs font-semibold text-slate-500 uppercase">Work Location</span> <span className="text-slate-900">{employee.workLocation || "N/A"}</span></p>
             {employee.onlineStorageLink && (

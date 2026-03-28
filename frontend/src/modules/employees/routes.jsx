@@ -5,11 +5,18 @@ import { EmployeeProfilePage } from './pages/EmployeeProfilePage'
 import { EmployeesListPage } from './pages/EmployeesListPage'
 
 export const employeesRoutes = [
-  { path: '/employees', element: <EmployeesListPage /> },
+  { 
+    path: '/employees', 
+    element: (
+      <RequireRole roles={["HR_STAFF", "ADMIN", 3]}>
+        <EmployeesListPage />
+      </RequireRole>
+    ) 
+  },
   {
     path: '/employees/create',
     element: (
-      <RequireRole roles={[2, 3, "MANAGER", "HR_STAFF", "ADMIN"]}>
+      <RequireRole roles={[3, "HR_STAFF", "ADMIN"]}>
         <CreateEmployeePage />
       </RequireRole>
     ),
@@ -17,7 +24,7 @@ export const employeesRoutes = [
   {
     path: '/employees/:employeeId/edit',
     element: (
-      <RequireRole roles={[2, 3, "MANAGER", "HR_STAFF", "ADMIN"]}>
+      <RequireRole roles={[3, "HR_STAFF", "ADMIN"]}>
         <EditEmployeePage />
       </RequireRole>
     ),

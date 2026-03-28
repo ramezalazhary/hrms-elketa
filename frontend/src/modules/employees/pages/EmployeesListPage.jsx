@@ -64,7 +64,7 @@ export function EmployeesListPage() {
       title="Employees List"
       description="Manage employee records, role assignments, and profile access."
     actions={
-        (["ADMIN", "HR_STAFF", "MANAGER", 2, 3].includes(role)) ? (
+        (["ADMIN", "HR_STAFF", 3].includes(role)) ? (
           <Link
             className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-card transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400"
             to="/employees/create"

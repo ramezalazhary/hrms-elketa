@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { Trash2, ShieldCheck } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FormBuilder } from "@/shared/components/FormBuilder";
+import { SearchableSelect } from "@/shared/components/SearchableSelect";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
@@ -31,24 +33,52 @@ export function EditDepartmentPage() {
   useEffect(() => {
     if (department) {
       setPositions(
-        department.positions.map((p) => ({ title: p.title, level: p.level })),
+        (department.positions || []).map((p) => ({ 
+          title: p.title, 
+          level: p.level || "", 
+          responsibility: p.responsibility || "",
+          members: p.members || []
+        })),
       );
-      setTeams(department.teams || []);
+      setTeams(
+        (department.teams || []).map((t) => ({
+          ...t,
+          leaderEmail: t.leaderEmail || t.manager || t.managerEmail || "",
+          leaderTitle: t.leaderTitle || "Team Leader",
+          leaderResponsibility: t.leaderResponsibility || "",
+        }))
+      );
     }
   }, [department]);
+
+  const departmentEmployees = useMemo(() => {
+    if (!department) return [];
+    return employees.filter(emp => 
+      emp.department === department.name || 
+      emp.departmentId === department.id || 
+      emp.departmentId === department._id
+    );
+  }, [employees, department]);
 
   if (!department) {
     return <div>Department not found</div>;
   }
 
-  const employeeOptions = employees.map((emp) => ({
-    // Manager scoping in backend uses `Department.head === managerEmail`
-    value: emp.email,
-    label: `${emp.fullName} (${emp.position})`,
+  const leaderOptions = departmentEmployees.map((emp) => ({
+    id: emp.email,
+    label: emp.fullName,
+    sublabel: emp.position
   }));
 
   const addTeam = () => {
-    setTeams([...teams, { name: "", manager: "", positions: [] }]);
+    setTeams([...teams, { 
+      name: "", 
+      leaderEmail: "", 
+      leaderTitle: "Team Leader",
+      leaderResponsibility: "",
+      positions: [], 
+      members: [] 
+    }]);
   };
 
   const updateTeam = (index, field, value) => {
@@ -62,7 +92,7 @@ export function EditDepartmentPage() {
   };
 
   const addPosition = () => {
-    setPositions([...positions, { title: "", level: "" }]);
+    setPositions([...positions, { title: "", level: "", responsibility: "", members: [] }]);
   };
 
   const updatePosition = (index, field, value) => {
@@ -78,7 +108,7 @@ export function EditDepartmentPage() {
   return (
     <Layout
       title={`Edit ${department.name}`}
-      description="Update department details, head, and positions."
+      description="Update department details, leadership, and positions."
     >
       <FormBuilder
         fields={[
@@ -89,8 +119,15 @@ export function EditDepartmentPage() {
             required: true,
           },
           {
+            name: "code",
+            label: "Department Code (e.g., HR, ENG)",
+            type: "text",
+            required: true,
+            placeholder: "Used as prefix for employee IDs (#ENG-001)",
+          },
+          {
             name: "type",
-            label: "Type",
+            label: "Organization Type",
             type: "select",
             required: true,
             options: [
@@ -100,33 +137,61 @@ export function EditDepartmentPage() {
           },
           {
             name: "head",
-            label:
-              employeeOptions.length > 0
-                ? "Department manager (optional)"
-                : "Department manager (optional — add employees to choose one)",
-            type: "select",
-            options: employeeOptions,
+            label: "Department Leader",
+            type: "searchableSelect",
+            placeholder: `Search employees in ${department.name}...`,
+            options: leaderOptions.map(opt => ({ label: opt.label, value: opt.id, sublabel: opt.sublabel })),
+          },
+          {
+            name: "headTitle",
+            label: "Leader Title",
+            type: "text",
+            placeholder: "e.g. Head of Engineering, Finance Director",
+          },
+          {
+            name: "headResponsibility",
+            label: "Leader Primary Responsibility",
+            type: "textarea",
+            fullWidth: true,
           },
           {
             name: "description",
-            label: "Description",
+            label: "General Description",
             type: "textarea",
             fullWidth: true,
+          },
+          {
+            name: "standardStartTime",
+            label: "Work Start Time",
+            type: "time",
+            placeholder: "09:00",
+          },
+          {
+            name: "gracePeriod",
+            label: "Grace Period (Minutes)",
+            type: "number",
+            placeholder: "15",
           },
         ]}
         initialValues={{
           name: department.name,
           head: department.head || "",
+          headTitle: department.headTitle || "Department Leader",
+          headResponsibility: department.headResponsibility || "",
           type: department.type || "PERMANENT",
           description: department.description || "",
+          standardStartTime: department.standardStartTime || "09:00",
+          gracePeriod: department.gracePeriod ?? 15,
         }}
         submitLabel="Update Department"
         onSubmit={async (values) => {
           const validPositions = positions
-            .filter((p) => p.title && p.level)
+            .filter((p) => p.title)
             .map((p) => ({
               title: p.title,
-              level: p.level,
+              level: p.level || "",
+              responsibility: p.responsibility || "",
+              members: p.members || [],
             }));
 
           try {
@@ -140,7 +205,10 @@ export function EditDepartmentPage() {
                 ...values,
                 head,
                 positions: validPositions,
-                teams: teams.filter(t => t.name),
+                teams: teams.filter(t => t.name).map(t => ({
+                  ...t,
+                  leaderEmail: t.leaderEmail || "",
+                })),
               }),
             ).unwrap();
             showToast("Department updated successfully", "success");
@@ -163,52 +231,95 @@ export function EditDepartmentPage() {
           </div>
           <div className="space-y-4">
             {positions.map((pos, index) => (
-              <div key={index} className="flex gap-4 items-end bg-slate-50/50 p-4 rounded-xl border border-dashed border-slate-200">
-                <div className="flex-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Title</label>
-                  <input type="text" value={pos.title} onChange={(e) => updatePosition(index, "title", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2" />
+              <div key={index} className="flex flex-col gap-4 bg-slate-50/50 p-4 rounded-xl border border-dashed border-slate-200 relative group">
+                <button type="button" onClick={() => removePosition(index)} className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Title</label>
+                    <input type="text" value={pos.title} onChange={(e) => updatePosition(index, "title", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white" placeholder="e.g. Lead Engineer" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Level (Optional)</label>
+                    <input type="text" value={pos.level} onChange={(e) => updatePosition(index, "level", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white" placeholder="e.g. Junior, Senior" />
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Level</label>
-                  <input type="text" value={pos.level} onChange={(e) => updatePosition(index, "level", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2" />
+                <div>
+                   <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Employees in this position</label>
+                   <SearchableSelect 
+                      options={leaderOptions}
+                      value={pos.members || []}
+                      multiple={true}
+                      placeholder="Select staff..."
+                      onChange={(val) => updatePosition(index, "members", val)}
+                   />
                 </div>
-                <button type="button" onClick={() => removePosition(index)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Primary Responsibility</label>
+                  <textarea value={pos.responsibility} onChange={(e) => updatePosition(index, "responsibility", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white text-sm" placeholder="Summarize what this role does..." />
+                </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Teams Section (Special Logic: Convert Dept to Teams) */}
+        {/* Teams Section */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between border-b pb-4 mb-4">
             <div>
-              <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wide">Teams / Sub-units</h3>
-              <p className="text-xs text-slate-500">Group employees into specific functional teams within {department.name}.</p>
+              <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                Teams / Sub-units
+                <ShieldCheck size={16} className="text-emerald-500" title="Stricly departmentalized" />
+              </h3>
+              <p className="text-xs text-slate-500 italic">Only employees from {department.name} can lead or join these teams.</p>
             </div>
-            <button type="button" onClick={addTeam} className="rounded-xl bg-emerald-50 text-emerald-700 px-4 py-2 text-sm font-bold hover:bg-emerald-100 transition">
+            <button type="button" onClick={addTeam} className="rounded-xl bg-emerald-50 text-emerald-700 px-4 py-2 text-sm font-bold hover:bg-emerald-100 transition shadow-sm">
               + Create Team
             </button>
           </div>
           <div className="space-y-6">
             {teams.map((team, index) => (
-              <div key={index} className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 relative">
-                <button onClick={() => removeTeam(index)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Team Name</label>
-                    <input type="text" value={team.name} onChange={(e) => updateTeam(index, "name", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white" placeholder="e.g., UI/UX Team" />
+              <div key={index} className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 relative group">
+                <button onClick={() => removeTeam(index)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500 p-1 rounded-md opacity-0 group-hover:opacity-100 transition"><Trash2 size={18} /></button>
+                <div className="grid lg:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Team Name</label>
+                      <input type="text" value={team.name} onChange={(e) => updateTeam(index, "name", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white shadow-sm" placeholder="e.g., UI/UX Team" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Team Leader</label>
+                      <SearchableSelect
+                        options={leaderOptions}
+                        value={team.leaderEmail}
+                        placeholder="Search departmental employees..."
+                        onChange={(val) => updateTeam(index, "leaderEmail", val)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Team Members</label>
+                      <SearchableSelect
+                        options={leaderOptions}
+                        value={team.members || []}
+                        multiple={true}
+                        placeholder="Select members..."
+                        onChange={(val) => updateTeam(index, "members", val)}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Team Manager</label>
-                    <select value={team.manager} onChange={(e) => updateTeam(index, "manager", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white">
-                      <option value="">Select Manager...</option>
-                      {employeeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                    </select>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Leader Title</label>
+                      <input type="text" value={team.leaderTitle} onChange={(e) => updateTeam(index, "leaderTitle", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white shadow-sm" placeholder="e.g. Lead Designer" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Leader Responsibility</label>
+                      <textarea value={team.leaderResponsibility} onChange={(e) => updateTeam(index, "leaderResponsibility", e.target.value)} rows={4} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white text-sm shadow-sm" placeholder="Describe the leader's specific duties..." />
+                    </div>
                   </div>
                 </div>
               </div>
             ))}
-            {teams.length === 0 && <div className="text-center py-6 text-slate-400 text-sm italic">No teams defined. Department operates as a single unit.</div>}
+            {teams.length === 0 && <div className="text-center py-6 text-slate-400 text-sm italic">No teams defined. Department operates as a single unit or has not been subdivided yet.</div>}
           </div>
         </div>
       </div>

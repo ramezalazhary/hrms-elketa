@@ -6,7 +6,6 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAdminOrHrHead, isHrDepartmentHead } from "../middleware/rbac.js";
 import { UserPermission } from "../models/Permission.js";
-import { User } from "../models/User.js";
 import { Employee } from "../models/Employee.js";
 import { validatePermissionCreation } from "../middleware/validation.js";
 import { strictLimiter } from "../middleware/security.js";
@@ -23,7 +22,7 @@ const HR_DEPARTMENT_NAME = process.env.HR_DEPARTMENT_NAME || "HR";
 async function restrictHrHeadToHrEmployees(req, res, next) {
   if (req.user.role === "ADMIN" || req.user.role === 3) return next();
 
-  const targetUser = await User.findById(req.params.userId).select("email");
+  const targetUser = await Employee.findById(req.params.userId).select("email");
   if (!targetUser) return res.status(404).json({ error: "User not found" });
 
   const targetEmployee = await Employee.findOne({
@@ -82,7 +81,7 @@ router.post(
       const { userId } = req.params;
       const { module, actions, scope } = req.body;
 
-      const user = await User.findById(userId);
+      const user = await Employee.findById(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }

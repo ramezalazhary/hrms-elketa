@@ -60,8 +60,19 @@ export function TeamsListPage() {
           },
           {
             key: "managerEmail",
-            header: "Manager",
-            render: (row) => row.managerEmail || "-",
+            header: "Team Head",
+            render: (row) => (
+              <span className="text-zinc-600 font-medium">{row.managerEmail || "—"}</span>
+            ),
+          },
+          {
+            key: "members",
+            header: "Members",
+            render: (row) => (
+              <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-semibold text-zinc-600">
+                {(row.members || []).length} Members
+              </span>
+            ),
           },
           {
             key: "status",

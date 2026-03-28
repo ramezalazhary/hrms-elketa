@@ -10,14 +10,18 @@ const TeamSchema = new Schema(
       required: true,
       index: true,
     },
-    managerEmail: { type: String }, // Email of team manager
+    leaderEmail: { type: String }, // Leader Email
+    leaderTitle: { type: String, default: "Team Leader" },
+    leaderResponsibility: { type: String },
     description: { type: String },
     positions: [
       {
         title: { type: String },
         level: { type: String },
+        responsibility: { type: String },
       },
     ],
+    members: [{ type: String }], // Array of employee emails
     status: {
       type: String,
       enum: ["ACTIVE", "ARCHIVED"],

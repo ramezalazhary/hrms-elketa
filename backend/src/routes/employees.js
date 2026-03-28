@@ -7,7 +7,6 @@ import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
 import { requireAuth } from "../middleware/auth.js";
 import { UserPermission } from "../models/Permission.js";
-import { User } from "../models/User.js";
 import { hashPassword } from "../middleware/auth.js";
 
 const router = Router();
@@ -30,32 +29,39 @@ function optionalDate(value) {
 async function resolveEmployeeAccess(user) {
   // 1. Admin gets EVERYTHING
   if (user.role === "ADMIN" || user.role === 3) {
-    return { scope: "all", actions: ["view", "create", "edit", "delete", "export"] };
+    return {
+      scope: "all",
+      actions: ["view", "create", "edit", "delete", "export"],
+    };
   }
 
   // 2. Head of HR gets EVERYTHING
-  const hrDept = await Department.findOne({ name: "HR" });
+  const hrDept = await Department.findOne({ code: "HR" });
   const isHrHead = hrDept && hrDept.head === user.email;
   if (isHrHead) {
-    return { scope: "all", actions: ["view", "create", "edit", "delete", "export"] };
+    return {
+      scope: "all",
+      actions: ["view", "create", "edit", "delete", "export"],
+    };
   }
 
-  // 3. Department Head (MANAGER) sees all but can only create (No Edit/Delete)
+  // 3. Department Head (MANAGER) sees all but is Read-Only
   const isDeptHead = await Department.findOne({ head: user.email });
   if (isDeptHead || user.role === "MANAGER" || user.role === 2) {
-    return { scope: "department", actions: ["view", "create"] };
+    return { scope: "department", actions: ["view"] };
   }
 
   // 4. Team Leader see his team only
-  // Check if they are listed as a manager in any team within any department
-  const deptsWithTeams = await Department.find({ "teams.manager": user.email });
-  if (deptsWithTeams.length > 0 || user.role === "TEAM_LEADER") {
-    const managedTeamNames = [];
-    deptsWithTeams.forEach(d => {
-       d.teams.forEach(t => {
-         if (t.manager === user.email) managedTeamNames.push(t.name);
-       });
+  // Check if they are listed as a leader in any team within any department
+  const deptsWithTeams = await Department.find({ "teams.leaderEmail": user.email });
+  const managedTeamNames = [];
+  deptsWithTeams.forEach((d) => {
+    d.teams.forEach((t) => {
+      if (t.leaderEmail === user.email) managedTeamNames.push(t.name);
     });
+  });
+
+  if (user.role === "TEAM_LEADER" || managedTeamNames.length > 0) {
     return { scope: "team", actions: ["view"], teams: managedTeamNames };
   }
 
@@ -78,7 +84,8 @@ async function checkScopeDepartment(userEmail, targetDepartment) {
 
 router.get("/", requireAuth, async (req, res) => {
   const access = await resolveEmployeeAccess(req.user);
-  if (!access.actions.includes("view")) return res.status(403).json({ error: "Forbidden" });
+  if (!access.actions.includes("view"))
+    return res.status(403).json({ error: "Forbidden" });
 
   if (access.scope === "all") {
     return res.json(await Employee.find());
@@ -86,18 +93,19 @@ router.get("/", requireAuth, async (req, res) => {
 
   if (access.scope === "department") {
     const employeeRecord = await Employee.findOne({ email: req.user.email });
-    let deptNames = await Department.find({ head: req.user.email }).distinct("name");
+    let deptNames = await Department.find({ head: req.user.email }).distinct(
+      "name",
+    );
     if (employeeRecord) deptNames.push(employeeRecord.department);
     return res.json(await Employee.find({ department: { $in: deptNames } }));
   }
 
   if (access.scope === "team") {
-    return res.json(await Employee.find({ 
-      $or: [
-        { team: { $in: access.teams } },
-        { email: req.user.email }
-      ]
-    }));
+    return res.json(
+      await Employee.find({
+        $or: [{ team: { $in: access.teams } }, { email: req.user.email }],
+      }),
+    );
   }
 
   if (access.scope === "self") {
@@ -109,7 +117,8 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.get("/:id", requireAuth, async (req, res) => {
   const access = await resolveEmployeeAccess(req.user);
-  if (!access.actions.includes("view")) return res.status(403).json({ error: "Forbidden" });
+  if (!access.actions.includes("view"))
+    return res.status(403).json({ error: "Forbidden" });
 
   const employee = await Employee.findById(req.params.id);
   if (!employee) return res.status(404).json({ error: "Employee not found" });
@@ -117,16 +126,22 @@ router.get("/:id", requireAuth, async (req, res) => {
   if (access.scope === "all") return res.json(employee);
 
   if (access.scope === "department") {
-    const isAllowedDept = await checkScopeDepartment(req.user.email, employee.department);
+    const isAllowedDept = await checkScopeDepartment(
+      req.user.email,
+      employee.department,
+    );
     if (isAllowedDept) return res.json(employee);
     return res.status(403).json({ error: "Forbidden: Not in your scope" });
   }
 
   if (access.scope === "team") {
-     if (employee.email === req.user.email || access.teams.includes(employee.team)) {
-        return res.json(employee);
-     }
-     return res.status(403).json({ error: "Forbidden: Not in your team scope" });
+    if (
+      employee.email === req.user.email ||
+      access.teams.includes(employee.team)
+    ) {
+      return res.json(employee);
+    }
+    return res.status(403).json({ error: "Forbidden: Not in your team scope" });
   }
 
   if (access.scope === "self") {
@@ -139,15 +154,37 @@ router.get("/:id", requireAuth, async (req, res) => {
 
 router.post("/", requireAuth, async (req, res) => {
   const access = await resolveEmployeeAccess(req.user);
-  if (!access.actions.includes("create")) return res.status(403).json({ error: "Forbidden" });
+  if (!access.actions.includes("create"))
+    return res.status(403).json({ error: "Forbidden" });
 
-  const { 
-    fullName, email, department, team, position, status, employmentType, managerId,
-    employeeCode, gender, maritalStatus, age,
-    dateOfBirth, nationality, idNumber, profilePicture,
-    workEmail, phoneNumber, address, additionalContact,
-    dateOfHire, workLocation, onlineStorageLink,
-    education, trainingCourses, skills, languages,
+  const {
+    fullName,
+    email,
+    department,
+    team,
+    position,
+    status,
+    employmentType,
+    managerId,
+    employeeCode,
+    gender,
+    maritalStatus,
+    age,
+    dateOfBirth,
+    nationality,
+    idNumber,
+    profilePicture,
+    workEmail,
+    phoneNumber,
+    address,
+    additionalContact,
+    dateOfHire,
+    workLocation,
+    onlineStorageLink,
+    education,
+    trainingCourses,
+    skills,
+    languages,
     financial,
     insurance,
   } = req.body;
@@ -156,28 +193,55 @@ router.post("/", requireAuth, async (req, res) => {
   }
 
   if (access.scope === "department") {
-    const isAllowedDept = await checkScopeDepartment(req.user.email, department);
+    const isAllowedDept = await checkScopeDepartment(
+      req.user.email,
+      department,
+    );
     if (!isAllowedDept) {
-      return res.status(403).json({ error: "Cannot create employee outside your department scope" });
+      return res.status(403).json({
+        error: "Cannot create employee outside your department scope",
+      });
     }
   } else if (access.scope === "self") {
-    return res.status(403).json({ error: "Scope 'self' cannot create employees" });
+    return res
+      .status(403)
+      .json({ error: "Scope 'self' cannot create employees" });
   }
 
   const existing = await Employee.findOne({ email });
-  if (existing) return res.status(409).json({ error: "Employee already exists" });
+  if (existing)
+    return res.status(409).json({ error: "Employee already exists" });
 
   try {
-    const newEmployee = new Employee({ 
-      fullName, 
-      email, 
-      department, 
-      team: team || null,
-      position,
-      status: status || "ACTIVE",
-      employmentType: employmentType || "FULL_TIME",
-      managerId: managerId || null,
-      employeeCode: employeeCode || `EMP-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+    // 2. Resolve Department Code & Generate Employee ID
+    const deptDoc = await Department.findOne({ name: department });
+    if (!deptDoc) return res.status(404).json({ error: "Department not found while generating code" });
+
+    if (!employeeCode) {
+      const deptCount = await Employee.countDocuments({ department });
+      const serial = (deptCount + 1).toString().padStart(3, '0');
+      req.body.employeeCode = `#${deptDoc.code}-${serial}`;
+    }
+
+    const { role: requestedRole } = req.body;
+    let finalRole = "EMPLOYEE";
+
+    if (requestedRole) {
+      if (access.scope === "all") {
+        finalRole = requestedRole;
+      } else if (access.scope === "department") {
+         // Managers can assign EMPLOYEE, TEAM_LEADER, or MANAGER
+         const allowed = ["EMPLOYEE", "TEAM_LEADER", "MANAGER"];
+         finalRole = allowed.includes(requestedRole) ? requestedRole : "EMPLOYEE";
+      }
+    } else {
+      // Default logic if no role provided
+      finalRole = department === "HR" ? "HR_STAFF" : "EMPLOYEE";
+    }
+
+    const newEmployee = new Employee({
+      ...req.body,
+      employeeCode: req.body.employeeCode,
       gender: gender || "MALE",
       maritalStatus: maritalStatus || "SINGLE",
       age: age || null,
@@ -197,46 +261,28 @@ router.post("/", requireAuth, async (req, res) => {
       skills,
       languages,
       financial,
-      insurance: insurance && typeof insurance === "object"
-        ? {
-            provider: insurance.provider || undefined,
-            policyNumber: insurance.policyNumber || undefined,
-            coverageType: insurance.coverageType || "HEALTH",
-            validUntil: optionalDate(insurance.validUntil),
-          }
-        : undefined,
+      insurance:
+        insurance && typeof insurance === "object"
+          ? {
+              provider: insurance.provider || undefined,
+              policyNumber: insurance.policyNumber || undefined,
+              coverageType: insurance.coverageType || "HEALTH",
+              validUntil: optionalDate(insurance.validUntil),
+            }
+          : undefined,
+      // Auth fields - merged from User model
+      passwordHash: await hashPassword("Welcome123!"),
+      role: finalRole,
+      requirePasswordChange: true,
+      isActive: true,
     });
     await newEmployee.save();
-
-    // ----- Auto Provision User Account -----
-    const existingUser = await User.findOne({ email });
-    let provisionalRole = "EMPLOYEE";
-    let userProvisioned = false;
-    
-    // Super simple role inference for HR Staff vs Manager (In an advanced system, this would be explicitly managed via permissions)
-    if (department === "HR") provisionalRole = "HR_STAFF";
-    
-    if (!existingUser) {
-      const passwordHash = await hashPassword("Welcome123!");
-      const newUser = new User({
-        email: email,
-        passwordHash,
-        role: provisionalRole,
-        employeeId: newEmployee._id,
-        requirePasswordChange: true,
-      });
-      await newUser.save();
-      userProvisioned = true;
-    } else if (!existingUser.employeeId) {
-      existingUser.employeeId = newEmployee._id;
-      await existingUser.save();
-    }
 
     return res.status(201).json({
       message: "Employee created successfully",
       employee: newEmployee,
-      userProvisioned,
-      defaultPassword: userProvisioned ? "Welcome123!" : null,
+      userProvisioned: true,
+      defaultPassword: "Welcome123!",
     });
   } catch (err) {
     if (err?.name === "ValidationError") {
@@ -252,15 +298,37 @@ router.post("/", requireAuth, async (req, res) => {
 
 router.put("/:id", requireAuth, async (req, res) => {
   const access = await resolveEmployeeAccess(req.user);
-  if (!access.actions.includes("edit")) return res.status(403).json({ error: "Forbidden" });
+  if (!access.actions.includes("edit"))
+    return res.status(403).json({ error: "Forbidden" });
 
-  const { 
-    fullName, email, department, team, position, status, employmentType, managerId,
-    employeeCode, gender, maritalStatus, age,
-    dateOfBirth, nationality, idNumber, profilePicture,
-    workEmail, phoneNumber, address, additionalContact,
-    dateOfHire, workLocation, onlineStorageLink,
-    education, trainingCourses, skills, languages,
+  const {
+    fullName,
+    email,
+    department,
+    team,
+    position,
+    status,
+    employmentType,
+    managerId,
+    employeeCode,
+    gender,
+    maritalStatus,
+    age,
+    dateOfBirth,
+    nationality,
+    idNumber,
+    profilePicture,
+    workEmail,
+    phoneNumber,
+    address,
+    additionalContact,
+    dateOfHire,
+    workLocation,
+    onlineStorageLink,
+    education,
+    trainingCourses,
+    skills,
+    languages,
     financial,
     insurance,
   } = req.body;
@@ -269,25 +337,41 @@ router.put("/:id", requireAuth, async (req, res) => {
   if (!employee) return res.status(404).json({ error: "Employee not found" });
 
   if (access.scope === "department") {
-    const isAllowedDept = await checkScopeDepartment(req.user.email, employee.department);
-    if (!isAllowedDept) return res.status(403).json({ error: "Not authorized to edit this record" });
-    
+    const isAllowedDept = await checkScopeDepartment(
+      req.user.email,
+      employee.department,
+    );
+    if (!isAllowedDept)
+      return res
+        .status(403)
+        .json({ error: "Not authorized to edit this record" });
+
     // Check if trying to move the employee to a restricted department
     if (department && department !== employee.department) {
-       const isTargetAllowedDept = await checkScopeDepartment(req.user.email, department);
-       if (!isTargetAllowedDept) return res.status(403).json({ error: "Cannot move employee to a restricted department" });
+      const isTargetAllowedDept = await checkScopeDepartment(
+        req.user.email,
+        department,
+      );
+      if (!isTargetAllowedDept)
+        return res
+          .status(403)
+          .json({ error: "Cannot move employee to a restricted department" });
     }
   } else if (access.scope === "self") {
-    if (employee.email !== req.user.email) return res.status(403).json({ error: "Forbidden: Can only edit self" });
-    if (department && department !== employee.department) return res.status(403).json({ error: "Cannot change own department" });
+    if (employee.email !== req.user.email)
+      return res.status(403).json({ error: "Forbidden: Can only edit self" });
+    if (department && department !== employee.department)
+      return res.status(403).json({ error: "Cannot change own department" });
   }
+
+  const oldEmail = employee.email;
 
   employee.fullName = fullName ?? employee.fullName;
   employee.email = email ?? employee.email;
   employee.department = department ?? employee.department;
   employee.team = team ?? employee.team;
   employee.position = position ?? employee.position;
-  
+
   if (status !== undefined) employee.status = status;
   if (employmentType !== undefined) employee.employmentType = employmentType;
   if (managerId !== undefined) employee.managerId = managerId;
@@ -296,17 +380,20 @@ router.put("/:id", requireAuth, async (req, res) => {
   if (maritalStatus !== undefined) employee.maritalStatus = maritalStatus;
   if (age !== undefined) employee.age = age;
 
-  if (dateOfBirth !== undefined) employee.dateOfBirth = optionalDate(dateOfBirth);
+  if (dateOfBirth !== undefined)
+    employee.dateOfBirth = optionalDate(dateOfBirth);
   if (nationality !== undefined) employee.nationality = nationality;
   if (idNumber !== undefined) employee.idNumber = idNumber;
   if (profilePicture !== undefined) employee.profilePicture = profilePicture;
   if (workEmail !== undefined) employee.workEmail = workEmail;
   if (phoneNumber !== undefined) employee.phoneNumber = phoneNumber;
   if (address !== undefined) employee.address = address;
-  if (additionalContact !== undefined) employee.additionalContact = additionalContact;
+  if (additionalContact !== undefined)
+    employee.additionalContact = additionalContact;
   if (dateOfHire !== undefined) employee.dateOfHire = optionalDate(dateOfHire);
   if (workLocation !== undefined) employee.workLocation = workLocation;
-  if (onlineStorageLink !== undefined) employee.onlineStorageLink = onlineStorageLink;
+  if (onlineStorageLink !== undefined)
+    employee.onlineStorageLink = onlineStorageLink;
   if (education !== undefined) employee.education = education;
   if (trainingCourses !== undefined) employee.trainingCourses = trainingCourses;
   if (skills !== undefined) employee.skills = skills;
@@ -314,13 +401,18 @@ router.put("/:id", requireAuth, async (req, res) => {
   if (financial !== undefined) employee.financial = financial;
   if (insurance !== undefined) employee.insurance = insurance;
 
+  // Store new email for sync check
+  const newEmail = employee.email;
+
   await employee.save();
 
-  // Cascade Termination to User Account
+  // Update isActive based on employment status
   if (employee.status === "TERMINATED" || employee.status === "RESIGNED") {
-    await User.updateOne({ employeeId: employee._id }, { $set: { isActive: false } });
+    employee.isActive = false;
+    await employee.save();
   } else if (employee.status === "ACTIVE") {
-    await User.updateOne({ employeeId: employee._id }, { $set: { isActive: true } });
+    employee.isActive = true;
+    await employee.save();
   }
 
   return res.json(employee);
@@ -328,11 +420,14 @@ router.put("/:id", requireAuth, async (req, res) => {
 
 router.delete("/:id", requireAuth, async (req, res) => {
   const access = await resolveEmployeeAccess(req.user);
-  if (!access.actions.includes("delete")) return res.status(403).json({ error: "Forbidden" });
+  if (!access.actions.includes("delete"))
+    return res.status(403).json({ error: "Forbidden" });
 
   // Explicit policy: Only Managers and Admins can delete data.
   if (req.user.role === "EMPLOYEE" || req.user.role === 1) {
-    return res.status(403).json({ error: "Policy Restriction: Only Managers and Admins can delete data." });
+    return res.status(403).json({
+      error: "Policy Restriction: Only Managers and Admins can delete data.",
+    });
   }
 
   const employee = await Employee.findById(req.params.id);
@@ -340,24 +435,27 @@ router.delete("/:id", requireAuth, async (req, res) => {
 
   if (access.scope === "department") {
     // Only Managers can delete FROM their managed departments explicitly, not just from the dept they belong to!
-    const deptNames = await Department.find({ head: req.user.email }).distinct("name");
+    const deptNames = await Department.find({ head: req.user.email }).distinct(
+      "name",
+    );
     if (!deptNames.includes(employee.department)) {
-      return res.status(403).json({ error: "Managers can only delete employees from departments they explicitly manage." });
+      return res.status(403).json({
+        error:
+          "Managers can only delete employees from departments they explicitly manage.",
+      });
     }
   } else if (access.scope === "self") {
-    return res.status(403).json({ error: "Scope 'self' cannot delete records." });
+    return res
+      .status(403)
+      .json({ error: "Scope 'self' cannot delete records." });
   }
 
-  const loginUser = await User.findOne({
-    $or: [{ employeeId: employee._id }, { email: employee.email }],
-  });
+  const employee_id = employee._id.toString();
 
   await Employee.findByIdAndDelete(req.params.id);
 
-  if (loginUser) {
-    await UserPermission.deleteMany({ userId: loginUser._id.toString() });
-    await User.deleteOne({ _id: loginUser._id });
-  }
+  // Clean up associated permissions
+  await UserPermission.deleteMany({ userId: employee_id });
 
   return res.json({ success: true });
 });

@@ -26,7 +26,8 @@ export function CreatePositionPage() {
       await dispatch(
         createPositionThunk({
           title: formData.title,
-          level: formData.level || "Mid",
+          level: formData.level || "",
+          responsibility: formData.responsibility || "",
           departmentId: formData.departmentId,
           teamId: formData.teamId || null,
           description: formData.description || "",
@@ -96,12 +97,20 @@ export function CreatePositionPage() {
             label: "Seniority Level",
             type: "select",
             options: [
+              { label: "None / Optional", value: "" },
               { label: "Junior", value: "Junior" },
               { label: "Mid", value: "Mid" },
               { label: "Senior", value: "Senior" },
               { label: "Lead", value: "Lead" },
               { label: "Executive", value: "Executive" },
             ],
+          },
+          {
+            name: "responsibility",
+            label: "Responsibility / Key Duties",
+            type: "textarea",
+            placeholder: "Summarize the primary responsibilities and goals for this position.",
+            fullWidth: true,
           },
           {
             name: "departmentId",

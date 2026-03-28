@@ -94,9 +94,18 @@ export function PositionsListPage() {
                 key: "level",
                 header: "Level",
                 render: (row) => (
-                  <span className="px-2 py-1 bg-gray-100 rounded text-sm">
-                    {row.level}
+                  <span className={`px-2 py-1 rounded text-sm ${row.level ? 'bg-indigo-50 text-indigo-700 font-medium' : 'bg-gray-50 text-gray-400 italic'}`}>
+                    {row.level || "None"}
                   </span>
+                ),
+              },
+              {
+                key: "responsibility",
+                header: "Responsibility",
+                render: (row) => (
+                  <div className="max-w-[180px] truncate text-xs text-zinc-500 italic" title={row.responsibility}>
+                    {row.responsibility || "—"}
+                  </div>
                 ),
               },
               {
