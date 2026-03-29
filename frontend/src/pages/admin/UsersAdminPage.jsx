@@ -21,7 +21,6 @@ import {
   deleteUserPermissionsApi,
   replaceUserPermissionsApi,
 } from "@/modules/permissions/api";
-import { getPasswordRequestsApi, forceResetPasswordApi } from "@/modules/users/api";
 import {
   RoleBadge,
   RoleStatCard,

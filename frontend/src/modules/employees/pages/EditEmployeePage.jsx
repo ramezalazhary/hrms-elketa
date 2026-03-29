@@ -7,6 +7,7 @@ import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { updateEmployeeThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { getDocumentRequirementsApi } from "@/modules/organization/api";
+import { API_URL } from "@/shared/api/apiBase";
 
 export function EditEmployeePage() {
   const dispatch = useAppDispatch();
@@ -60,9 +61,7 @@ export function EditEmployeePage() {
 
   const handleResetPassword = async (values) => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-      const rootUrl = API_URL.endsWith('/api') ? API_URL.substring(0, API_URL.length - 4) : API_URL;
-      const res = await fetch(`${rootUrl}/api/auth/reset-password`, {
+      const res = await fetch(`${API_URL}/auth/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

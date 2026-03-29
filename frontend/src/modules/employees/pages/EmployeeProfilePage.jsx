@@ -4,9 +4,11 @@ import { Layout } from '@/shared/components/Layout'
 import { useAppDispatch, useAppSelector } from '@/shared/hooks/reduxHooks'
 import { useToast } from '@/shared/components/ToastProvider'
 import { FormBuilder } from '@/shared/components/FormBuilder'
-import { StatusBadge, DepartmentBadge } from '@/shared/components/EntityBadges'
+import { DepartmentBadge } from '@/shared/components/EntityBadges'
 import { fetchDepartmentsThunk } from '@/modules/departments/store'
 import { getDocumentRequirementsApi } from '@/modules/organization/api'
+import { API_URL } from '@/shared/api/apiBase'
+import { Mail, Briefcase, ArrowLeft, Shield } from 'lucide-react'
 
 export function EmployeeProfilePage() {
   const { employeeId } = useParams()
@@ -72,7 +74,7 @@ export function EmployeeProfilePage() {
 
   const handleResetPassword = async (values) => {
     try {
-      const res = await fetch('http://localhost:5000/api/auth/reset-password', {
+      const res = await fetch(`${API_URL}/auth/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -92,31 +94,35 @@ export function EmployeeProfilePage() {
 
   return (
     <Layout
-      title="Employee Profile"
-      description="Detailed employee identity and current employment details."
+      className="max-w-5xl"
+      title="Employee profile"
+      description="Identity, role, documents, and contact in one place."
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {currentUser?.role === "ADMIN" && (
             <button
+              type="button"
               onClick={() => setShowResetModal(true)}
-              className="rounded-lg border border-red-200 bg-red-50 text-red-600 px-3 py-1.5 text-sm font-medium transition hover:bg-red-100"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 shadow-sm transition hover:bg-rose-100"
             >
-              Force Password Reset
+              <Shield className="h-4 w-4" />
+              Reset password
             </button>
           )}
           <Link
-            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 transition hover:bg-zinc-50"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-teal-200 hover:bg-teal-50/80 hover:text-teal-900"
             to="/employees"
           >
-            Back to List
+            <ArrowLeft className="h-4 w-4" />
+            Back to list
           </Link>
         </div>
       }
     >
       {showResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/30 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-6 shadow-card">
-            <h2 className="text-base font-medium text-zinc-900 mb-2">Reset password</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-teal-100 bg-white p-6 shadow-2xl shadow-teal-900/10 ring-1 ring-teal-500/10">
+            <h2 className="mb-2 text-base font-semibold text-slate-900">Reset password</h2>
             <p className="text-sm text-zinc-600 mb-6">
               You are about to forcibly override the password for <strong>{employee?.email}</strong>. 
               They will be locked out of their old account and forced to change this new temporary password immediately.
@@ -134,9 +140,40 @@ export function EmployeeProfilePage() {
       )}
       {employee ? (
         <div className="space-y-6">
-          {/* 1. Job & Administrative */}
-          <div className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-6 shadow-card md:grid-cols-2 lg:grid-cols-3">
-            <h3 className="col-span-full border-b border-zinc-100 pb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Job & administrative</h3>
+          <div className="relative overflow-hidden rounded-2xl border border-teal-100/90 bg-gradient-to-br from-teal-600 via-teal-700 to-cyan-800 p-6 text-white shadow-xl shadow-teal-900/20 md:p-8">
+            <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-cyan-400/25" />
+            <div className="pointer-events-none absolute bottom-0 left-1/3 h-28 w-28 rounded-full bg-violet-500/20 blur-2xl" />
+            <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-2xl font-bold ring-2 ring-white/25 backdrop-blur-sm">
+                  {(employee.fullName?.trim()?.[0] || '?').toUpperCase()}
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight md:text-2xl">{employee.fullName}</h2>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-teal-100">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-medium backdrop-blur-sm">
+                      <Briefcase className="h-3.5 w-3.5" />
+                      {employee.position || '—'}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-medium backdrop-blur-sm">
+                      <Mail className="h-3.5 w-3.5" />
+                      {employee.email}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-center backdrop-blur-sm md:text-left">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-teal-100/90">Department</p>
+                <p className="mt-0.5 text-sm font-semibold text-white">{employee.department || '—'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm ring-1 ring-teal-500/5 md:grid-cols-2 lg:grid-cols-3">
+            <h3 className="col-span-full flex items-center gap-2 border-b border-teal-100 pb-3 text-xs font-semibold uppercase tracking-wide text-teal-800">
+              <span className="h-1.5 w-1.5 rounded-full bg-teal-500" />
+              Role & workplace
+            </h3>
             <p><span className="block text-xs font-semibold text-slate-500 uppercase">Employee Code</span> <span className="text-slate-900 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{employee.employeeCode || "N/A"}</span></p>
             <p><span className="block text-xs font-semibold text-slate-500 uppercase">Status</span> <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${employee.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>{employee.status}</span></p>
             <p><span className="block text-xs font-semibold text-slate-500 uppercase">Hire Date</span> <span className="text-slate-900">{employee.dateOfHire ? new Date(employee.dateOfHire).toLocaleDateString() : "N/A"}</span></p>
@@ -147,7 +184,7 @@ export function EmployeeProfilePage() {
               <div className="flex flex-wrap gap-1">
                 {assignedTeams.length > 0 ? (
                   assignedTeams.map(t => (
-                    <span key={t.id ?? t.name} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-xs font-bold">
+                    <span key={t.id ?? t.name} className="rounded-lg border border-violet-200/80 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-800">
                       {t.name}
                     </span>
                   ))
@@ -165,7 +202,7 @@ export function EmployeeProfilePage() {
                   href={employee.onlineStorageLink} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-50 text-zinc-800 text-xs font-medium rounded-md border border-zinc-200 hover:bg-zinc-100 transition"
+                  className="inline-flex items-center gap-2 rounded-lg border border-cyan-200/80 bg-cyan-50 px-3 py-1.5 text-xs font-medium text-cyan-900 transition hover:bg-cyan-100"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                   Access Digital Archive
@@ -175,16 +212,16 @@ export function EmployeeProfilePage() {
           </div>
 
           {/* 1.5 Document Checklist & Progress */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-card">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-4 mb-4">
-              <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Required Documents Checklist</h3>
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm ring-1 ring-violet-500/5">
+            <div className="mb-4 flex flex-col gap-3 border-b border-violet-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-violet-900">Required documents</h3>
               <div className="flex flex-col items-end">
-                <span className="text-[10px] font-bold text-indigo-600 mb-1 uppercase tracking-widest">
-                  Compliance: {mergedChecklist.filter(d => d.status === "RECEIVED").length} / {mergedChecklist.length}
+                <span className="mb-1 text-[10px] font-bold uppercase tracking-widest text-teal-700">
+                  {mergedChecklist.filter(d => d.status === "RECEIVED").length} / {mergedChecklist.length} received
                 </span>
-                <div className="w-32 h-1 bg-zinc-100 rounded-full overflow-hidden">
+                <div className="h-1.5 w-36 overflow-hidden rounded-full bg-slate-100">
                   <div 
-                    className="h-full bg-indigo-500 transition-all duration-700"
+                    className="h-full rounded-full bg-gradient-to-r from-teal-500 to-cyan-500 transition-all duration-700"
                     style={{ width: `${(mergedChecklist.filter(d => d.status === "RECEIVED").length / Math.max(1, mergedChecklist.length)) * 100}%` }}
                   />
                 </div>
@@ -224,9 +261,8 @@ export function EmployeeProfilePage() {
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            {/* 2. Personal Information */}
-            <div className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-6 shadow-card">
-              <h3 className="border-b border-zinc-100 pb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Personal</h3>
+            <div className="grid gap-4 rounded-2xl border border-slate-200/90 bg-gradient-to-b from-white to-teal-50/30 p-6 shadow-sm ring-1 ring-teal-500/5">
+              <h3 className="border-b border-teal-100 pb-2 text-xs font-semibold uppercase tracking-wide text-teal-900">Personal</h3>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Full Name</span> <span className="text-slate-900 font-medium">{employee.fullName}</span></p>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Date of Birth</span> <span className="text-slate-900">{employee.dateOfBirth ? new Date(employee.dateOfBirth).toLocaleDateString() : "N/A"}</span></p>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Gender</span> <span className="text-slate-900 capitalize">{employee.gender?.toLowerCase()}</span></p>
@@ -235,8 +271,8 @@ export function EmployeeProfilePage() {
             </div>
 
             {/* 3. Contact Information */}
-            <div className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-6 shadow-card">
-              <h3 className="border-b border-zinc-100 pb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Contact</h3>
+            <div className="grid gap-4 rounded-2xl border border-slate-200/90 bg-gradient-to-b from-white to-cyan-50/30 p-6 shadow-sm ring-1 ring-cyan-500/5">
+              <h3 className="border-b border-cyan-100 pb-2 text-xs font-semibold uppercase tracking-wide text-cyan-900">Contact</h3>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Personal Email</span> <span className="text-zinc-900 underline decoration-zinc-300">{employee.email}</span></p>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Work Email</span> <span className="text-zinc-900 underline decoration-zinc-300">{employee.workEmail || "N/A"}</span></p>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Phone</span> <span className="text-slate-900">{employee.phoneNumber || "N/A"}</span></p>
@@ -245,8 +281,8 @@ export function EmployeeProfilePage() {
           </div>
 
           {/* 4. Education & Skills */}
-          <div className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-6 shadow-card md:grid-cols-2">
-            <h3 className="col-span-full border-b border-zinc-100 pb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Education & skills</h3>
+          <div className="grid gap-4 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm ring-1 ring-violet-500/10 md:grid-cols-2">
+            <h3 className="col-span-full border-b border-violet-100 pb-2 text-xs font-semibold uppercase tracking-wide text-violet-900">Education & skills</h3>
             <div>
               <span className="block text-xs font-semibold text-slate-500 uppercase mb-2">Education</span>
               {employee.education?.length > 0 ? (
@@ -264,7 +300,7 @@ export function EmployeeProfilePage() {
               <div className="flex flex-wrap gap-1.5">
                 {employee.skills?.technical?.length > 0 ? (
                   employee.skills.technical.map(skill => (
-                    <span key={skill} className="px-2 py-0.5 bg-zinc-100 text-zinc-800 text-xs font-medium rounded border border-zinc-200">{skill}</span>
+                    <span key={skill} className="rounded-md border border-teal-200/80 bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-900">{skill}</span>
                   ))
                 ) : <span className="text-slate-400 italic">None listed</span>}
               </div>
@@ -273,10 +309,10 @@ export function EmployeeProfilePage() {
 
           {/* 5. Benefits & Compensation */}
           {currentUser?.role === "ADMIN" ? (
-            <div className="grid gap-4 rounded-lg border border-zinc-200 bg-zinc-50/50 p-6 shadow-card">
-              <div className="flex items-center justify-between col-span-full border-b border-zinc-200 pb-2">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-700">Benefits & financial</h3>
-                <span className="text-[10px] bg-zinc-200 text-zinc-800 px-1.5 rounded uppercase font-medium flex items-center gap-1">
+            <div className="grid gap-4 rounded-2xl border border-violet-200/60 bg-gradient-to-br from-violet-50/80 to-white p-6 shadow-sm">
+              <div className="col-span-full flex items-center justify-between border-b border-violet-200/50 pb-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-violet-900">Benefits & financial</h3>
+                <span className="flex items-center gap-1 rounded-md bg-violet-200/60 px-2 py-0.5 text-[10px] font-medium uppercase text-violet-900">
                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                    Admin Access
                 </span>
@@ -323,7 +359,7 @@ export function EmployeeProfilePage() {
           )}
         </div>
       ) : (
-        <p className="rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
+        <p className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-950">
           Employee not found.
         </p>
       )}

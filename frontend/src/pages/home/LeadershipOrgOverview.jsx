@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ResponsiveContainer,
@@ -41,11 +41,11 @@ function formatMoney(n, currency = "USD") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(n);
 }
 
-function yearsSince(dateStr) {
+function yearsSince(dateStr, asOfMs) {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return null;
-  return (Date.now() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+  return (asOfMs - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
 }
 
 /**
@@ -58,6 +58,8 @@ export function LeadershipOrgOverview({
   teams,
   isLoading,
 }) {
+  const [asOfMs] = useState(() => Date.now());
+
   const teamCountByDepartmentId = useMemo(() => {
     const m = new Map();
     for (const t of teams) {
@@ -77,7 +79,7 @@ export function LeadershipOrgOverview({
     let payrollSum = 0;
     let payrollCount = 0;
     let newHires90 = 0;
-    const now = Date.now();
+    const now = asOfMs;
     const ms90 = 90 * 24 * 60 * 60 * 1000;
 
     for (const e of employees) {
@@ -102,7 +104,7 @@ export function LeadershipOrgOverview({
 
     const tenureBuckets = { under1: 0, y1_3: 0, y3_5: 0, over5: 0, unknown: 0 };
     for (const e of employees) {
-      const y = yearsSince(e.dateOfHire);
+      const y = yearsSince(e.dateOfHire, asOfMs);
       if (y == null) {
         tenureBuckets.unknown++;
         continue;
@@ -131,7 +133,7 @@ export function LeadershipOrgOverview({
       activeRate: total ? Math.round((active / total) * 1000) / 10 : 0,
       tenureBuckets,
     };
-  }, [employees]);
+  }, [employees, asOfMs]);
 
   const departmentRows = useMemo(() => {
     const map = new Map();
@@ -382,8 +384,8 @@ export function LeadershipOrgOverview({
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-25} textAnchor="end" height={60} />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                   <Tooltip
-                    formatter={(v, _n, p) => [v, "Employees"]}
-                    labelFormatter={(_, p) => p?.payload?.fullName ?? ""}
+                    formatter={(v) => [v, "Employees"]}
+                    labelFormatter={(_, item) => item?.payload?.fullName ?? ""}
                   />
                   <Bar dataKey="employees" fill="#3f3f46" radius={[2, 2, 0, 0]} />
                 </BarChart>

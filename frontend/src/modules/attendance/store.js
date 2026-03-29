@@ -49,7 +49,8 @@ const attendanceSlice = createSlice({
       })
       .addCase(fetchAttendanceThunk.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.items = action.payload;
+        state.error = null;
+        state.items = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchAttendanceThunk.rejected, (state, action) => {
         state.isLoading = false;

@@ -1,6 +1,5 @@
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { API_URL } from "@/shared/api/apiBase";
 
 async function handleResponse(response) {
   if (!response.ok) {

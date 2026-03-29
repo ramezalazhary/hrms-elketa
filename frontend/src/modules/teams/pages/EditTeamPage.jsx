@@ -2,7 +2,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { FormBuilder } from "@/shared/components/FormBuilder";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { updateTeamThunk, fetchTeamThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
@@ -18,8 +18,6 @@ export function EditTeamPage() {
   const employees = useAppSelector((state) => state.employees?.items || []);
   const team = useAppSelector((state) => state.teams?.selectedTeam);
   const isLoading = useAppSelector((state) => state.teams?.isLoading);
-  const [selectedDeptId, setSelectedDeptId] = useState("");
-
   useEffect(() => {
     if (teamId) {
       dispatch(fetchTeamThunk(teamId));
@@ -28,11 +26,10 @@ export function EditTeamPage() {
     dispatch(fetchEmployeesThunk());
   }, [teamId, dispatch]);
 
-  useEffect(() => {
-    if (team?.departmentId) {
-      const deptId = team.departmentId?.id || team.departmentId?._id || team.departmentId;
-      setSelectedDeptId(deptId);
-    }
+  const selectedDeptId = useMemo(() => {
+    if (!team?.departmentId) return "";
+    const raw = team.departmentId;
+    return raw?.id || raw?._id || raw || "";
   }, [team]);
 
   const filteredEmployees = useMemo(() => {

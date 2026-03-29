@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { FormBuilder } from "@/shared/components/FormBuilder";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { createDepartmentThunk } from "../store";

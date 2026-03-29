@@ -9,76 +9,55 @@ import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
 import { fetchDepartmentsThunk, updateDepartmentThunk } from "../store";
 
-export function EditDepartmentPage() {
-  const { departmentId } = useParams();
+function mapPositionsFromDepartment(dept) {
+  return (dept.positions || []).map((p) => ({
+    title: p.title,
+    level: p.level || "",
+    responsibility: p.responsibility || "",
+    members: p.members || [],
+  }));
+}
+
+function mapTeamsFromDepartment(dept) {
+  return (dept.teams || []).map((t) => ({
+    ...t,
+    leaderEmail: t.leaderEmail || t.manager || t.managerEmail || "",
+    leaderTitle: t.leaderTitle || "Team Leader",
+    leaderResponsibility: t.leaderResponsibility || "",
+  }));
+}
+
+function EditDepartmentForm({ department, departmentEmployees }) {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const departments = useAppSelector((state) => state.departments.items);
-  const employees = useAppSelector((state) => state.employees.items);
-  const [positions, setPositions] = useState([]);
-  const [teams, setTeams] = useState([]);
-
-  const department = departments.find((d) => d.id === departmentId);
   const { showToast } = useToast();
+  const [positions, setPositions] = useState(() =>
+    mapPositionsFromDepartment(department),
+  );
+  const [teams, setTeams] = useState(() => mapTeamsFromDepartment(department));
 
-  useEffect(() => {
-    if (!departments.length) {
-      dispatch(fetchDepartmentsThunk());
-    }
-    if (!employees.length) {
-      dispatch(fetchEmployeesThunk());
-    }
-  }, [dispatch, departments.length, employees.length]);
-
-  useEffect(() => {
-    if (department) {
-      setPositions(
-        (department.positions || []).map((p) => ({ 
-          title: p.title, 
-          level: p.level || "", 
-          responsibility: p.responsibility || "",
-          members: p.members || []
-        })),
-      );
-      setTeams(
-        (department.teams || []).map((t) => ({
-          ...t,
-          leaderEmail: t.leaderEmail || t.manager || t.managerEmail || "",
-          leaderTitle: t.leaderTitle || "Team Leader",
-          leaderResponsibility: t.leaderResponsibility || "",
-        }))
-      );
-    }
-  }, [department]);
-
-  const departmentEmployees = useMemo(() => {
-    if (!department) return [];
-    return employees.filter(emp => 
-      emp.department === department.name || 
-      emp.departmentId === department.id || 
-      emp.departmentId === department._id
-    );
-  }, [employees, department]);
-
-  if (!department) {
-    return <div>Department not found</div>;
-  }
-
-  const leaderOptions = departmentEmployees.map((emp) => ({
-    id: emp.email,
-    label: emp.fullName,
-    sublabel: emp.position
-  }));
+  const leaderOptions = useMemo(
+    () =>
+      departmentEmployees.map((emp) => ({
+        id: emp.email,
+        label: emp.fullName,
+        sublabel: emp.position,
+      })),
+    [departmentEmployees],
+  );
 
   const addTeam = () => {
-    setTeams([...teams, { 
-      name: "", 
-      leaderEmail: "", 
-      leaderTitle: "Team Leader",
-      leaderResponsibility: "",
-      positions: [], 
-      members: [] 
-    }]);
+    setTeams([
+      ...teams,
+      {
+        name: "",
+        leaderEmail: "",
+        leaderTitle: "Team Leader",
+        leaderResponsibility: "",
+        positions: [],
+        members: [],
+      },
+    ]);
   };
 
   const updateTeam = (index, field, value) => {
@@ -92,7 +71,10 @@ export function EditDepartmentPage() {
   };
 
   const addPosition = () => {
-    setPositions([...positions, { title: "", level: "", responsibility: "", members: [] }]);
+    setPositions([
+      ...positions,
+      { title: "", level: "", responsibility: "", members: [] },
+    ]);
   };
 
   const updatePosition = (index, field, value) => {
@@ -133,14 +115,18 @@ export function EditDepartmentPage() {
             options: [
               { label: "Permanent", value: "PERMANENT" },
               { label: "Temporary / Project", value: "PROJECT" },
-            ]
+            ],
           },
           {
             name: "head",
             label: "Department Leader",
             type: "searchableSelect",
             placeholder: `Search employees in ${department.name}...`,
-            options: leaderOptions.map(opt => ({ label: opt.label, value: opt.id, sublabel: opt.sublabel })),
+            options: leaderOptions.map((opt) => ({
+              label: opt.label,
+              value: opt.id,
+              sublabel: opt.sublabel,
+            })),
           },
           {
             name: "headTitle",
@@ -206,10 +192,12 @@ export function EditDepartmentPage() {
                 ...values,
                 head,
                 positions: validPositions,
-                teams: teams.filter(t => t.name).map(t => ({
-                  ...t,
-                  leaderEmail: t.leaderEmail || "",
-                })),
+                teams: teams
+                  .filter((t) => t.name)
+                  .map((t) => ({
+                    ...t,
+                    leaderEmail: t.leaderEmail || "",
+                  })),
               }),
             ).unwrap();
             showToast("Department updated successfully", "success");
@@ -222,73 +210,144 @@ export function EditDepartmentPage() {
       />
 
       <div className="mt-8 space-y-8">
-        {/* Positions Section */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between border-b pb-4 mb-4">
-            <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wide">Department Positions</h3>
-            <button type="button" onClick={addPosition} className="rounded-md border border-zinc-200 bg-white text-zinc-800 px-3 py-1.5 text-sm font-medium hover:bg-zinc-50 transition">
+          <div className="mb-4 flex items-center justify-between border-b pb-4">
+            <h3 className="text-lg font-bold uppercase tracking-wide text-slate-800">
+              Department Positions
+            </h3>
+            <button
+              type="button"
+              onClick={addPosition}
+              className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50"
+            >
               + Add position
             </button>
           </div>
           <div className="space-y-4">
             {positions.map((pos, index) => (
-              <div key={index} className="flex flex-col gap-4 bg-slate-50/50 p-4 rounded-xl border border-dashed border-slate-200 relative group">
-                <button type="button" onClick={() => removePosition(index)} className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
-                <div className="grid md:grid-cols-2 gap-4">
+              <div
+                key={index}
+                className="group relative flex flex-col gap-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4"
+              >
+                <button
+                  type="button"
+                  onClick={() => removePosition(index)}
+                  className="absolute right-4 top-4 rounded-lg p-2 text-zinc-400 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                >
+                  <Trash2 size={16} />
+                </button>
+                <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Title</label>
-                    <input type="text" value={pos.title} onChange={(e) => updatePosition(index, "title", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white" placeholder="e.g. Lead Engineer" />
+                    <label className="mb-1 block text-[10px] font-bold uppercase text-slate-500">
+                      Title
+                    </label>
+                    <input
+                      type="text"
+                      value={pos.title}
+                      onChange={(e) => updatePosition(index, "title", e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2"
+                      placeholder="e.g. Lead Engineer"
+                    />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Level (Optional)</label>
-                    <input type="text" value={pos.level} onChange={(e) => updatePosition(index, "level", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white" placeholder="e.g. Junior, Senior" />
+                    <label className="mb-1 block text-[10px] font-bold uppercase text-slate-500">
+                      Level (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={pos.level}
+                      onChange={(e) => updatePosition(index, "level", e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2"
+                      placeholder="e.g. Junior, Senior"
+                    />
                   </div>
                 </div>
                 <div>
-                   <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Employees in this position</label>
-                   <SearchableSelect 
-                      options={leaderOptions}
-                      value={pos.members || []}
-                      multiple={true}
-                      placeholder="Select staff..."
-                      onChange={(val) => updatePosition(index, "members", val)}
-                   />
+                  <label className="mb-1 block text-[10px] font-bold uppercase text-slate-500">
+                    Employees in this position
+                  </label>
+                  <SearchableSelect
+                    options={leaderOptions}
+                    value={pos.members || []}
+                    multiple={true}
+                    placeholder="Select staff..."
+                    onChange={(val) => updatePosition(index, "members", val)}
+                  />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Primary Responsibility</label>
-                  <textarea value={pos.responsibility} onChange={(e) => updatePosition(index, "responsibility", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white text-sm" placeholder="Summarize what this role does..." />
+                  <label className="mb-1 block text-[10px] font-bold uppercase text-slate-500">
+                    Primary Responsibility
+                  </label>
+                  <textarea
+                    value={pos.responsibility}
+                    onChange={(e) =>
+                      updatePosition(index, "responsibility", e.target.value)
+                    }
+                    rows={2}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    placeholder="Summarize what this role does..."
+                  />
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Teams Section */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between border-b pb-4 mb-4">
+          <div className="mb-4 flex items-center justify-between border-b pb-4">
             <div>
-              <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+              <h3 className="flex items-center gap-2 text-lg font-bold uppercase tracking-wide text-slate-800">
                 Teams / Sub-units
-                <ShieldCheck size={16} className="text-emerald-500" title="Stricly departmentalized" />
+                <ShieldCheck
+                  size={16}
+                  className="text-emerald-500"
+                  title="Strictly departmentalized"
+                />
               </h3>
-              <p className="text-xs text-slate-500 italic">Only employees from {department.name} can lead or join these teams.</p>
+              <p className="text-xs italic text-slate-500">
+                Only employees from {department.name} can lead or join these
+                teams.
+              </p>
             </div>
-            <button type="button" onClick={addTeam} className="rounded-xl bg-emerald-50 text-emerald-700 px-4 py-2 text-sm font-bold hover:bg-emerald-100 transition shadow-sm">
+            <button
+              type="button"
+              onClick={addTeam}
+              className="rounded-xl bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 shadow-sm transition hover:bg-emerald-100"
+            >
               + Create Team
             </button>
           </div>
           <div className="space-y-6">
             {teams.map((team, index) => (
-              <div key={index} className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 relative group">
-                <button onClick={() => removeTeam(index)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500 p-1 rounded-md opacity-0 group-hover:opacity-100 transition"><Trash2 size={18} /></button>
-                <div className="grid lg:grid-cols-2 gap-6">
+              <div
+                key={index}
+                className="group relative rounded-2xl border border-slate-200 bg-slate-50/50 p-6"
+              >
+                <button
+                  type="button"
+                  onClick={() => removeTeam(index)}
+                  className="absolute right-4 top-4 rounded-md p-1 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100"
+                >
+                  <Trash2 size={18} />
+                </button>
+                <div className="grid gap-6 lg:grid-cols-2">
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Team Name</label>
-                      <input type="text" value={team.name} onChange={(e) => updateTeam(index, "name", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white shadow-sm" placeholder="e.g., UI/UX Team" />
+                      <label className="mb-1 block text-[10px] font-bold uppercase text-slate-500">
+                        Team Name
+                      </label>
+                      <input
+                        type="text"
+                        value={team.name}
+                        onChange={(e) => updateTeam(index, "name", e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm"
+                        placeholder="e.g., UI/UX Team"
+                      />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Team Leader</label>
+                      <label className="mb-1 block text-[10px] font-bold uppercase text-slate-500">
+                        Team Leader
+                      </label>
                       <SearchableSelect
                         options={leaderOptions}
                         value={team.leaderEmail}
@@ -297,7 +356,9 @@ export function EditDepartmentPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Team Members</label>
+                      <label className="mb-1 block text-[10px] font-bold uppercase text-slate-500">
+                        Team Members
+                      </label>
                       <SearchableSelect
                         options={leaderOptions}
                         value={team.members || []}
@@ -309,21 +370,86 @@ export function EditDepartmentPage() {
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Leader Title</label>
-                      <input type="text" value={team.leaderTitle} onChange={(e) => updateTeam(index, "leaderTitle", e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white shadow-sm" placeholder="e.g. Lead Designer" />
+                      <label className="mb-1 block text-[10px] font-bold uppercase text-slate-500">
+                        Leader Title
+                      </label>
+                      <input
+                        type="text"
+                        value={team.leaderTitle}
+                        onChange={(e) =>
+                          updateTeam(index, "leaderTitle", e.target.value)
+                        }
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm"
+                        placeholder="e.g. Lead Designer"
+                      />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Leader Responsibility</label>
-                      <textarea value={team.leaderResponsibility} onChange={(e) => updateTeam(index, "leaderResponsibility", e.target.value)} rows={4} className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white text-sm shadow-sm" placeholder="Describe the leader's specific duties..." />
+                      <label className="mb-1 block text-[10px] font-bold uppercase text-slate-500">
+                        Leader Responsibility
+                      </label>
+                      <textarea
+                        value={team.leaderResponsibility}
+                        onChange={(e) =>
+                          updateTeam(index, "leaderResponsibility", e.target.value)
+                        }
+                        rows={4}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
+                        placeholder="Describe the leader's specific duties..."
+                      />
                     </div>
                   </div>
                 </div>
               </div>
             ))}
-            {teams.length === 0 && <div className="text-center py-6 text-slate-400 text-sm italic">No teams defined. Department operates as a single unit or has not been subdivided yet.</div>}
+            {teams.length === 0 && (
+              <div className="py-6 text-center text-sm italic text-slate-400">
+                No teams defined. Department operates as a single unit or has not
+                been subdivided yet.
+              </div>
+            )}
           </div>
         </div>
       </div>
     </Layout>
+  );
+}
+
+export function EditDepartmentPage() {
+  const { departmentId } = useParams();
+  const dispatch = useAppDispatch();
+  const departments = useAppSelector((state) => state.departments.items);
+  const employees = useAppSelector((state) => state.employees.items);
+
+  const department = departments.find((d) => d.id === departmentId);
+
+  useEffect(() => {
+    if (!departments.length) {
+      dispatch(fetchDepartmentsThunk());
+    }
+    if (!employees.length) {
+      dispatch(fetchEmployeesThunk());
+    }
+  }, [dispatch, departments.length, employees.length]);
+
+  const departmentEmployees = useMemo(() => {
+    if (!department) return [];
+    return employees.filter(
+      (emp) =>
+        emp.department === department.name ||
+        emp.departmentId === department.id ||
+        emp.departmentId === department._id,
+    );
+  }, [employees, department]);
+
+  if (!department) {
+    return <div>Department not found</div>;
+  }
+
+  return (
+    <EditDepartmentForm
+      key={department.id}
+      department={department}
+      departmentEmployees={departmentEmployees}
+    />
   );
 }

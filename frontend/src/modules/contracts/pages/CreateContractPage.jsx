@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { FormBuilder } from '@/shared/components/FormBuilder'
 import { Layout } from '@/shared/components/Layout'
 import { Modal } from '@/shared/components/Modal'
@@ -15,7 +15,6 @@ export function CreateContractPage() {
       description="Create and store employee contract details."
     >
       <FormBuilder
-        devDemoFill={devDemoFill}
         fields={[
           { name: 'employeeName', label: 'Employee', type: 'text', required: true },
           { name: 'contractType', label: 'Contract Type', type: 'text', required: true },

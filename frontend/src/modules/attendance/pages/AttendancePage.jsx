@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Layout } from "@/shared/components/Layout";
 import { DataTable } from "@/shared/components/DataTable";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
@@ -6,13 +6,19 @@ import { useToast } from "@/shared/components/ToastProvider";
 import { fetchAttendanceThunk, importAttendanceThunk, createAttendanceThunk, updateAttendanceThunk, deleteAttendanceThunk } from "../store";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
 import { StatusBadge } from "@/shared/components/EntityBadges";
-import { FileUp, Calendar, Trash2, Edit2, Plus, LogIn, LogOut, Check, X, ShieldCheck, AlertTriangle, Download, Info, Search } from "lucide-react";
+import { FileUp, Trash2, Edit2, Plus, ShieldCheck, AlertTriangle, Download, Info, Search, Clock, CalendarRange } from "lucide-react";
 import { downloadAttendanceTemplateApi } from "../api";
+import {
+  formatAttendanceDate,
+  formatTotalHours,
+  getAttendanceEmployee,
+  getAttendanceRowId,
+} from "../utils";
 
 export function AttendancePage() {
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
-  const { items, isLoading } = useAppSelector((state) => state.attendance);
+  const { items, isLoading, error: fetchError } = useAppSelector((state) => state.attendance);
   const { items: employees } = useAppSelector((state) => state.employees);
   const { currentUser } = useAppSelector((state) => state.identity);
 
@@ -45,10 +51,17 @@ export function AttendancePage() {
 
   const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "HR_STAFF";
 
+  /** Params sent to GET /attendance (empty employee code is omitted so the API filters correctly). */
+  const listQuery = useMemo(() => {
+    const q = { startDate, endDate };
+    if (isAdmin && employeeCode.trim()) q.employeeCode = employeeCode.trim();
+    return q;
+  }, [startDate, endDate, employeeCode, isAdmin]);
+
   useEffect(() => {
-    void dispatch(fetchAttendanceThunk({ startDate, endDate, employeeCode }));
+    void dispatch(fetchAttendanceThunk(listQuery));
     if (isAdmin) void dispatch(fetchEmployeesThunk());
-  }, [dispatch, startDate, endDate, employeeCode, isAdmin]);
+  }, [dispatch, listQuery, isAdmin]);
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
@@ -58,7 +71,7 @@ export function AttendancePage() {
     try {
       const result = await dispatch(importAttendanceThunk({ file, overwrite: isOverwriteEnabled })).unwrap();
       showToast(result.message, result.summary.failed > 0 ? "warning" : "success");
-      void dispatch(fetchAttendanceThunk({ startDate, endDate }));
+      void dispatch(fetchAttendanceThunk(listQuery));
     } catch (error) {
       showToast(error.message || "Failed to import attendance", "error");
     } finally {
@@ -71,7 +84,7 @@ export function AttendancePage() {
     try {
       await downloadAttendanceTemplateApi();
       showToast("Template download started", "success");
-    } catch (error) {
+    } catch {
       showToast("Failed to download template", "error");
     }
   };
@@ -88,7 +101,7 @@ export function AttendancePage() {
       setIsAddModalOpen(false);
       setEditingId(null);
       setFormData({ employeeId: "", date: todayStr, checkIn: "09:00:00 AM", checkOut: "05:00:00 PM", status: "PRESENT", remarks: "" });
-      void dispatch(fetchAttendanceThunk({ startDate, endDate }));
+      void dispatch(fetchAttendanceThunk(listQuery));
     } catch (error) {
       showToast(error.error || error.message || "Operation failed", "error");
     }
@@ -100,8 +113,8 @@ export function AttendancePage() {
       await dispatch(deleteAttendanceThunk(deleteId)).unwrap();
       showToast("Record deleted", "success");
       setDeleteId(null);
-      void dispatch(fetchAttendanceThunk({ startDate, endDate }));
-    } catch (error) {
+      void dispatch(fetchAttendanceThunk(listQuery));
+    } catch {
       showToast("Delete failed", "error");
     }
   };
@@ -121,8 +134,8 @@ export function AttendancePage() {
 
   return (
     <Layout
-      title="Attendance Records"
-      description="Monitor and manage daily attendance logs. Use the Range filters to view history."
+      title="Attendance"
+      description="Daily check-in/out per employee. Adjust the date range to load records from the server; filters apply to the table below."
       actions={
         isAdmin && (
           <div className="flex items-center gap-3">
@@ -155,17 +168,43 @@ export function AttendancePage() {
         )
       }
     >
-      {/* Import Guidance */}
+      {fetchError && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          Could not load attendance: {fetchError}
+        </div>
+      )}
+
+      <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-teal-100 bg-gradient-to-r from-teal-50/90 via-white to-cyan-50/80 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-600 text-white shadow-md">
+            <CalendarRange className="h-5 w-5" strokeWidth={1.75} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Records in view</p>
+            <p className="text-xs text-slate-600">
+              <span className="font-semibold text-teal-800">{items.length}</span> row{items.length === 1 ? "" : "s"}{" "}
+              · {startDate} → {endDate}
+              {isAdmin && employeeCode.trim() ? (
+                <span className="text-violet-700"> · code contains “{employeeCode.trim()}”</span>
+              ) : null}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <Clock className="h-4 w-4 shrink-0 text-teal-600" />
+          Times are stored as 24h on the server; this table shows the saved values.
+        </div>
+      </div>
+
       {isAdmin && (
-        <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50/50 p-4 flex items-start gap-3 shadow-sm">
-          <Info size={18} className="text-blue-500 mt-0.5" />
-          <div className="text-xs text-blue-700 font-medium">
-            <p className="font-black uppercase tracking-widest mb-1">Import Guidance</p>
-            <p>For a successful import, ensure your Excel file contains columns: 
-              <span className="font-bold underline ml-1">Employee Code</span>, 
-              <span className="font-bold underline ml-1">Date</span> (YYYY-MM-DD), 
-              <span className="font-bold underline ml-1">Check In</span> (HH:MM:SS AM/PM), and 
-              <span className="font-bold underline ml-1">Check Out</span> (HH:MM:SS AM/PM). 
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-sky-100 bg-sky-50/60 p-4 shadow-sm">
+          <Info size={18} className="mt-0.5 shrink-0 text-sky-600" />
+          <div className="text-xs font-medium text-sky-900">
+            <p className="mb-1 font-semibold text-sky-950">Import & template</p>
+            <p>
+              Excel columns (flexible names):{" "}
+              <strong>Employee Code</strong>, <strong>Date</strong>, <strong>Check In</strong>, <strong>Check Out</strong>.
+              Dates can be YYYY-MM-DD or Excel date cells. Times accept 12h (e.g. 9:00 AM) or 24h. Download the template to match the expected layout.
             </p>
           </div>
         </div>
@@ -231,53 +270,80 @@ export function AttendancePage() {
           {
             key: "code",
             header: "Code",
-            render: (row) => (
-               <span className="font-mono text-xs font-semibold text-zinc-500 bg-zinc-50 border border-zinc-100 px-1.5 py-0.5 rounded">
-                 {row.employeeId?.employeeCode || row.employeeCode || "—"}
-               </span>
-            ),
+            render: (row) => {
+              const emp = getAttendanceEmployee(row);
+              const code = emp?.employeeCode || row.employeeCode || "—";
+              return (
+                <span className="rounded-md border border-teal-200/80 bg-teal-50/80 px-2 py-0.5 font-mono text-xs font-semibold text-teal-900">
+                  {code}
+                </span>
+              );
+            },
           },
           {
             key: "employee",
             header: "Employee",
-            render: (row) => (
-              <div>
-                <p className="font-semibold text-zinc-900">{row.employeeId?.fullName || <span className="text-zinc-400 italic">Former Employee</span>}</p>
-                <p className="text-[10px] text-zinc-500 leading-none">{row.employeeId?.department || "—"}</p>
-              </div>
-            ),
+            render: (row) => {
+              const emp = getAttendanceEmployee(row);
+              const name = emp?.fullName;
+              const dept = emp?.department;
+              return (
+                <div>
+                  <p className="font-semibold text-zinc-900">
+                    {name || (
+                      <span className="text-zinc-500 italic">
+                        {row.employeeCode ? `Not linked (${row.employeeCode})` : "No profile"}
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[10px] leading-none text-zinc-500">{dept || "—"}</p>
+                </div>
+              );
+            },
           },
           {
             key: "date",
-            header: "Date",
+            header: "Work date",
             render: (row) => (
-              <span className="text-sm text-zinc-600 font-medium whitespace-nowrap">
-                {new Date(row.date).toLocaleDateString()}
+              <span className="whitespace-nowrap text-sm font-medium text-zinc-700">
+                {formatAttendanceDate(row.date)}
               </span>
             ),
           },
           {
             key: "in",
-            header: "Check In",
+            header: "Check in",
             render: (row) => (
-               <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-xs">
-                 {row.checkIn || "—"}
-               </div>
+              <div className="text-xs font-semibold text-emerald-700">{row.checkIn || "—"}</div>
             ),
           },
           {
             key: "out",
-            header: "Check Out",
+            header: "Check out",
             render: (row) => (
-               <div className="flex items-center gap-1.5 text-amber-600 font-bold text-xs">
-                 {row.checkOut || "—"}
-               </div>
+              <div className="text-xs font-semibold text-amber-700">{row.checkOut || "—"}</div>
+            ),
+          },
+          {
+            key: "hours",
+            header: "Hours",
+            render: (row) => (
+              <span className="font-mono text-sm font-semibold text-slate-700">{formatTotalHours(row.totalHours)}</span>
             ),
           },
           {
             key: "status",
             header: "Status",
             render: (row) => <StatusBadge status={row.status} />,
+          },
+          {
+            key: "remarks",
+            header: "Note",
+            render: (row) => (
+              <span className="line-clamp-2 max-w-[10rem] text-xs text-zinc-500" title={row.remarks || ""}>
+                {row.remarks || "—"}
+              </span>
+            ),
           },
           {
             key: "actions",
@@ -295,8 +361,12 @@ export function AttendancePage() {
           },
         ]}
         data={items}
-        emptyText={isLoading ? "Loading..." : "No attendance data for this period."}
-        getRowKey={(row) => row._id}
+        emptyText={
+          isLoading
+            ? "Loading…"
+            : "No rows for this range. widen the dates, clear the employee code filter, or add/import records."
+        }
+        getRowKey={(row, index) => getAttendanceRowId(row, index)}
       />
 
       {/* Manual Add/Edit Modal */}
@@ -340,12 +410,12 @@ export function AttendancePage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-zinc-600 uppercase">Input Time</label>
-                  <input type="text" placeholder="09:00:00 AM" className="px-3 py-2 rounded-lg border border-zinc-200 text-sm" value={formData.checkIn} onChange={(e) => setFormData({...formData, checkIn: e.target.value})} />
+                  <label className="text-xs font-bold text-zinc-600 uppercase">Check in</label>
+                  <input type="text" placeholder="09:00:00 AM or 09:00" className="px-3 py-2 rounded-lg border border-zinc-200 text-sm" value={formData.checkIn} onChange={(e) => setFormData({...formData, checkIn: e.target.value})} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-zinc-600 uppercase">Output Time</label>
-                  <input type="text" placeholder="05:00:00 PM" className="px-3 py-2 rounded-lg border border-zinc-200 text-sm" value={formData.checkOut} onChange={(e) => setFormData({...formData, checkOut: e.target.value})} />
+                  <label className="text-xs font-bold text-zinc-600 uppercase">Check out</label>
+                  <input type="text" placeholder="05:00:00 PM or 17:00" className="px-3 py-2 rounded-lg border border-zinc-200 text-sm" value={formData.checkOut} onChange={(e) => setFormData({...formData, checkOut: e.target.value})} />
                 </div>
               </div>
             </div>

@@ -1,7 +1,5 @@
 import { getAuthHeaders } from "@/shared/api/fetchWithAuth";
-
-/** Base URL for REST calls; must match Vite `VITE_API_URL` (no trailing `/api` duplication in paths below). */
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { API_URL } from "@/shared/api/apiBase";
 
 /**
  * @param {Response} response Fetch response.

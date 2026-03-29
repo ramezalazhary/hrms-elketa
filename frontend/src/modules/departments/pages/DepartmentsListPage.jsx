@@ -8,7 +8,7 @@ import { useToast } from "@/shared/components/ToastProvider";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { fetchDepartmentsThunk, deleteDepartmentThunk } from "../store";
 import { DepartmentBadge } from "@/shared/components/EntityBadges";
-import { Trash2, Edit, Building2, LayoutDashboard } from "lucide-react";
+import { Trash2, Edit, Building2, LayoutDashboard, Layers } from "lucide-react";
 
 export function DepartmentsListPage() {
   const dispatch = useAppDispatch();
@@ -38,23 +38,51 @@ export function DepartmentsListPage() {
   return (
     <Layout
       title="Departments"
-      description="Structural management of the organization."
+      description="Org units, leaders, teams, and roles—in one directory."
       actions={
         isAdmin ? (
           <Link
-            className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-zinc-900/20 transition hover:bg-zinc-800 active:scale-95"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/25 transition hover:from-violet-500 hover:to-teal-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2"
             to="/departments/create"
           >
-            + Create Department
+            <Layers className="h-4 w-4 opacity-90" />
+            New department
           </Link>
         ) : null
       }
     >
-      <Filters
-        placeholder="Filter by name..."
-        search={search}
-        onSearchChange={setSearch}
-      />
+      <div className="relative overflow-hidden rounded-2xl border border-violet-100/80 bg-gradient-to-br from-violet-50/90 via-white to-teal-50/70 p-5 shadow-sm ring-1 ring-violet-500/10 md:p-6">
+        <div className="pointer-events-none absolute -left-6 top-0 h-28 w-28 rounded-full bg-teal-300/20 blur-2xl" />
+        <div className="pointer-events-none absolute bottom-0 right-0 h-24 w-24 rounded-full bg-violet-400/20 blur-2xl" />
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-teal-600 text-white shadow-md">
+              <Building2 className="h-5 w-5" strokeWidth={1.75} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-800">Organization structure</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                <span className="font-semibold text-violet-700">{departments.length}</span> departments
+                {search ? (
+                  <>
+                    {" · "}
+                    <span className="font-semibold text-teal-700">{filtered.length}</span> visible
+                  </>
+                ) : null}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm">
+        <Filters
+          placeholder="Search departments by name…"
+          search={search}
+          onSearchChange={setSearch}
+        />
+      </div>
+
       <DataTable
         columns={[
           {
@@ -62,10 +90,10 @@ export function DepartmentsListPage() {
             header: "Department",
             render: (row) => (
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-zinc-50 border border-zinc-100 rounded-lg">
-                  <Building2 size={16} className="text-zinc-400" />
+                <div className="rounded-xl border border-teal-100 bg-gradient-to-br from-teal-50 to-cyan-50 p-2 shadow-sm">
+                  <Building2 size={16} className="text-teal-600" />
                 </div>
-                <DepartmentBadge name={row.name} className="font-bold text-zinc-900" />
+                <DepartmentBadge name={row.name} className="font-semibold" />
               </div>
             ),
           },
@@ -73,7 +101,13 @@ export function DepartmentsListPage() {
             key: "type",
             header: "Type",
             render: (row) => (
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${row.type === 'PROJECT' ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-slate-50 text-slate-700 border border-slate-100'}`}>
+              <span
+                className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                  row.type === "PROJECT"
+                    ? "border-violet-200 bg-violet-50 text-violet-800"
+                    : "border-teal-200 bg-teal-50 text-teal-800"
+                }`}
+              >
                 {row.type || "PERMANENT"}
               </span>
             ),
@@ -83,8 +117,8 @@ export function DepartmentsListPage() {
             header: "Leader",
             render: (row) => (
               <div className="flex flex-col">
-                <span className="text-zinc-900 font-bold text-xs">{row.head || "Unassigned"}</span>
-                <span className="text-[10px] text-zinc-400 font-medium">{row.headTitle || "Department Leader"}</span>
+                <span className="text-xs font-semibold text-slate-900">{row.head || "Unassigned"}</span>
+                <span className="text-[10px] font-medium text-slate-500">{row.headTitle || "Department lead"}</span>
               </div>
             ),
           },
@@ -92,12 +126,12 @@ export function DepartmentsListPage() {
             key: "structure",
             header: "Sub-Units",
             render: (row) => (
-              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
-                <span className="px-2 py-0.5 bg-zinc-100 text-zinc-600 rounded border border-zinc-200">
-                  {row.teams?.length || 0} Teams
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide">
+                <span className="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-cyan-900">
+                  {row.teams?.length || 0} teams
                 </span>
-                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded border border-indigo-100">
-                  {row.positions?.length || 0} Roles
+                <span className="rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-violet-900">
+                  {row.positions?.length || 0} roles
                 </span>
               </div>
             ),
@@ -124,8 +158,8 @@ export function DepartmentsListPage() {
               <div className="flex justify-end gap-2">
                 <Link
                   to={`/departments/${row.id}`}
-                  className="p-2 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition border border-transparent hover:border-emerald-100"
-                  title="View Structure"
+                  className="rounded-lg border border-transparent p-2 text-slate-400 transition hover:border-teal-100 hover:bg-teal-50 hover:text-teal-700"
+                  title="View structure"
                 >
                   <LayoutDashboard size={16} />
                 </Link>
@@ -133,8 +167,8 @@ export function DepartmentsListPage() {
                   <>
                     <Link
                       to={`/departments/${row.id}/edit`}
-                      className="p-2 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition border border-transparent hover:border-indigo-100"
-                      title="Edit Structure"
+                      className="rounded-lg border border-transparent p-2 text-slate-400 transition hover:border-violet-100 hover:bg-violet-50 hover:text-violet-700"
+                      title="Edit department"
                     >
                       <Edit size={16} />
                     </Link>
@@ -149,14 +183,16 @@ export function DepartmentsListPage() {
                           showToast(error.message || "Deletion failed", "error");
                         }
                       }}
-                      className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition border border-transparent hover:border-red-100"
-                      title="Delete Department"
+                      className="rounded-lg border border-transparent p-2 text-slate-400 transition hover:border-rose-100 hover:bg-rose-50 hover:text-rose-600"
+                      title="Delete department"
                     >
                       <Trash2 size={16} />
                     </button>
                   </>
                 ) : (
-                  <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest px-2 py-1 bg-zinc-50 rounded border border-zinc-100">Read Only</span>
+                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    View only
+                  </span>
                 )}
               </div>
             ),

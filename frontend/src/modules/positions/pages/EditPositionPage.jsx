@@ -8,35 +8,24 @@ import { updatePositionThunk, fetchPositionThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { fetchTeamsThunk } from "@/modules/teams/store";
 
-export function EditPositionPage() {
-  const { positionId } = useParams();
+function initialDepartmentId(position) {
+  if (!position?.departmentId) return null;
+  return (
+    position.departmentId.id ||
+    position.departmentId._id ||
+    position.departmentId
+  );
+}
+
+function EditPositionForm({ position, positionId }) {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const [selectedDept, setSelectedDept] = useState(null);
-
   const departments = useAppSelector((state) => state.departments?.items || []);
   const teams = useAppSelector((state) => state.teams?.items || []);
-  const position = useAppSelector((state) => state.positions?.selectedPosition);
-  const isLoading = useAppSelector((state) => state.positions?.isLoading);
-
-  useEffect(() => {
-    if (positionId) {
-      dispatch(fetchPositionThunk(positionId));
-    }
-    dispatch(fetchDepartmentsThunk());
-    dispatch(fetchTeamsThunk());
-  }, [positionId, dispatch]);
-
-  useEffect(() => {
-    if (position?.departmentId) {
-      setSelectedDept(
-        position.departmentId.id ||
-          position.departmentId._id ||
-          position.departmentId,
-      );
-    }
-  }, [position]);
+  const [selectedDept, setSelectedDept] = useState(() =>
+    initialDepartmentId(position),
+  );
 
   const handleSubmit = async (formData) => {
     try {
@@ -68,14 +57,6 @@ export function EditPositionPage() {
       )
     : [];
 
-  if (isLoading || !position) {
-    return (
-      <Layout title="Edit Position" description="Loading...">
-        Loading...
-      </Layout>
-    );
-  }
-
   return (
     <Layout title="Edit Position" description="Update position details.">
       <FormBuilder
@@ -85,10 +66,7 @@ export function EditPositionPage() {
           title: position.title,
           level: position.level || "",
           responsibility: position.responsibility || "",
-          departmentId:
-            position.departmentId?.id ||
-            position.departmentId?._id ||
-            position.departmentId,
+          departmentId: initialDepartmentId(position),
           teamId:
             position.teamId?.id ||
             position.teamId?._id ||
@@ -121,7 +99,8 @@ export function EditPositionPage() {
             name: "responsibility",
             label: "Responsibility / Key Duties",
             type: "textarea",
-            placeholder: "Summarize the primary responsibilities and goals for this position.",
+            placeholder:
+              "Summarize the primary responsibilities and goals for this position.",
             fullWidth: true,
           },
           {
@@ -165,5 +144,32 @@ export function EditPositionPage() {
         ]}
       />
     </Layout>
+  );
+}
+
+export function EditPositionPage() {
+  const { positionId } = useParams();
+  const dispatch = useAppDispatch();
+  const position = useAppSelector((state) => state.positions?.selectedPosition);
+  const isLoading = useAppSelector((state) => state.positions?.isLoading);
+
+  useEffect(() => {
+    if (positionId) {
+      dispatch(fetchPositionThunk(positionId));
+    }
+    dispatch(fetchDepartmentsThunk());
+    dispatch(fetchTeamsThunk());
+  }, [positionId, dispatch]);
+
+  if (isLoading || !position) {
+    return (
+      <Layout title="Edit Position" description="Loading...">
+        Loading...
+      </Layout>
+    );
+  }
+
+  return (
+    <EditPositionForm key={positionId} position={position} positionId={positionId} />
   );
 }

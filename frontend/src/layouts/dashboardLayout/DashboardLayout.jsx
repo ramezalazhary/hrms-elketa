@@ -26,7 +26,15 @@ import {
 
 /** Minimal dashboard chrome: neutral sidebar, hairline borders, no heavy shadows. */
 export function DashboardLayout() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem("sidebar-collapsed");
+      if (saved !== null) return JSON.parse(saved);
+    } catch {
+      /* ignore invalid stored value */
+    }
+    return false;
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState({
     Organizations: true,
@@ -42,7 +50,6 @@ export function DashboardLayout() {
   const isAdmin = currentRole === "ADMIN" || currentRole === 3;
   const isHrManager = currentRole === "HR_MANAGER";
   const isHR = currentRole === "HR_STAFF" || isHrManager || isAdmin;
-  const isManager = ["MANAGER", "TEAM_LEADER"].includes(currentRole) || isHR;
 
   const hasHrOpsAccess = 
     isAdmin || 
@@ -62,11 +69,6 @@ export function DashboardLayout() {
       void dispatch(fetchDepartmentsThunk());
     }
   }, [dispatch, currentRole, isAdmin]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("sidebar-collapsed");
-    if (saved !== null) setIsCollapsed(JSON.parse(saved));
-  }, []);
 
   const toggleSidebarSize = () => {
     setIsCollapsed((prev) => {

@@ -64,7 +64,9 @@ export function HomePage() {
             <div className="flex justify-between py-2 border-b border-zinc-100">
               <span className="text-zinc-500">Profile</span>
               <span className="text-zinc-800">
-                {new Date(currentUser?.createdAt || Date.now()).toLocaleDateString()}
+                {currentUser?.createdAt
+                  ? new Date(currentUser.createdAt).toLocaleDateString()
+                  : "—"}
               </span>
             </div>
             <div className="flex justify-between py-2 border-b border-zinc-100">

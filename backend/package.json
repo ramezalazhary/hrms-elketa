@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "seed": "node src/seedUsers.js",
+    "seed:attendance": "node src/seedAttendanceDemo.js",
     "test:permissions": "node scripts/permission-smoke.mjs",
+    "test:api": "node scripts/full-api-smoke.mjs",
+    "test:integration": "node scripts/full-api-smoke.mjs && node scripts/permission-smoke.mjs",
     "start": "node src/index.js"
   },
   "dependencies": {

@@ -14,7 +14,7 @@ export function CreatePositionPage() {
   const { showToast } = useToast();
   const departments = useAppSelector((state) => state.departments?.items || []);
   const teams = useAppSelector((state) => state.teams?.items || []);
-  const [selectedDept, setSelectedDept] = React.useState(null);
+  const [selectedDept, setSelectedDept] = useState(null);
 
   useEffect(() => {
     dispatch(fetchDepartmentsThunk());

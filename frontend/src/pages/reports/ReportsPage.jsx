@@ -2,9 +2,8 @@ import { useState, useEffect } from "react";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
+import { API_URL } from "@/shared/api/apiBase";
 import { DataTable } from "@/shared/components/DataTable";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 export function ReportsPage() {
   const { showToast } = useToast();

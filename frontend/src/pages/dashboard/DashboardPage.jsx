@@ -19,6 +19,7 @@ import {
 import { Calendar } from "lucide-react";
 import { StatusBadge } from "@/shared/components/EntityBadges";
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
+import { API_URL } from "@/shared/api/apiBase";
 
 const STATUS_PIE_COLORS = {
   Active: "#10b981",
@@ -107,7 +108,7 @@ function TeamLeaderDashboard({ teams, employees, currentUserEmployee }) {
     const fetchDaily = async () => {
       setLoadingAttendance(true);
       try {
-        const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/attendance?todayOnly=true`);
+        const res = await fetchWithAuth(`${API_URL}/attendance?todayOnly=true`);
         if (res.ok) {
            const data = await res.json();
            setDailyAttendance(data);
@@ -279,7 +280,7 @@ function DepartmentManagerDashboard({ department, employees, requests, onHandleR
     const fetchDaily = async () => {
       setLoadingAttendance(true);
       try {
-        const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/attendance?todayOnly=true`);
+        const res = await fetchWithAuth(`${API_URL}/attendance?todayOnly=true`);
         if (res.ok) {
            const data = await res.json();
            setDailyAttendance(data);
@@ -678,14 +679,14 @@ function AdminDashboard({ employees, departments, employeesPerDepartment, reques
 export function DashboardPage() {
   const dispatch = useAppDispatch();
   const { currentUser } = useAppSelector((state) => state.identity);
-  const { items: employees, isLoading: employeesLoading } = useAppSelector((state) => state.employees);
-  const { items: departments, isLoading: deptsLoading } = useAppSelector((state) => state.departments);
+  const { items: employees } = useAppSelector((state) => state.employees);
+  const { items: departments } = useAppSelector((state) => state.departments);
 
   const [requests, setRequests] = useState([]);
 
-  const fetchRequests = async () => {
+  const refreshRequests = async () => {
     try {
-      const res = await fetchWithAuth("/api/management-requests");
+      const res = await fetchWithAuth(`${API_URL}/management-requests`);
       if (res.ok) setRequests(await res.json());
     } catch (e) {
       console.error("Failed to fetch requests", e);
@@ -694,14 +695,14 @@ export function DashboardPage() {
 
   const handleSendRequest = async (data) => {
     try {
-      await fetchWithAuth("/api/management-requests", {
+      await fetchWithAuth(`${API_URL}/management-requests`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify(data)
       });
-      fetchRequests();
+      await refreshRequests();
     } catch (e) {
       console.error("Request failed", e);
     }
@@ -709,14 +710,14 @@ export function DashboardPage() {
 
   const handleUpdateRequest = async (id, status) => {
     try {
-      await fetchWithAuth(`/api/management-requests/${id}`, {
+      await fetchWithAuth(`${API_URL}/management-requests/${id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({ status })
       });
-      fetchRequests();
+      await refreshRequests();
     } catch (e) {
       console.error("Update failed", e);
     }
@@ -725,7 +726,18 @@ export function DashboardPage() {
   useEffect(() => {
     void dispatch(fetchDepartmentsThunk());
     void dispatch(fetchEmployeesThunk());
-    fetchRequests();
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetchWithAuth(`${API_URL}/management-requests`);
+        if (!cancelled && res.ok) setRequests(await res.json());
+      } catch (e) {
+        console.error("Failed to fetch requests", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [dispatch]);
 
   const managedDepartments = useMemo(() =>

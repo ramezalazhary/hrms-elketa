@@ -1,6 +1,6 @@
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { API_URL } from "@/shared/api/apiBase";
+import { buildAttendanceQueryParams } from "./utils";
 
 async function handleResponse(response) {
   if (!response.ok) {
@@ -10,10 +10,16 @@ async function handleResponse(response) {
   return response.json();
 }
 
-export const getAttendanceApi = async (params) => {
-  const query = new URLSearchParams(params).toString();
-  const response = await fetchWithAuth(`${API_URL}/attendance?${query}`);
-  return handleResponse(response);
+/**
+ * @param {{ startDate?: string, endDate?: string, employeeCode?: string }} params
+ * @returns {Promise<Array>} Attendance documents (employeeId populated when applicable).
+ */
+export const getAttendanceApi = async (params = {}) => {
+  const query = buildAttendanceQueryParams(params);
+  const url = query ? `${API_URL}/attendance?${query}` : `${API_URL}/attendance`;
+  const response = await fetchWithAuth(url);
+  const data = await handleResponse(response);
+  return Array.isArray(data) ? data : [];
 };
 
 export const createAttendanceApi = async (data) => {
