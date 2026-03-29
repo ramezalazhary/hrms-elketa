@@ -6,6 +6,7 @@ import { useToast } from "@/shared/components/ToastProvider";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { updateEmployeeThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
+import { getDocumentRequirementsApi } from "@/modules/organization/api";
 
 export function EditEmployeePage() {
   const dispatch = useAppDispatch();
@@ -18,15 +19,44 @@ export function EditEmployeePage() {
   const { showToast } = useToast();
 
   const [showResetModal, setShowResetModal] = useState(false);
-
-  useEffect(() => {
-    dispatch(fetchDepartmentsThunk());
-  }, [dispatch]);
-
+  const [documentChecklist, setDocumentChecklist] = useState([]);
   const employee = useMemo(
     () => employees.find((item) => item.id === employeeId),
     [employeeId, employees],
   );
+
+  useEffect(() => {
+    if (!departments.length) {
+      dispatch(fetchDepartmentsThunk());
+    }
+  }, [dispatch, departments.length]);
+
+  useEffect(() => {
+    async function syncChecklist() {
+      if (employee) {
+        try {
+          const data = await getDocumentRequirementsApi();
+          const required = data.documentRequirements || [];
+          const existing = employee.documentChecklist || [];
+          
+          const merged = required.map(req => {
+            const found = existing.find(e => e.documentName === req.name);
+            return {
+               documentName: req.name,
+               status: found?.status || "MISSING",
+               fileUrl: found?.fileUrl || "",
+               submissionDate: found?.submissionDate || null,
+               description: req.description
+            };
+          });
+          setDocumentChecklist(merged);
+        } catch (err) {
+          console.error("Failed to load global policy:", err);
+        }
+      }
+    }
+    syncChecklist();
+  }, [employee]);
 
   const handleResetPassword = async (values) => {
     try {
@@ -211,7 +241,6 @@ export function EditEmployeePage() {
         submitLabel="Save Changes"
         onSubmit={async (values) => {
           try {
-            // Reconstruct nested payload for backend
             const payload = { ...values };
             payload.insurance = {
               provider: values.insuranceProvider,
@@ -222,6 +251,9 @@ export function EditEmployeePage() {
               baseSalary: Number(values.baseSalary) || 0,
               currency: values.currency || 'USD'
             };
+            
+            // Add checklist
+            payload.documentChecklist = documentChecklist;
 
             await dispatch(
               updateEmployeeThunk({
@@ -237,6 +269,61 @@ export function EditEmployeePage() {
           }
         }}
       />
+
+      {/* Document Checklist Section */}
+      <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between border-b pb-4 mb-4">
+           <div>
+              <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wide">Document Checklist</h3>
+              <p className="text-xs text-slate-500 italic">Mark documents as received from the employee.</p>
+           </div>
+           <div className="text-right">
+              <span className="text-sm font-bold text-indigo-600">
+                 {documentChecklist.filter(d => d.status === "RECEIVED").length} / {documentChecklist.length} Submitted
+              </span>
+              <div className="w-48 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                 <div 
+                   className="h-full bg-indigo-500 transition-all duration-500" 
+                   style={{ width: `${(documentChecklist.filter(d => d.status === "RECEIVED").length / Math.max(1, documentChecklist.length)) * 100}%` }}
+                 />
+              </div>
+           </div>
+        </div>
+        <div className="grid md:grid-cols-2 gap-4">
+           {documentChecklist.map((doc, idx) => (
+             <div key={idx} className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${doc.status === "RECEIVED" ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                <input 
+                  type="checkbox"
+                  id={`doc-${idx}`}
+                  checked={doc.status === "RECEIVED"}
+                  onChange={(e) => {
+                    const next = [...documentChecklist];
+                    next[idx].status = e.target.checked ? "RECEIVED" : "MISSING";
+                    if (e.target.checked && !next[idx].submissionDate) {
+                        next[idx].submissionDate = new Date().toISOString();
+                    }
+                    setDocumentChecklist(next);
+                  }}
+                  className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                   <label htmlFor={`doc-${idx}`} className="text-sm font-bold text-slate-800 block cursor-pointer">{doc.documentName}</label>
+                   {doc.description && <p className="text-[10px] text-slate-500 italic">{doc.description}</p>}
+                </div>
+                {doc.status === "RECEIVED" && doc.submissionDate && (
+                  <span className="text-[10px] font-medium text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
+                     Received {new Date(doc.submissionDate).toLocaleDateString()}
+                  </span>
+                )}
+             </div>
+           ))}
+           {documentChecklist.length === 0 && (
+             <p className="col-span-2 text-center py-6 text-slate-400 text-sm italic">
+               No documents required for this department.
+             </p>
+           )}
+        </div>
+      </div>
     </Layout>
   );
 }

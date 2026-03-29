@@ -36,7 +36,7 @@ export const validateUserCreation = [
       "Password must contain at least one uppercase letter, one lowercase letter, and one number",
     ),
   body("role")
-    .isIn([1, 2, 3, "EMPLOYEE", "MANAGER", "HR_STAFF", "ADMIN"])
+    .isIn([1, 2, 3, "EMPLOYEE", "MANAGER", "HR_STAFF", "HR_MANAGER", "ADMIN"])
     .withMessage("Invalid role"),
   handleValidationErrors,
 ];
@@ -61,8 +61,8 @@ export const validateDepartmentCreation = [
     .trim()
     .isLength({ min: 2, max: 10 })
     .withMessage("Department code must be between 2 and 10 characters")
-    .matches(/^[A-Z0-9]+$/)
-    .withMessage("Department code must be alphanumeric and uppercase"),
+    .matches(/^[a-zA-Z0-9]+$/)
+    .withMessage("Department code must be alphanumeric"),
   // Empty string from HTML selects must skip email check (optional() alone only skips undefined/null).
   body("head")
     .optional({ values: "falsy" })
@@ -82,6 +82,15 @@ export const validateDepartmentCreation = [
     .trim()
     .isLength({ min: 1, max: 50 })
     .withMessage("Position level must be between 1 and 50 characters"),
+  body("requiredDocuments")
+    .optional()
+    .isArray()
+    .withMessage("Required documents must be an array"),
+  body("requiredDocuments.*.name")
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage("Document name is required"),
   handleValidationErrors,
 ];
 
@@ -117,7 +126,7 @@ export const validateEmployeeCreation = [
 export const validatePermissionCreation = [
   body("userId").isString().notEmpty().withMessage("User ID is required"),
   body("module")
-    .isIn(["recruitment", "payroll", "employees", "departments"])
+    .isIn(["recruitment", "payroll", "employees", "departments", "attendance"])
     .withMessage("Invalid module"),
   body("actions")
     .isArray({ min: 1 })
@@ -144,7 +153,7 @@ export const userCreationSchema = Joi.object({
     }),
   role: Joi.alternatives().try(
     Joi.number().integer().min(1).max(3),
-    Joi.string().valid("EMPLOYEE", "MANAGER", "HR_STAFF", "ADMIN"),
+    Joi.string().valid("EMPLOYEE", "MANAGER", "HR_STAFF", "HR_MANAGER", "ADMIN"),
   ).required(),
 });
 

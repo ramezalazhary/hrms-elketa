@@ -1,5 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
+import path from "path";
+import { fileURLToPath } from "url";
 import * as XLSX from "xlsx";
 import { Attendance } from "../models/Attendance.js";
 import { Employee } from "../models/Employee.js";
@@ -7,19 +9,32 @@ import { Department } from "../models/Department.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const upload = multer({ storage: multer.memoryStorage() });
 
 /**
  * Helper to parse various time formats (String "HH:mm", "HH:mm:ss", "HH:mm AM/PM", or Date object).
  */
 const parseTime = (timeStr) => {
-  if (!timeStr) return null;
+  if (timeStr === undefined || timeStr === null || timeStr === "") return null;
+  
   if (timeStr instanceof Date)
     return {
       h: timeStr.getHours(),
       m: timeStr.getMinutes(),
       s: timeStr.getSeconds(),
     };
+
+  // Handle Excel numeric time (fractional day)
+  if (typeof timeStr === "number") {
+    const totalSeconds = Math.round(timeStr * 86400);
+    return {
+      h: Math.floor(totalSeconds / 3600),
+      m: Math.floor((totalSeconds % 3600) / 60),
+      s: totalSeconds % 60,
+    };
+  }
+
   const str = timeStr.toString().trim().toUpperCase();
   // Regex for HH:mm:ss AM/PM
   const match = str.match(/(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i);
@@ -160,7 +175,9 @@ router.get("/", requireAuth, async (req, res) => {
        }
     }
     if (employeeId) filter.employeeId = employeeId;
-    if (employeeCode) filter.employeeCode = employeeCode;
+    if (employeeCode) {
+      filter.employeeCode = { $regex: employeeCode, $options: "i" };
+    }
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
@@ -236,6 +253,19 @@ router.post("/", requireAuth, async (req, res) => {
     res.status(201).json(newRecord);
   } catch (error) {
     res.status(500).json({ error: "Failed to create attendance" });
+  }
+});
+
+/**
+ * GET /attendance/template - Download the Excel import template
+ */
+router.get("/template", requireAuth, (req, res) => {
+  try {
+    const templatePath = path.join(__dirname, "../AttendanceTemplate.xlsx");
+    res.download(templatePath, "AttendanceImportTemplate.xlsx");
+  } catch (error) {
+    console.error("Template download error:", error);
+    res.status(500).json({ error: "Failed to download template" });
   }
 });
 

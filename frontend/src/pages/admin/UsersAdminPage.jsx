@@ -50,7 +50,7 @@ function Avatar({ email }) {
   );
 }
 
-const MODULES = ["employees","departments","recruitment","payroll"];
+const MODULES = ["employees", "departments", "attendance", "recruitment", "payroll"];
 const ACTIONS  = ["view","create","edit","delete","approve","export"];
 
 // ─── Main component ──────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ import teamsRouter from "./routes/teams.js";
 import positionsRouter from "./routes/positions.js";
 import employmentsRouter from "./routes/employments.js";
 import reportsRouter from "./routes/reports.js";
+import organizationPolicyRouter from "./routes/organizationPolicy.js";
 import attendanceRouter from "./routes/attendance.js";
 import managementRequestsRouter from "./routes/managementRequests.js";
 import { securityHeaders, apiLimiter } from "./middleware/security.js";
@@ -61,6 +62,7 @@ app.use("/api/employments", employmentsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/attendance", attendanceRouter);
 app.use("/api/management-requests", managementRequestsRouter);
+app.use("/api/policy", organizationPolicyRouter);
 
 /** Unmatched `/api/*` paths return JSON 404 (does not catch non-API routes if added later). */
 app.use("/api/*", (req, res) => {

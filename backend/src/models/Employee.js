@@ -7,7 +7,7 @@ const EmployeeSchema = new Schema(
     passwordHash: { type: String },
     role: {
       type: String,
-      enum: ["EMPLOYEE", "TEAM_LEADER", "MANAGER", "HR_STAFF", "ADMIN"],
+      enum: ["EMPLOYEE", "TEAM_LEADER", "MANAGER", "HR_STAFF", "HR_MANAGER", "ADMIN"],
       default: "EMPLOYEE",
     },
     requirePasswordChange: { type: Boolean, default: false },
@@ -130,6 +130,17 @@ const EmployeeSchema = new Schema(
       optional: true,
       index: true,
     },
+
+    // NEW: Documents Checklist
+    documentChecklist: [
+      {
+        documentName: { type: String, required: true },
+        status: { type: String, enum: ["RECEIVED", "MISSING"], default: "MISSING" },
+        fileUrl: { type: String },
+        submissionDate: { type: Date },
+        notifiedDate: { type: Date }, // For tracking follow-ups
+      }
+    ],
 
     // Multi-assignment support
     additionalAssignments: [

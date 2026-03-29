@@ -6,7 +6,8 @@ import { useToast } from "@/shared/components/ToastProvider";
 import { fetchAttendanceThunk, importAttendanceThunk, createAttendanceThunk, updateAttendanceThunk, deleteAttendanceThunk } from "../store";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
 import { StatusBadge } from "@/shared/components/EntityBadges";
-import { FileUp, Calendar, Trash2, Edit2, Plus, LogIn, LogOut, Check, X, ShieldCheck, AlertTriangle } from "lucide-react";
+import { FileUp, Calendar, Trash2, Edit2, Plus, LogIn, LogOut, Check, X, ShieldCheck, AlertTriangle, Download, Info, Search } from "lucide-react";
+import { downloadAttendanceTemplateApi } from "../api";
 
 export function AttendancePage() {
   const dispatch = useAppDispatch();
@@ -16,9 +17,16 @@ export function AttendancePage() {
   const { currentUser } = useAppSelector((state) => state.identity);
 
   // Filters
-  const today = new Date().toISOString().split('T')[0];
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(today);
+  const now = new Date();
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(now.getDate() - 30);
+
+  const todayStr = now.toISOString().split('T')[0];
+  const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+  const [startDate, setStartDate] = useState(thirtyDaysAgoStr);
+  const [endDate, setEndDate] = useState(todayStr);
+  const [employeeCode, setEmployeeCode] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [isOverwriteEnabled, setIsOverwriteEnabled] = useState(false);
 
@@ -28,7 +36,7 @@ export function AttendancePage() {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
     employeeId: "",
-    date: today,
+    date: todayStr,
     checkIn: "09:00:00 AM",
     checkOut: "05:00:00 PM",
     status: "PRESENT",
@@ -38,9 +46,9 @@ export function AttendancePage() {
   const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "HR_STAFF";
 
   useEffect(() => {
-    void dispatch(fetchAttendanceThunk({ startDate, endDate }));
+    void dispatch(fetchAttendanceThunk({ startDate, endDate, employeeCode }));
     if (isAdmin) void dispatch(fetchEmployeesThunk());
-  }, [dispatch, startDate, endDate, isAdmin]);
+  }, [dispatch, startDate, endDate, employeeCode, isAdmin]);
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
@@ -59,6 +67,15 @@ export function AttendancePage() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      await downloadAttendanceTemplateApi();
+      showToast("Template download started", "success");
+    } catch (error) {
+      showToast("Failed to download template", "error");
+    }
+  };
+
   const handleSaveManual = async () => {
     try {
       if (editingId) {
@@ -70,7 +87,7 @@ export function AttendancePage() {
       }
       setIsAddModalOpen(false);
       setEditingId(null);
-      setFormData({ employeeId: "", date: today, checkIn: "09:00:00 AM", checkOut: "05:00:00 PM", status: "PRESENT", remarks: "" });
+      setFormData({ employeeId: "", date: todayStr, checkIn: "09:00:00 AM", checkOut: "05:00:00 PM", status: "PRESENT", remarks: "" });
       void dispatch(fetchAttendanceThunk({ startDate, endDate }));
     } catch (error) {
       showToast(error.error || error.message || "Operation failed", "error");
@@ -112,7 +129,7 @@ export function AttendancePage() {
             <button
               onClick={() => { 
                 setEditingId(null); 
-                setFormData({ employeeId: "", date: today, checkIn: "09:00:00 AM", checkOut: "05:00:00 PM", status: "PRESENT", remarks: "" });
+                setFormData({ employeeId: "", date: todayStr, checkIn: "09:00:00 AM", checkOut: "05:00:00 PM", status: "PRESENT", remarks: "" });
                 setIsAddModalOpen(true); 
               }}
               className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 transition"
@@ -120,17 +137,40 @@ export function AttendancePage() {
               <Plus size={16} />
               Add Manual
             </button>
-            <label className="cursor-pointer relative group">
-              <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} disabled={isImporting} />
-              <div className={`flex items-center gap-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 ${isImporting ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                <FileUp size={16} />
-                {isImporting ? "Importing..." : "Import Excel"}
-              </div>
-            </label>
+            <button
+               onClick={handleDownloadTemplate}
+               className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+             >
+               <Download size={16} />
+               Download Template
+             </button>
+             <label className="cursor-pointer relative group">
+               <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} disabled={isImporting} />
+               <div className={`flex items-center gap-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 ${isImporting ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                 <FileUp size={16} />
+                 {isImporting ? "Importing..." : "Import Excel"}
+               </div>
+             </label>
           </div>
         )
       }
     >
+      {/* Import Guidance */}
+      {isAdmin && (
+        <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50/50 p-4 flex items-start gap-3 shadow-sm">
+          <Info size={18} className="text-blue-500 mt-0.5" />
+          <div className="text-xs text-blue-700 font-medium">
+            <p className="font-black uppercase tracking-widest mb-1">Import Guidance</p>
+            <p>For a successful import, ensure your Excel file contains columns: 
+              <span className="font-bold underline ml-1">Employee Code</span>, 
+              <span className="font-bold underline ml-1">Date</span> (YYYY-MM-DD), 
+              <span className="font-bold underline ml-1">Check In</span> (HH:MM:SS AM/PM), and 
+              <span className="font-bold underline ml-1">Check Out</span> (HH:MM:SS AM/PM). 
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Search & Filter Bar */}
       <div className="mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-1.5">
@@ -153,11 +193,27 @@ export function AttendancePage() {
         </div>
 
         {isAdmin && (
-          <div className="lg:col-span-2 flex items-center justify-end">
-            <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-zinc-50 border border-zinc-200">
+          <div className="flex flex-col gap-1.5 flex-1">
+             <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Search Employee Code</label>
+             <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                <input 
+                  type="text" 
+                  placeholder="e.g. #IT-001"
+                  value={employeeCode}
+                  onChange={(e) => setEmployeeCode(e.target.value)}
+                  className="w-full pl-10 pr-3 py-2 rounded-lg border border-zinc-200 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none transition" 
+                />
+             </div>
+          </div>
+        )}
+
+        {isAdmin && (
+          <div className="flex items-center justify-end">
+            <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-zinc-50 border border-zinc-200 h-full">
               <div className="flex items-center gap-2">
                  <ShieldCheck size={16} className={isOverwriteEnabled ? "text-amber-600" : "text-zinc-400"} />
-                 <span className="text-xs font-bold text-zinc-700">Overwrite Policy</span>
+                 <span className="text-xs font-bold text-zinc-700">Overwrite</span>
               </div>
               <button 
                 onClick={() => setIsOverwriteEnabled(!isOverwriteEnabled)}
@@ -165,9 +221,6 @@ export function AttendancePage() {
               >
                 <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isOverwriteEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
               </button>
-              <span className="text-[10px] text-zinc-500 italic max-w-[120px] leading-tight">
-                {isOverwriteEnabled ? "High Risk: Overwrites existing logs." : "High Control: Skips existing logs."}
-              </span>
             </div>
           </div>
         )}

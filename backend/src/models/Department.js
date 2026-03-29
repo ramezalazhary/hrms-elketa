@@ -47,6 +47,15 @@ const DepartmentSchema = new Schema(
     budget: { type: Number },
     parentDepartmentId: { type: Schema.Types.ObjectId, ref: "Department" }, // For matrix/recursive structure
 
+    // Documents Management
+    requiredDocuments: [
+      {
+        name: { type: String, required: true },
+        isMandatory: { type: Boolean, default: true },
+        description: { type: String }
+      }
+    ],
+
     // Migration flag for transition period
     hasMigratedTeams: { type: Boolean, default: false }, // Teams now in separate collection
   },

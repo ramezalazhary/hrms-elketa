@@ -7,6 +7,7 @@
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import { Employee } from "../models/Employee.js";
+import { UserPermission } from "../models/Permission.js";
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -62,11 +63,14 @@ router.post("/login", validateLogin, async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
+    const permissions = await UserPermission.find({ userId: employee._id });
+
     const authUser = {
       id: employee._id.toString(),
       email: employee.email,
       role: employee.role,
       requirePasswordChange: employee.requirePasswordChange,
+      permissions: permissions.map(p => ({ module: p.module, actions: p.actions, scope: p.scope })),
     };
 
     const accessToken = generateAccessToken(authUser);
@@ -179,6 +183,7 @@ router.post(
         id: newEmployee._id.toString(),
         email: newEmployee.email,
         role: newEmployee.role,
+        permissions: [],
       };
 
       res.status(201).json({

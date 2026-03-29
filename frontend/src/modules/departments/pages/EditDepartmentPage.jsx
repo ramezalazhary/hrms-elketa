@@ -175,6 +175,7 @@ export function EditDepartmentPage() {
         ]}
         initialValues={{
           name: department.name,
+          code: department.code || "",
           head: department.head || "",
           headTitle: department.headTitle || "Department Leader",
           headResponsibility: department.headResponsibility || "",

@@ -13,6 +13,7 @@ import { HomePage } from "@/pages/home/HomePage";
 import { PasswordRequestsPage } from "@/pages/admin/PasswordRequestsPage";
 import { ForgotPasswordPage } from "@/modules/identity/pages/ForgotPasswordPage";
 import { RequireAdminOrHrHead } from "@/shared/routing/RequireAdminOrHrHead";
+import { OrganizationRulesPage } from "@/modules/organization/pages/OrganizationRulesPage";
 
 export const appRoutes = [
   {
@@ -48,6 +49,14 @@ export const appRoutes = [
           <RequireAdminOrHrHead>
             <PasswordRequestsPage />
           </RequireAdminOrHrHead>
+        ),
+      },
+      {
+        path: "/admin/organization-rules",
+        element: (
+          <RequireRole roles={[3, "ADMIN"]}>
+            <OrganizationRulesPage />
+          </RequireRole>
         ),
       },
       {

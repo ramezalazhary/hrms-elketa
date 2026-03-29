@@ -331,6 +331,7 @@ router.put("/:id", requireAuth, async (req, res) => {
     languages,
     financial,
     insurance,
+    documentChecklist,
   } = req.body;
   const employee = await Employee.findById(req.params.id);
 
@@ -400,6 +401,7 @@ router.put("/:id", requireAuth, async (req, res) => {
   if (languages !== undefined) employee.languages = languages;
   if (financial !== undefined) employee.financial = financial;
   if (insurance !== undefined) employee.insurance = insurance;
+  if (documentChecklist !== undefined) employee.documentChecklist = documentChecklist;
 
   // Store new email for sync check
   const newEmail = employee.email;

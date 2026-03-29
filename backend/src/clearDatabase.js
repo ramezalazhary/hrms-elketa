@@ -1,6 +1,6 @@
 /**
  * @file Dev utility: wipes core Collections and inserts a single ADMIN employee for recovery.
- * Run: `node src/clearDatabase.js` from `backend/`.
+ * Run: `c` from `backend/`.
  */
 import dotenv from "dotenv";
 dotenv.config();

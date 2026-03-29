@@ -21,6 +21,7 @@ import {
   Menu,
   X,
   CalendarRange,
+  Settings,
 } from "lucide-react";
 
 /** Minimal dashboard chrome: neutral sidebar, hairline borders, no heavy shadows. */
@@ -29,6 +30,7 @@ export function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState({
     Organizations: true,
+    "HR Operations": true,
   });
 
   const navigate = useNavigate();
@@ -38,8 +40,14 @@ export function DashboardLayout() {
   const currentRole = currentUser?.role;
 
   const isAdmin = currentRole === "ADMIN" || currentRole === 3;
-  const isHR = currentRole === "HR_STAFF" || isAdmin;
+  const isHrManager = currentRole === "HR_MANAGER";
+  const isHR = currentRole === "HR_STAFF" || isHrManager || isAdmin;
   const isManager = ["MANAGER", "TEAM_LEADER"].includes(currentRole) || isHR;
+
+  const hasHrOpsAccess = 
+    isAdmin || 
+    isHrManager || 
+    currentUser?.permissions?.some(p => p.module === "attendance" && p.actions.includes("view"));
 
   const isHrDepartmentHead = useMemo(
     () =>
@@ -104,6 +112,17 @@ export function DashboardLayout() {
         { type: "link", to: "/organizations", label: "Structure", icon: Network },
         { type: "link", to: "/employees", label: "Employees", icon: Users },
         { type: "link", to: "/departments", label: "Departments", icon: Briefcase },
+        { type: "link", to: "/admin/organization-rules", label: "Organization Rules", icon: Settings },
+      ],
+    });
+  }
+
+  if (hasHrOpsAccess) {
+    navStructure.push({
+      type: "group",
+      label: "HR Operations",
+      icon: CalendarRange,
+      children: [
         { type: "link", to: "/attendance", label: "Attendance", icon: CalendarRange },
       ],
     });

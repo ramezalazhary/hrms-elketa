@@ -52,3 +52,21 @@ export const importAttendanceApi = async (file, overwrite = false) => {
   });
   return handleResponse(response);
 };
+
+/**
+ * Downloads the attendance import template for Excel
+ */
+export const downloadAttendanceTemplateApi = async () => {
+  const response = await fetchWithAuth(`${API_URL}/attendance/template`);
+  if (!response.ok) throw new Error("Failed to download template");
+  
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "AttendanceTemplate.xlsx";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};

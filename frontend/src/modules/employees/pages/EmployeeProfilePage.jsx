@@ -6,6 +6,7 @@ import { useToast } from '@/shared/components/ToastProvider'
 import { FormBuilder } from '@/shared/components/FormBuilder'
 import { StatusBadge, DepartmentBadge } from '@/shared/components/EntityBadges'
 import { fetchDepartmentsThunk } from '@/modules/departments/store'
+import { getDocumentRequirementsApi } from '@/modules/organization/api'
 
 export function EmployeeProfilePage() {
   const { employeeId } = useParams()
@@ -18,10 +19,21 @@ export function EmployeeProfilePage() {
 
   const dispatch = useAppDispatch();
 
+  const [globalPolicy, setGlobalPolicy] = useState(null);
+
   useEffect(() => {
     if (!departments.length) {
       void dispatch(fetchDepartmentsThunk());
     }
+    const loadPolicy = async () => {
+      try {
+        const data = await getDocumentRequirementsApi();
+        setGlobalPolicy(data);
+      } catch (err) {
+        console.error("Failed to load global policy", err);
+      }
+    };
+    loadPolicy();
   }, [dispatch, departments.length]);
 
   const employee = useMemo(
@@ -41,6 +53,22 @@ export function EmployeeProfilePage() {
     });
     return found;
   }, [employee, departments]);
+
+  const mergedChecklist = useMemo(() => {
+    if (!employee || !globalPolicy) return employee?.documentChecklist || [];
+    const required = globalPolicy.documentRequirements || [];
+    const existing = employee.documentChecklist || [];
+    
+    return required.map(req => {
+      const found = existing.find(e => e.documentName === req.name);
+      return {
+        documentName: req.name,
+        status: found?.status || "MISSING",
+        submissionDate: found?.submissionDate || null,
+        isMandatory: req.isMandatory
+      };
+    });
+  }, [employee, globalPolicy]);
 
   const handleResetPassword = async (values) => {
     try {
@@ -144,6 +172,55 @@ export function EmployeeProfilePage() {
                 </a>
               </p>
             )}
+          </div>
+
+          {/* 1.5 Document Checklist & Progress */}
+          <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-card">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-4 mb-4">
+              <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Required Documents Checklist</h3>
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] font-bold text-indigo-600 mb-1 uppercase tracking-widest">
+                  Compliance: {mergedChecklist.filter(d => d.status === "RECEIVED").length} / {mergedChecklist.length}
+                </span>
+                <div className="w-32 h-1 bg-zinc-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-indigo-500 transition-all duration-700"
+                    style={{ width: `${(mergedChecklist.filter(d => d.status === "RECEIVED").length / Math.max(1, mergedChecklist.length)) * 100}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+               {mergedChecklist.length > 0 ? (
+                 mergedChecklist.map((doc, idx) => (
+                   <div key={idx} className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${doc.status === "RECEIVED" ? 'bg-emerald-50/30 border-emerald-100/50' : 'bg-rose-50/30 border-rose-100/50'}`}>
+                      <div className={`mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center ${doc.status === "RECEIVED" ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                         {doc.status === "RECEIVED" ? (
+                           <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4"><path d="M5 13l4 4L19 7" /></svg>
+                         ) : (
+                           <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4"><path d="M6 18L18 6M6 6l12 12" /></svg>
+                         )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                         <div className="flex items-center gap-1.5 min-w-0">
+                            <p className="text-xs font-bold text-slate-800 truncate" title={doc.documentName}>{doc.documentName}</p>
+                            {doc.isMandatory && <span className="text-[8px] bg-rose-100 text-rose-600 px-1 rounded font-bold shrink-0">REQUIRED</span>}
+                         </div>
+                         {doc.status === "RECEIVED" && doc.submissionDate ? (
+                           <p className="text-[9px] text-emerald-600 font-medium mt-0.5">Submitted {new Date(doc.submissionDate).toLocaleDateString()}</p>
+                         ) : (
+                           <p className="text-[9px] text-rose-500 font-medium mt-0.5 italic">Pending Submission</p>
+                         )}
+                      </div>
+                   </div>
+                 ))
+               ) : (
+                 <div className="col-span-full py-4 text-center">
+                   <p className="text-xs text-slate-400 italic">No global document requirements defined in Organization Rules.</p>
+                 </div>
+               )}
+            </div>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">

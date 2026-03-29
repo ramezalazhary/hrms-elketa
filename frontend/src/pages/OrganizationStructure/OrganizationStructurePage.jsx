@@ -92,7 +92,7 @@ function OrganizationStructurePage() {
             </p>
           </div>
           <h1 className="text-4xl font-black text-zinc-900 tracking-tighter uppercase italic">
-            Organization <span className="text-zinc-400">Blueprint</span>
+            Elkheta <span className="text-zinc-400">Structure</span>
           </h1>
           <p className="text-sm text-zinc-500 mt-3 max-w-xl leading-relaxed font-medium">
             Global structural map representing institutional departments, dedicated sub-units, and leadership assignments.

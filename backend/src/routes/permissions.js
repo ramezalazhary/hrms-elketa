@@ -126,34 +126,38 @@ router.put(
       if (!items)
         return res.status(400).json({ error: "permissions array is required" });
 
-      const hrHead = await isHrDepartmentHead(req.user.email);
-      if (hrHead) {
-        const allowedModules = new Set([
-          "recruitment",
-          "payroll",
-          "employees",
-          "departments",
-        ]);
-        const invalid = items.find(
-          (p) => !allowedModules.has(String(p.module)),
-        );
-        if (invalid) {
-          return res
-            .status(403)
-            .json({ error: "HR Head can only manage HR modules" });
-        }
+      const isAdmin = req.user.role === "ADMIN" || req.user.role === 3;
+      if (!isAdmin) {
+        const hrHead = await isHrDepartmentHead(req.user.email);
+        if (hrHead) {
+          const allowedModules = new Set([
+            "recruitment",
+            "payroll",
+            "employees",
+            "departments",
+            "attendance",
+          ]);
+          const invalid = items.find(
+            (p) => !allowedModules.has(String(p.module)),
+          );
+          if (invalid) {
+            return res
+              .status(403)
+              .json({ error: "HR Head can only manage HR modules" });
+          }
 
-        const systemModules = new Set(["employees", "departments"]);
-        const forbiddenSystemAction = items.find((p) => {
-          const moduleName = String(p.module);
-          if (!systemModules.has(moduleName)) return false;
-          const actions = Array.isArray(p.actions) ? p.actions.map(String) : [];
-          return actions.some((a) => a !== "view" && a !== "edit");
-        });
-        if (forbiddenSystemAction) {
-          return res
-            .status(403)
-            .json({ error: "HR system permissions are edit-only" });
+          const systemModules = new Set(["employees", "departments"]);
+          const forbiddenSystemAction = items.find((p) => {
+            const moduleName = String(p.module);
+            if (!systemModules.has(moduleName)) return false;
+            const actions = Array.isArray(p.actions) ? p.actions.map(String) : [];
+            return actions.some((a) => a !== "view" && a !== "edit");
+          });
+          if (forbiddenSystemAction) {
+            return res
+              .status(403)
+              .json({ error: "HR system permissions are edit-only" });
+          }
         }
       }
 

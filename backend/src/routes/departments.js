@@ -105,7 +105,7 @@ router.post(
   validateDepartmentCreation,
   async (req, res) => {
     try {
-      const { name, code, head, headTitle, headResponsibility, positions, description, type, status, teams } = req.body;
+      const { name, code, head, headTitle, headResponsibility, positions, description, type, status, teams, requiredDocuments } = req.body;
 
       // Check if department or code already exists
       const existing = await Department.findOne({ $or: [{ name }, { code }] });
@@ -140,6 +140,7 @@ router.post(
         type: type || "PERMANENT",
         status: status || "ACTIVE",
         positions: positions || [],
+        requiredDocuments: requiredDocuments || [],
         teams: (teams || []).map(t => ({
           ...t,
           leaderEmail: t.leaderEmail || t.manager || t.managerEmail,
@@ -166,7 +167,7 @@ router.put(
   validateDepartmentUpdate,
   async (req, res) => {
     try {
-      const { name, code, head, headTitle, headResponsibility, positions, description, type, status, teams } = req.body;
+      const { name, code, head, headTitle, headResponsibility, positions, description, type, status, teams, requiredDocuments } = req.body;
 
       const department = await Department.findById(req.params.id);
       if (!department) {
@@ -174,6 +175,20 @@ router.put(
       }
 
       const currentName = name ?? department.name;
+
+      // Check if new name or code is taken by another department
+      const conflict = await Department.findOne({
+        _id: { $ne: req.params.id },
+        $or: [
+          { name: currentName },
+          { code: code !== undefined ? code : department.code }
+        ].filter(Boolean)
+      });
+
+      if (conflict) {
+        const field = conflict.name === currentName ? "name" : "code";
+        return res.status(409).json({ error: `Department ${field} already exists` });
+      }
 
       if (head !== undefined && head !== null && head !== "") {
         const headEmp = await Employee.findOne({ email: head });
@@ -199,6 +214,7 @@ router.put(
       department.type = type ?? department.type;
       department.status = status ?? department.status;
       department.positions = Array.isArray(positions) ? positions : department.positions;
+      department.requiredDocuments = Array.isArray(requiredDocuments) ? requiredDocuments : department.requiredDocuments;
 
       if (Array.isArray(teams)) {
         // Validate team leaders and members departmental integrity
