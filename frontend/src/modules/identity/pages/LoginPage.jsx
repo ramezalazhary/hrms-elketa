@@ -33,16 +33,13 @@ export function LoginPage() {
   return (
     <div className="min-h-screen w-full flex bg-zinc-50 items-center justify-center p-6 font-sans text-zinc-900">
       <div className="w-full max-w-[380px]">
-        <div className="mb-8 text-center animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 border border-indigo-100 shadow-sm mb-4 mx-auto rotate-3 hover:rotate-0 transition-transform duration-300">
+        <div className="mb-8 text-center flex flex-col justify-center animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div className="inline-flex h-12 w-12 mx-auto items-center justify-center rounded-2xl bg-indigo-50 border border-indigo-100 shadow-sm mb-4  rotate-3 hover:rotate-0 transition-transform duration-300">
             <LogIn className="h-6 w-6 text-indigo-600" aria-hidden />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
             Sign in
           </h1>
-          <p className="text-sm text-zinc-500 mt-2">
-            Log in to manage your workplace.
-          </p>
         </div>
 
         <form
@@ -130,14 +127,11 @@ export function LoginPage() {
             )}
           </button>
         </form>
-
-        <p className="mt-6 text-center text-[11px] text-zinc-400 leading-relaxed">
-          New or reset password? After an admin sets a temporary password, sign
-          in here — you’ll be prompted to choose a new one.
-        </p>
+        
         <p className="mt-2 text-center text-[11px] text-zinc-400">
-          &copy; {new Date().getFullYear()}
+         Elkheta HR Department &copy; {new Date().getFullYear()}
         </p>
+        
       </div>
     </div>
   );

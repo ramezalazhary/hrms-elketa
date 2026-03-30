@@ -1,6 +1,5 @@
 import { AuthLayout } from "@/layouts/authLayout/AuthLayout";
 import { DashboardLayout } from "@/layouts/dashboardLayout/DashboardLayout";
-import { identityRoutes } from "@/modules/identity/routes";
 import { coreModuleRoutes } from "@/modules";
 import { DashboardPage } from "@/pages/dashboard/DashboardPage";
 import { LoginPage } from "@/pages/login/LoginPage";
@@ -14,6 +13,7 @@ import { PasswordRequestsPage } from "@/pages/admin/PasswordRequestsPage";
 import { ForgotPasswordPage } from "@/modules/identity/pages/ForgotPasswordPage";
 import { RequireAdminOrHrHead } from "@/shared/routing/RequireAdminOrHrHead";
 import { OrganizationRulesPage } from "@/modules/organization/pages/OrganizationRulesPage";
+import { WelcomePage } from "@/modules/identity/pages/WelcomePage";
 
 export const appRoutes = [
   {
@@ -22,12 +22,26 @@ export const appRoutes = [
       { path: "/login", element: <LoginPage /> },
       { path: "/forgot-password", element: <ForgotPasswordPage /> },
       { path: "/change-password", element: <ChangePasswordPage /> },
-      ...identityRoutes
+      {
+        path: "/welcome",
+        element: <WelcomePage />,
+      },
     ],
   },
   {
     element: (
-      <RequireRole roles={[1, 2, 3, "EMPLOYEE", "TEAM_LEADER", "MANAGER", "HR_STAFF", "ADMIN"]}>
+      <RequireRole
+        roles={[
+          1,
+          2,
+          3,
+          "EMPLOYEE",
+          "TEAM_LEADER",
+          "MANAGER",
+          "HR_STAFF",
+          "ADMIN",
+        ]}
+      >
         <DashboardLayout />
       </RequireRole>
     ),

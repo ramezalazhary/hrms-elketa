@@ -1,11 +1,9 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import {
-  loginApi,
-  refreshTokenApi,
-  logoutApi,
-  changePasswordApi,
-} from "./api";
+import { loginApi, refreshTokenApi, logoutApi, changePasswordApi } from "./api";
 
+
+// function self invoice to check if the user is already sigin or not
+// the Function must be in the top of the file to excute the check loged user
 const storedAuth = (() => {
   try {
     const raw = localStorage.getItem("auth");
@@ -26,8 +24,8 @@ const initialState = {
 export const loginThunk = createAsyncThunk(
   "identity/login",
   async (payload) => {
-    console.log("request data:", payload);
-    return await loginApi(payload.email, payload.password);
+    const reponse = await loginApi(payload.email, payload.password);
+    return reponse;
   },
 );
 
@@ -152,6 +150,7 @@ const identitySlice = createSlice({
         try {
           localStorage.removeItem("auth");
         } catch {
+          console.log("IN ChangePassword Thunk  Error in remove auth");
           // ignore
         }
       });
