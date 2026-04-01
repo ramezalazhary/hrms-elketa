@@ -8,7 +8,7 @@ import { DepartmentBadge } from '@/shared/components/EntityBadges'
 import { fetchDepartmentsThunk } from '@/modules/departments/store'
 import { getDocumentRequirementsApi } from '@/modules/organization/api'
 import { API_URL } from '@/shared/api/apiBase'
-import { Mail, Briefcase, ArrowLeft, Shield, AlertTriangle, ArrowRightLeft, Clock, MapPin, Phone, TrendingUp } from 'lucide-react'
+import { Mail, Briefcase, ArrowLeft, Shield, AlertTriangle, AlertCircle, ArrowRightLeft, Clock, MapPin, Phone, TrendingUp, Settings } from 'lucide-react'
 
 /** Days until a date from now (negative = past) */
 function daysUntil(dateStr) {
@@ -27,6 +27,8 @@ export function EmployeeProfilePage() {
   const accessToken = useAppSelector((state) => state.identity.accessToken)
   const [showResetModal, setShowResetModal] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [showSalaryModal, setShowSalaryModal] = useState(false)
   const [attendanceHistory, setAttendanceHistory] = useState([])
   const [isAttendanceLoading, setIsAttendanceLoading] = useState(false)
 
@@ -139,18 +141,32 @@ export function EmployeeProfilePage() {
       description="Identity, role, documents, and contact in one place."
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {currentUser?.role === "ADMIN" && (
-            <button
-              type="button"
-              onClick={() => setShowResetModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 shadow-sm transition hover:bg-rose-100"
-            >
-              <Shield className="h-4 w-4" />
-              Reset password
-            </button>
+          {canAdmin && (
+            <div className="relative group">
+              <button className="inline-flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-700 shadow-sm transition hover:bg-teal-100">
+                <Settings className="h-4 w-4" />
+                Manage
+              </button>
+              <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                <button 
+                  onClick={() => setShowTransferModal(true)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left"
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5 text-indigo-500" />
+                  Transfer Department
+                </button>
+                <button 
+                  onClick={() => setShowSalaryModal(true)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left"
+                >
+                  <TrendingUp className="h-3.5 w-3.5 text-teal-500" />
+                  Salary Increase
+                </button>
+              </div>
+            </div>
           )}
           <Link
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-teal-200 hover:bg-teal-50/80 hover:text-teal-900"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
             to="/employees"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -268,60 +284,40 @@ export function EmployeeProfilePage() {
         )}
 
         {/* Tab nav */}
-        <div className="flex gap-1 border-b border-slate-200">
-          {["overview", "documents", "transfer_history", "salary_history"].map((tab) => (
+        <div className="flex gap-1 border-b border-slate-200 overflow-x-auto no-scrollbar">
+          {["overview", "documents", "transfer_history", "salary_history", "attendance"].map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
+              className={`px-4 py-2 text-sm font-medium rounded-t-xl transition-all whitespace-nowrap flex items-center gap-2 ${
                 activeTab === tab
-                  ? "bg-white border border-b-white border-slate-200 text-slate-900 -mb-px"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "bg-white border-x border-t border-slate-200 text-teal-700 -mb-px shadow-[0_-4px_10px_-5px_rgba(0,0,0,0.1)]"
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-50/50"
               }`}
             >
+              {tab === "overview" && <Briefcase className="h-3.5 w-3.5" />}
               {tab === "overview" && "Overview"}
+              
+              {tab === "documents" && <Shield className="h-3.5 w-3.5" />}
               {tab === "documents" && "Documents"}
-              {tab === "transfer_history" && (
-                <span className="flex items-center gap-1.5">
-                  <ArrowRightLeft className="h-3.5 w-3.5" />
-                  Transfers
-                  {transferHistory.length > 0 && (
-                    <span className="ml-1 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5">
-                      {transferHistory.length}
-                    </span>
-                  )}
-                </span>
-              )}
-              {tab === "salary_history" && (
-                <span className="flex items-center gap-1.5">
-                  <TrendingUp className="h-3.5 w-3.5" />
-                  Salary History
-                  {(employee.salaryHistory || []).length > 0 && (
-                    <span className="ml-1 rounded-full bg-teal-100 text-teal-700 text-[10px] font-bold px-1.5 py-0.5">
-                      {employee.salaryHistory.length}
-                    </span>
-                  )}
-                </span>
-              )}
-              {["overview", "attendance"].includes(tab) && tab === "attendance" && (
-                <span className="flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5" />
-                  Attendance
+              
+              {tab === "transfer_history" && <ArrowRightLeft className="h-3.5 w-3.5" />}
+              {tab === "transfer_history" && "Transfers"}
+              
+              {tab === "salary_history" && <TrendingUp className="h-3.5 w-3.5" />}
+              {tab === "salary_history" && "Salary History"}
+              
+              {tab === "attendance" && <Clock className="h-3.5 w-3.5" />}
+              {tab === "attendance" && "Attendance"}
+
+              {tab === "salary_history" && (employee.salaryHistory || []).length > 0 && (
+                <span className="rounded-full bg-teal-100 text-teal-700 text-[10px] font-bold px-1.5 py-0.5">
+                  {employee.salaryHistory.length}
                 </span>
               )}
             </button>
           ))}
-          {!["overview", "documents", "transfer_history", "salary_history", "attendance"].includes(activeTab) && (
-             <button
-               type="button"
-               onClick={() => setActiveTab("attendance")}
-               className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${activeTab === "attendance" ? "bg-white border border-b-white border-slate-200 text-slate-900 -mb-px" : "text-slate-500 hover:text-slate-700"}`}
-             >
-                <Clock className="h-3.5 w-3.5 inline mr-1.5" />
-                Attendance
-             </button>
-          )}
         </div>
 
         {activeTab === "overview" && (
