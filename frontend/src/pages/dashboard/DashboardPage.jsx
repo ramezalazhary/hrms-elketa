@@ -21,6 +21,7 @@ import { Calendar, Clock, AlertTriangle, TrendingUp, FileWarning, ShieldCheck } 
 import { StatusBadge } from "@/shared/components/EntityBadges";
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
 import { API_URL } from "@/shared/api/apiBase";
+import { formatTotalHours } from "@/modules/attendance/utils";
 import { DashboardAlerts } from "./DashboardAlerts";
 
 const STATUS_PIE_COLORS = {
@@ -285,7 +286,7 @@ function EmployeeDashboard({ currentUser, employees }) {
                           </span>
                         </td>
                         <td className="px-6 py-4 text-xs font-mono text-zinc-500">{record.checkIn || '—'} / {record.checkOut || '—'}</td>
-                        <td className="px-6 py-4 text-right pr-8 text-xs font-black text-zinc-900">{record.totalHours ? `${record.totalHours}h` : '—'}</td>
+                        <td className="px-6 py-4 text-right pr-8 text-xs font-black text-zinc-900">{formatTotalHours(record.totalHours)}</td>
                       </tr>
                     ))
                   )}

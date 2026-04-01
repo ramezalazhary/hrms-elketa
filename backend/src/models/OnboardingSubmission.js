@@ -23,6 +23,9 @@ const OnboardingSubmissionSchema = new Schema(
       idNumber: { type: String },
       department: { type: String },
       position: { type: String },
+      team: { type: String },
+      employeeCode: { type: String },
+      baseSalary: { type: Number },
       educationDegree: { type: String },
       workPlaceDetails: {
         city: { type: String },

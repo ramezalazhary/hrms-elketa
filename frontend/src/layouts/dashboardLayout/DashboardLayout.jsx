@@ -52,9 +52,9 @@ export function DashboardLayout() {
   const isHrManager = currentRole === "HR_MANAGER";
   const isHR = currentRole === "HR_STAFF" || isHrManager || isAdmin;
 
-  const hasHrOpsAccess = 
-    isAdmin || 
-    isHrManager || 
+  const hasHrOpsAccess =
+    isAdmin ||
+    isHrManager ||
     currentUser?.permissions?.some(p => p.module === "attendance" && p.actions.includes("view"));
 
   const isHrDepartmentHead = useMemo(
@@ -88,7 +88,7 @@ export function DashboardLayout() {
   };
 
   const navStructure = [{ type: "link", to: "/", label: "Home", icon: Home }];
-  
+
   if (currentRole === "TEAM_LEADER") {
     navStructure.push({
       type: "link",
@@ -117,7 +117,6 @@ export function DashboardLayout() {
         { type: "link", to: "/organizations", label: "Structure", icon: Network },
         { type: "link", to: "/employees", label: "Employees", icon: Users },
         { type: "link", to: "/departments", label: "Departments", icon: Briefcase },
-        { type: "link", to: "/employees/onboarding", label: "Onboarding", icon: UserPlus },
         { type: "link", to: "/admin/organization-rules", label: "Organization Rules", icon: Settings },
       ],
     });
@@ -271,9 +270,8 @@ export function DashboardLayout() {
                 await dispatch(logoutThunk());
                 navigate("/login");
               }}
-              className={`w-full flex items-center gap-2 px-2 py-2 rounded-md text-xs font-medium text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors ${
-                isCollapsed ? "justify-center" : ""
-              }`}
+              className={`w-full flex items-center gap-2 px-2 py-2 rounded-md text-xs font-medium text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors ${isCollapsed ? "justify-center" : ""
+                }`}
               title="Sign out"
             >
               <LogOut size={16} className="shrink-0" />
@@ -315,10 +313,9 @@ function SidebarLink({ to, label, icon: Icon, isCollapsed, closeMobile }) {
       title={isCollapsed ? label : ""}
       className={({ isActive }) =>
         `flex items-center gap-2.5 px-2 py-2 rounded-md text-xs font-medium transition-colors
-        ${
-          isActive
-            ? "bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100"
-            : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
+        ${isActive
+          ? "bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100"
+          : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
         }`
       }
     >

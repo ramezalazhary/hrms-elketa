@@ -69,6 +69,8 @@ const EmployeeSchema = new Schema(
       enum: ["ACTIVE", "ON_LEAVE", "TERMINATED", "RESIGNED"],
       default: "ACTIVE",
     },
+    terminationDate: { type: Date },
+    terminationReason: { type: String },
     onlineStorageLink: { type: String }, // Link to digital archives (Drive, Dropbox, etc.)
 
     // Education & Skills
@@ -158,6 +160,8 @@ const EmployeeSchema = new Schema(
         yearlyIncreaseDateChanged: { type: Boolean, default: false },
         newYearlyIncreaseDate: { type: Date },
         notes: { type: String },
+        previousEmployeeCode: { type: String },
+        newEmployeeCode: { type: String },
         processedBy: { type: String }, // Admin email
       },
     ],

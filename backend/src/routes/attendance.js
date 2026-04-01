@@ -7,6 +7,7 @@ import { Attendance } from "../models/Attendance.js";
 import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
 import { requireAuth } from "../middleware/auth.js";
+import mongoose from "mongoose";
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

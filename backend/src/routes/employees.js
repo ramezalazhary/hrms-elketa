@@ -281,7 +281,7 @@ router.post("/", requireAuth, async (req, res) => {
     if (err?.name === "ValidationError") return res.status(400).json({ error: err.message });
     if (err?.code === 11000) return res.status(409).json({ error: "Employee already exists" });
     console.error("POST /employees:", err);
-    return res.status(500).json({ error: "Failed to create employee" });
+    return res.status(500).json({ error: err.message || "Failed to create employee" });
   }
 });
 
@@ -299,7 +299,9 @@ router.put("/:id", requireAuth, async (req, res) => {
     documentChecklist,
     fullNameArabic, nationalIdExpiryDate, governorate, city, emergencyPhone,
     subLocation, insurances, medicalCondition, socialInsurance,
+    terminationDate, terminationReason,
   } = req.body;
+
   const employee = await Employee.findById(req.params.id);
   if (!employee) return res.status(404).json({ error: "Employee not found" });
 
@@ -323,8 +325,14 @@ router.put("/:id", requireAuth, async (req, res) => {
 
   if (status !== undefined) employee.status = status;
   if (employmentType !== undefined) employee.employmentType = employmentType;
-  if (managerId !== undefined) employee.managerId = managerId;
-  if (teamLeaderId !== undefined) employee.teamLeaderId = teamLeaderId;
+
+  // Defensive: if frontend sends populated objects, extract the ID
+  if (managerId !== undefined) {
+    employee.managerId = (managerId && typeof managerId === 'object') ? (managerId.id || managerId._id) : (managerId || null);
+  }
+  if (teamLeaderId !== undefined) {
+    employee.teamLeaderId = (teamLeaderId && typeof teamLeaderId === 'object') ? (teamLeaderId.id || teamLeaderId._id) : (teamLeaderId || null);
+  }
   if (employeeCode !== undefined) employee.employeeCode = employeeCode;
   if (gender !== undefined) employee.gender = gender;
   if (maritalStatus !== undefined) employee.maritalStatus = maritalStatus;
@@ -365,9 +373,34 @@ router.put("/:id", requireAuth, async (req, res) => {
   if (insurances !== undefined) employee.insurances = insurances;
   if (medicalCondition !== undefined) employee.medicalCondition = medicalCondition;
   if (socialInsurance !== undefined) employee.socialInsurance = socialInsurance;
+  if (terminationDate !== undefined) {
+    employee.terminationDate = terminationDate === null ? null : optionalDate(terminationDate);
+  }
+  if (terminationReason !== undefined) {
+    employee.terminationReason = terminationReason === null ? null : terminationReason;
+  }
 
   if (employee.status === "TERMINATED" || employee.status === "RESIGNED") {
     employee.isActive = false;
+
+    // Auto-clear from Management Positions (Dept Head or Team Leader)
+    const email = employee.email;
+    if (email) {
+      // 1. Clear from Department head
+      await Department.updateMany({ head: email }, { $set: { head: "", headTitle: "Vacant" } });
+      
+      // 2. Clear from Team leaders (nested array update)
+      await Department.updateMany(
+        { "teams.leaderEmail": email },
+        { 
+          $set: { 
+            "teams.$[elem].leaderEmail": "",
+            "teams.$[elem].leaderTitle": "Vacant"
+          } 
+        },
+        { arrayFilters: [{ "elem.leaderEmail": email }] }
+      );
+    }
   } else if (employee.status === "ACTIVE") {
     employee.isActive = true;
   }
@@ -390,7 +423,7 @@ router.post("/:id/transfer", requireAuth, async (req, res) => {
   const employee = await Employee.findById(req.params.id);
   if (!employee) return res.status(404).json({ error: "Employee not found" });
 
-  const { toDepartment, newPosition, newSalary, resetYearlyIncreaseDate, notes } = req.body;
+  const { toDepartment, newPosition, newSalary, newEmployeeCode, resetYearlyIncreaseDate, notes } = req.body;
   if (!toDepartment) return res.status(400).json({ error: "Target department is required" });
 
   const toDeptDoc = await Department.findOne({ name: toDepartment });
@@ -416,6 +449,8 @@ router.post("/:id/transfer", requireAuth, async (req, res) => {
     yearlyIncreaseDateChanged: !!resetYearlyIncreaseDate,
     newYearlyIncreaseDate: resetYearlyIncreaseDate ? newYearlyIncreaseDate : undefined,
     notes,
+    previousEmployeeCode: newEmployeeCode ? employee.employeeCode : undefined,
+    newEmployeeCode: newEmployeeCode || undefined,
     processedBy: req.user.email,
   };
 
@@ -425,12 +460,30 @@ router.post("/:id/transfer", requireAuth, async (req, res) => {
   employee.department = toDepartment;
   employee.departmentId = toDeptDoc._id;
   if (newPosition) employee.position = newPosition;
-  if (newSalary) {
+  if (newSalary !== undefined && newSalary !== employee.financial?.baseSalary) {
+    const previousSalary = employee.financial?.baseSalary || 0;
+    const isIncrease = newSalary > previousSalary;
+    
+    // Log into salary history
+    if (!employee.salaryHistory) employee.salaryHistory = [];
+    employee.salaryHistory.push({
+      previousSalary,
+      newSalary,
+      increaseAmount: newSalary - previousSalary,
+      increasePercentage: previousSalary > 0 ? Number((((newSalary - previousSalary) / previousSalary) * 100).toFixed(2)) : 100,
+      effectiveDate: transferDate,
+      reason: `Salary adjusted during transfer to ${toDepartment}`,
+      processedBy: req.user.email,
+    });
+
     if (!employee.financial) employee.financial = {};
     employee.financial.baseSalary = newSalary;
   }
   if (resetYearlyIncreaseDate) {
     employee.yearlySalaryIncreaseDate = newYearlyIncreaseDate;
+  }
+  if (newEmployeeCode) {
+    employee.employeeCode = newEmployeeCode;
   }
 
   await employee.save();
@@ -481,6 +534,10 @@ router.post("/:id/process-increase", requireAuth, async (req, res) => {
 
   if (!employee) {
     return res.status(404).json({ error: "Employee not found" });
+  }
+
+  if (employee.status === "TERMINATED" || employee.status === "RESIGNED") {
+    return res.status(400).json({ error: "Cannot process salary increase for a terminated or resigned employee" });
   }
 
   const currentSalary = employee.financial?.baseSalary || 0;

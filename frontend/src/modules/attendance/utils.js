@@ -51,6 +51,12 @@ export function getAttendanceRowId(row, index = 0) {
 /** Format hours for table cells. */
 export function formatTotalHours(h) {
   if (h == null || Number.isNaN(Number(h))) return "—";
-  const n = Number(h);
-  return `${n.toFixed(1)}h`;
+  const totalSeconds = Math.round(Number(h) * 3600);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  
+  const pad = (num) => String(num).padStart(2, '0');
+  
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }

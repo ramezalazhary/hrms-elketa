@@ -59,8 +59,9 @@ describe("getAttendanceRowId", () => {
 
 describe("formatTotalHours", () => {
   it("formats numbers and rejects invalid", () => {
-    expect(formatTotalHours(8)).toBe("8.0h");
-    expect(formatTotalHours("7.25")).toBe("7.3h");
+    expect(formatTotalHours(8)).toBe("08:00:00");
+    expect(formatTotalHours("7.25")).toBe("07:15:00");
+    expect(formatTotalHours(8.791341782942908)).toBe("08:47:29");
     expect(formatTotalHours(null)).toBe("—");
     expect(formatTotalHours(NaN)).toBe("—");
   });

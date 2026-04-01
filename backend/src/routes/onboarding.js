@@ -13,7 +13,7 @@ const router = Router();
  */
 router.post("/generate", requireAuth, async (req, res) => {
   try {
-    const { expiresHours = 48, department, position } = req.body;
+    const { expiresHours = 48, department, position, team, employeeCode, baseSalary } = req.body;
     const user = req.user;
 
     const isAdmin = user.role === "ADMIN" || user.role === "HR_MANAGER" || user.role === "HR_STAFF" || user.role === 3;
@@ -26,7 +26,7 @@ router.post("/generate", requireAuth, async (req, res) => {
     const newLink = await OnboardingRequest.create({
       token,
       expiresAt,
-      metadata: { department, position },
+      metadata: { department, position, team, employeeCode, baseSalary },
       createdBy: user.email,
     });
 
@@ -74,7 +74,7 @@ router.post("/submit/:token", async (req, res) => {
       personalData: req.body,
     });
 
-    // Increment usage metric
+    // Increment usage metric (Support multiple submissions)
     link.usageCount += 1;
     await link.save();
 
@@ -172,6 +172,9 @@ router.patch("/submissions/:id", requireAuth, async (req, res) => {
           gender: finalData.gender,
           maritalStatus: finalData.maritalStatus,
           emergencyPhone: finalData.emergencyPhoneNumber || finalData.emergencyPhone,
+          team: finalData.team,
+          employeeCode: finalData.employeeCode,
+          financial: { baseSalary: finalData.baseSalary || 0 },
         });
         sub.status = "APPROVED";
       } catch (err) {

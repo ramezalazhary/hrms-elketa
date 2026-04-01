@@ -8,9 +8,13 @@ import { DepartmentBadge } from '@/shared/components/EntityBadges'
 import { fetchDepartmentsThunk } from '@/modules/departments/store'
 import { getDocumentRequirementsApi } from '@/modules/organization/api'
 import { API_URL } from '@/shared/api/apiBase'
-import { Mail, Briefcase, ArrowLeft, Shield, AlertTriangle, AlertCircle, ArrowRightLeft, Clock, MapPin, Phone, TrendingUp, Settings } from 'lucide-react'
+import { Clock, MapPin, Phone, TrendingUp, Settings, ArrowRightLeft, Briefcase, Mail, Shield, AlertTriangle, AlertCircle, ArrowLeft, User } from 'lucide-react'
+import { formatTotalHours } from '@/modules/attendance/utils'
+import { SalaryIncreaseModal } from '../components/SalaryIncreaseModal'
+import { TransferModal } from '../components/TransferModal'
 
 /** Days until a date from now (negative = past) */
+
 function daysUntil(dateStr) {
   if (!dateStr) return null;
   const d = new Date(dateStr);
@@ -153,10 +157,16 @@ export function EmployeeProfilePage() {
 
   const handleSalaryIncrease = async (values) => {
     try {
+      const payload = {
+        ...values,
+        increasePercentage: values.method === "PERCENT" ? values.value : undefined,
+        increaseAmount: values.method === "FIXED" ? values.value : undefined,
+      };
+
       const res = await fetch(`${API_URL}/employees/${employeeId}/process-increase`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-        body: JSON.stringify(values)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Increase failed");
@@ -167,6 +177,7 @@ export function EmployeeProfilePage() {
       showToast(err.message, "error");
     }
   }
+  const isTerminated = employee.status === "TERMINATED" || employee.status === "RESIGNED";
 
   return (
     <Layout
@@ -182,20 +193,24 @@ export function EmployeeProfilePage() {
                 Manage
               </button>
               <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                <button 
-                  onClick={() => setShowTransferModal(true)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left"
-                >
-                  <ArrowRightLeft className="h-3.5 w-3.5 text-indigo-500" />
-                  Transfer Department
-                </button>
-                <button 
-                  onClick={() => setShowSalaryModal(true)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left"
-                >
-                  <TrendingUp className="h-3.5 w-3.5 text-teal-500" />
-                  Salary Increase
-                </button>
+                {!isTerminated && (
+                  <button 
+                    onClick={() => setShowTransferModal(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left"
+                  >
+                    <ArrowRightLeft className="h-3.5 w-3.5 text-indigo-500" />
+                    Transfer Department
+                  </button>
+                )}
+                {!isTerminated && (
+                  <button 
+                    onClick={() => setShowSalaryModal(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left"
+                  >
+                    <TrendingUp className="h-3.5 w-3.5 text-teal-500" />
+                    Salary Increase
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -272,6 +287,39 @@ export function EmployeeProfilePage() {
             </div>
           </div>
         </div>
+
+        {/* Termination Info Banner */}
+        {isTerminated && (
+          <div className="relative overflow-hidden rounded-xl border border-rose-200 border-l-[6px] border-l-rose-500 bg-rose-50/60 p-4 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-rose-900 uppercase tracking-wide">
+                  {employee.status === "RESIGNED" ? "Employee Resigned" : "Employment Terminated"}
+                </h3>
+                <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-rose-800">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-rose-500" />
+                    <span className="font-medium">Exit Date:</span>
+                    <span className="font-bold">
+                      {employee.terminationDate
+                        ? new Date(employee.terminationDate).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })
+                        : "Not recorded"}
+                    </span>
+                  </div>
+                  {employee.terminationReason && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium">Reason:</span>
+                      <span>{employee.terminationReason}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modern Professional Alert Banners */}
         {isSelfOrAdmin && idExpiryDays !== null && idExpiryDays <= 60 && (
@@ -748,14 +796,23 @@ export function EmployeeProfilePage() {
                               <p className="font-medium text-slate-700">{new Intl.NumberFormat("en-EG", { style: "currency", currency: "EGP", maximumFractionDigits: 0 }).format(record.newSalary)}</p>
                             </div>
                           )}
-                          {record.yearlyIncreaseDateChanged && record.newYearlyIncreaseDate && (
+                          {record.newYearlyIncreaseDate && (
                             <div>
                               <p className="text-slate-400 uppercase tracking-wide mb-0.5">New Increase Date</p>
                               <p className="font-medium text-indigo-600">{new Date(record.newYearlyIncreaseDate).toLocaleDateString()}</p>
                             </div>
                           )}
+                          {record.newEmployeeCode && (
+                            <div>
+                              <p className="text-slate-400 uppercase tracking-wide mb-0.5">New Code</p>
+                              <p className="font-medium text-indigo-600">
+                                {record.previousEmployeeCode && <span className="text-slate-400 line-through mr-1">{record.previousEmployeeCode}</span>}
+                                {record.newEmployeeCode}
+                              </p>
+                            </div>
+                          )}
                           {record.processedBy && (
-                            <div className="col-span-full">
+                            <div className="col-span-full mt-2 border-t border-slate-200/50 pt-2">
                               <p className="text-slate-400 uppercase tracking-wide mb-0.5">Processed By</p>
                               <p className="font-medium text-slate-600">{record.processedBy}</p>
                             </div>
@@ -883,9 +940,9 @@ export function EmployeeProfilePage() {
                    </div>
                    <div className="bg-teal-50/50 p-3 rounded-xl border border-teal-100/50">
                       <p className="text-[10px] font-bold text-teal-600 uppercase mb-1">Avg. Hours</p>
-                      <p className="text-xl font-black text-teal-700">
-                        {(attendanceHistory.reduce((acc, curr) => acc + (curr.totalHours || 0), 0) / Math.max(1, attendanceHistory.length)).toFixed(1)}h
-                      </p>
+                      <div className="font-semibold text-slate-800">
+                        {formatTotalHours(attendanceHistory.reduce((acc, curr) => acc + (curr.totalHours || 0), 0) / Math.max(1, attendanceHistory.length))}
+                      </div>
                    </div>
                 </div>
 
@@ -922,7 +979,7 @@ export function EmployeeProfilePage() {
                           {log.checkOut || "—"}
                         </td>
                         <td className="py-3 text-xs font-black text-slate-900 text-right">
-                          {log.totalHours ? `${log.totalHours}h` : "—"}
+                          {formatTotalHours(log.totalHours)}
                         </td>
                       </tr>
                     ))}
@@ -934,50 +991,21 @@ export function EmployeeProfilePage() {
         </div>
       )}
       {showTransferModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-indigo-100 bg-white p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-slate-900 mb-1">Transfer Employee</h2>
-            <p className="text-xs text-slate-500 mb-6 font-medium">Record a department change and update role details for {employee.fullName}.</p>
-            <FormBuilder
-              fields={[
-                { 
-                  name: "toDepartment", 
-                  type: "select", 
-                  label: "Target Department", 
-                  required: true,
-                  options: departments.map(d => ({ value: d.name, label: d.name }))
-                },
-                { name: "newPosition", type: "text", label: "New Job Title (Optional)", placeholder: employee.position },
-                { name: "newSalary", type: "number", label: "New Base Salary (Optional)", placeholder: employee.financial?.baseSalary },
-                { name: "resetYearlyIncreaseDate", type: "checkbox", label: "Reset Yearly Increase Cycle (Set to 1 year from now)" },
-                { name: "notes", type: "textarea", label: "Transfer Notes" },
-              ]}
-              submitLabel="Process Transfer"
-              onCancel={() => setShowTransferModal(false)}
-              onSubmit={handleTransfer}
-            />
-          </div>
-        </div>
+        <TransferModal
+          employee={employee}
+          departments={departments}
+          onClose={() => setShowTransferModal(false)}
+          onSubmit={handleTransfer}
+        />
       )}
 
       {showSalaryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-teal-100 bg-white p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-slate-900 mb-1">Process Salary Increase</h2>
-            <p className="text-xs text-slate-500 mb-6 font-medium">Apply a base salary adjustment for {employee.fullName}.</p>
-            <FormBuilder
-              fields={[
-                { name: "increasePercentage", type: "number", label: "Increase Percentage (%)", placeholder: "e.g. 10" },
-                { name: "increaseAmount", type: "number", label: "OR Fixed Increase Amount", placeholder: "e.g. 500" },
-                { name: "effectiveDate", type: "date", label: "Effective Date", required: true },
-                { name: "reason", type: "text", label: "Reason / Context", placeholder: "Annual Performance Review" },
-              ]}
-              submitLabel="Update Salary"
-              onCancel={() => setShowSalaryModal(false)}
-              onSubmit={handleSalaryIncrease}
-            />
-          </div>
-        </div>
+        <SalaryIncreaseModal
+          employee={employee}
+          orgPolicy={globalPolicy}
+          onClose={() => setShowSalaryModal(false)}
+          onSubmit={handleSalaryIncrease}
+        />
       )}
     </div>
   </Layout>

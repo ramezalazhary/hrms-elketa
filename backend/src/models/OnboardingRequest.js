@@ -14,6 +14,10 @@ const OnboardingRequestSchema = new Schema(
     metadata: {
       department: { type: String },
       position: { type: String },
+      team: { type: String },
+      employeeCode: { type: String },
+      baseSalary: { type: Number },
+      educationDegree: { type: String },
     },
     createdBy: { type: String }, // Admin email who generated the link
   },

@@ -18,6 +18,7 @@ import {
   Shield,
   GraduationCap,
 } from "lucide-react";
+import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
 
 const STEPS = [
   { id: 1, label: "Personal", icon: User },
@@ -50,11 +51,16 @@ export function WelcomePage() {
     email: "",
     phoneNumber: "",
     emergencyPhoneNumber: "",
+    governorate: "",
+    city: "",
     workCity: "",
     workBranch: "",
     address: "",
     department: "",
     position: "",
+    team: "",
+    employeeCode: "",
+    baseSalary: "",
   });
 
   const [fieldErrors, setFieldErrors] = useState({});
@@ -79,6 +85,10 @@ export function WelcomePage() {
     return merged;
   }, [policy]);
 
+  const cityOptions = useMemo(() => {
+    return getCitiesForGovernorate(values.governorate).map((c) => ({ label: c, value: c }));
+  }, [values.governorate]);
+
   const selectedBranches =
     LOCATIONS.find((l) => l.city === values.workCity)?.branches || [];
 
@@ -95,6 +105,12 @@ export function WelcomePage() {
           getDocumentRequirementsApi().catch(() => ({ workLocations: [] })),
         ]);
         if (tokenRes.valid) {
+          // Check if this browser previously submitted for this token
+          if (localStorage.getItem(`onboarding_done_${token}`)) {
+            setSubmitted(true);
+            setLoading(false);
+            return;
+          }
           const pre = tokenRes.prefilledData || {};
           setInitialData(pre);
           setValues((prev) => ({ ...prev, ...pre }));
@@ -136,6 +152,8 @@ export function WelcomePage() {
       if (!values.email?.trim()) errors.email = "Email is required";
       else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) errors.email = "Invalid email format";
       if (!values.phoneNumber?.trim()) errors.phoneNumber = "Phone number is required";
+      if (!values.governorate) errors.governorate = "Governorate is required";
+      if (!values.city) errors.city = "City is required";
       if (!values.workCity) errors.workCity = "Work city is required";
       if (!values.workBranch) errors.workBranch = "Work branch is required";
       if (!values.address?.trim()) errors.address = "Address is required";
@@ -174,6 +192,8 @@ export function WelcomePage() {
       if (payload.dateOfBirth === "") delete payload.dateOfBirth;
 
       await submitOnboardingApi(token, payload);
+      // Persist completion status locally to restrict re-sending from this browser
+      localStorage.setItem(`onboarding_done_${token}`, "true");
       showToast("Information submitted successfully", "success");
       setSubmitted(true);
     } catch (err) {
@@ -444,6 +464,14 @@ export function WelcomePage() {
                   required: false,
                   placeholder: "+20 1XX XXX XXXX",
                 })}
+                {renderField("governorate", "Residential Governorate", "select", {
+                  options: EGYPT_GOVERNORATES.map((g) => ({ label: `${g.name} (${g.nameAr})`, value: g.name })),
+                  onChange: () => updateField("city", ""),
+                })}
+                {renderField("city", "Residential City", "select", {
+                  disabled: !values.governorate,
+                  options: cityOptions,
+                })}
                 {renderField("workCity", "Work City", "select", {
                   options: LOCATIONS.map((l) => ({ label: l.city, value: l.city })),
                   onChange: () => updateField("workBranch", ""),
@@ -485,6 +513,21 @@ export function WelcomePage() {
                   disabled: !!initialData.position,
                   placeholder: initialData.position ? "" : "e.g. Software Engineer",
                 })}
+                {renderField("team", "Assigned Team", "text", {
+                   required: false,
+                   disabled: !!initialData.team,
+                   placeholder: initialData.team ? "" : "N/A",
+                })}
+                {renderField("employeeCode", "Employee ID Code", "text", {
+                   required: false,
+                   disabled: !!initialData.employeeCode,
+                   placeholder: initialData.employeeCode ? "" : "N/A",
+                })}
+                {renderField("baseSalary", "Contract Base Salary (EGP)", "number", {
+                   required: false,
+                   disabled: !!initialData.baseSalary,
+                   placeholder: initialData.baseSalary ? "" : "0.00",
+                })}
               </div>
 
               {/* Summary Panel */}
@@ -517,6 +560,22 @@ export function WelcomePage() {
                   <div>
                     <span className="text-zinc-400">Position</span>
                     <p className="font-semibold text-zinc-800">{values.position || "To be assigned"}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400">Team</span>
+                    <p className="font-semibold text-zinc-800">{values.team || "General"}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400">Salary (EGP)</span>
+                    <p className="font-semibold text-zinc-800">{values.baseSalary || "0.00"}</p>
+                  </div>
+                  <div className="col-span-full pt-1 border-t border-zinc-100">
+                    <span className="text-zinc-400 italic">Code: </span>
+                    <span className="font-bold text-indigo-700">{values.employeeCode || "To be generated"}</span>
+                  </div>
+                  <div className="col-span-full pt-1 border-t border-zinc-100">
+                    <span className="text-zinc-400 italic">Residence: </span>
+                    <span className="font-semibold text-zinc-700">{values.city}, {values.governorate}</span>
                   </div>
                 </div>
               </div>

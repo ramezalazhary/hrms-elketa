@@ -4,12 +4,14 @@ import { FormBuilder } from "@/shared/components/FormBuilder";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
-import { updateEmployeeThunk } from "../store";
+import { updateEmployeeThunk, processSalaryIncreaseThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { getDocumentRequirementsApi } from "@/modules/organization/api";
 import { API_URL } from "@/shared/api/apiBase";
 import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
-import { ArrowRightLeft, Clock } from "lucide-react";
+import { ArrowLeft, Clock, Save, ArrowRightLeft, KeyRound, Settings, Briefcase, TrendingUp } from "lucide-react";
+import { TransferModal } from "../components/TransferModal";
+import { SalaryIncreaseModal } from "../components/SalaryIncreaseModal";
 
 export function EditEmployeePage() {
   const dispatch = useAppDispatch();
@@ -19,10 +21,12 @@ export function EditEmployeePage() {
   const departments = useAppSelector((state) => state.departments.items);
   const currentUser = useAppSelector((state) => state.identity.currentUser);
   const accessToken = useAppSelector((state) => state.identity.accessToken);
+  const status = useAppSelector((state) => state.employees.status);
   const { showToast } = useToast();
 
   const [showResetModal, setShowResetModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showSalaryModal, setShowSalaryModal] = useState(false);
   const [documentChecklist, setDocumentChecklist] = useState([]);
   const [activeTab, setActiveTab] = useState("profile");
   const [selectedGovernorate, setSelectedGovernorate] = useState("");
@@ -133,13 +137,29 @@ export function EditEmployeePage() {
     }
   };
 
+  const handleSalaryIncrease = async (values) => {
+    try {
+      await dispatch(processSalaryIncreaseThunk({
+        id: employee.id,
+        ...values,
+        increasePercentage: values.method === "PERCENT" ? values.value : undefined,
+        increaseAmount: values.method === "FIXED" ? values.value : undefined,
+      })).unwrap();
+      showToast("Salary increase processed successfully", "success");
+      setShowSalaryModal(false);
+      navigate("/employees");
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  };
+
   const canAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "HR_MANAGER";
 
-  if (!employee) {
+  if (status === "loading" || !employee) {
     return (
       <Layout title="Edit Employee">
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
-          Employee not found.
+          {status === "loading" ? "Loading..." : "Employee not found."}
         </p>
       </Layout>
     );
@@ -154,13 +174,28 @@ export function EditEmployeePage() {
       actions={
         <div className="flex items-center gap-2">
           {canAdmin && (
-            <button
-              onClick={() => setShowTransferModal(true)}
-              className="rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 px-3 py-1.5 text-sm font-medium transition hover:bg-indigo-100 shadow-sm flex items-center gap-1.5"
-            >
-              <ArrowRightLeft className="h-3.5 w-3.5" />
-              Transfer
-            </button>
+            <div className="relative group z-50">
+              <button className="inline-flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-700 shadow-sm transition hover:bg-teal-100">       
+                <Settings className="h-4 w-4" />
+                Manage
+              </button>
+              <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                <button
+                  onClick={() => setShowTransferModal(true)}
+                  className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition"
+                >
+                  <ArrowRightLeft className="h-4 w-4" />
+                  Transfer Employee
+                </button>
+                <button
+                  onClick={() => setShowSalaryModal(true)}
+                  className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition"
+                >
+                  <TrendingUp className="h-4 w-4" />
+                  Increase Salary
+                </button>
+              </div>
+            </div>
           )}
           {currentUser?.role === "ADMIN" && (
             <button
@@ -193,41 +228,21 @@ export function EditEmployeePage() {
 
       {/* Transfer Modal */}
       {showTransferModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/30 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl relative z-10">
-            <h2 className="text-xl font-bold text-slate-800 mb-1">Transfer Employee</h2>
-            <p className="text-sm text-slate-500 mb-5">
-              Moving <strong>{employee.fullName}</strong> from <strong>{employee.department}</strong>
-            </p>
-            <FormBuilder
-              fields={[
-                {
-                  name: "toDepartment",
-                  label: "Transfer To Department",
-                  type: "select",
-                  required: true,
-                  options: departments.filter(d => d.name !== employee.department).map(d => ({ label: d.name, value: d.name }))
-                },
-                { name: "newPosition", label: "New Position (optional)", type: "text" },
-                { name: "newSalary", label: "New Base Salary (optional)", type: "number" },
-                {
-                  name: "resetYearlyIncreaseDate",
-                  label: "Reset Yearly Increase Date?",
-                  type: "radio",
-                  required: true,
-                  options: [
-                    { label: "Keep existing date (preserves salary cycle)", value: "NO" },
-                    { label: "Reset yearly salary increase date (Set to 1 year from now)", value: "YES" },
-                  ]
-                },
-                { name: "notes", label: "Transfer Notes", type: "textarea" },
-              ]}
-              submitLabel="Confirm Transfer"
-              onCancel={() => setShowTransferModal(false)}
-              onSubmit={handleTransfer}
-            />
-          </div>
-        </div>
+        <TransferModal
+          employee={employee}
+          departments={departments}
+          onClose={() => setShowTransferModal(false)}
+          onSubmit={handleTransfer}
+        />
+      )}
+
+      {/* Salary Increase Modal */}
+      {showSalaryModal && (
+        <SalaryIncreaseModal
+          employee={employee}
+          onClose={() => setShowSalaryModal(false)}
+          onSubmit={handleSalaryIncrease}
+        />
       )}
 
       {/* Tab nav */}
@@ -325,20 +340,21 @@ export function EditEmployeePage() {
                   : [{ label: "— Select governorate first —", value: "" }],
               },
 
-              { type: "section", label: "3. Job & Administrative" },
-              { name: "employeeCode", label: "Employee Code", type: "text" },
-              { name: "position", label: "Job Title", type: "text", required: true },
+              { type: "section", label: "3. Job & Administrative (Use 'Manage' for Structural Changes)" },
+              { name: "employeeCode", label: "Employee Code", type: "text", disabled: true },
+              { name: "position", label: "Job Title", type: "text", disabled: true },
               {
                 name: "department",
                 label: "Department",
                 type: "select",
-                required: true,
+                disabled: true,
                 options: departments.map(d => ({ label: d.name, value: d.name }))
               },
               {
                 name: "team",
                 label: "Team / Unit",
                 type: "select",
+                disabled: true,
                 options: departments.flatMap(d => (d.teams || []).map(t => ({ label: `${t.name} (${d.name})`, value: t.name })))
               },
               {
@@ -375,8 +391,8 @@ export function EditEmployeePage() {
                 ]
               },
 
-              { type: "section", label: "4. Benefits & Compensation" },
-              { name: "baseSalary", label: "Base Salary", type: "number" },
+              { type: "section", label: "4. Benefits & Compensation (Use 'Manage' -> 'Increase Salary' to change Base Salary)" },
+              { name: "baseSalary", label: "Base Salary", type: "number", disabled: true },
               {
                  name: "paymentMethod",
                  label: "Payment Method",
