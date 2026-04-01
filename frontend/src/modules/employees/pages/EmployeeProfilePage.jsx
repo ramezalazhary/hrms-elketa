@@ -133,6 +133,40 @@ export function EmployeeProfilePage() {
   const isSelf = currentUser?.id === employee.id || currentUser?.email === employee.email;
   const isSelfOrAdmin = canAdmin || isSelf;
   const transferHistory = employee.transferHistory || [];
+  
+  const handleTransfer = async (values) => {
+    try {
+      const res = await fetch(`${API_URL}/employees/${employeeId}/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        body: JSON.stringify(values)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Transfer failed");
+      showToast("Employee transferred successfully", "success");
+      setShowTransferModal(false);
+      window.location.reload(); // Refresh to update store & history
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  }
+
+  const handleSalaryIncrease = async (values) => {
+    try {
+      const res = await fetch(`${API_URL}/employees/${employeeId}/process-increase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        body: JSON.stringify(values)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Increase failed");
+      showToast("Salary increase processed successfully", "success");
+      setShowSalaryModal(false);
+      window.location.reload();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  }
 
   return (
     <Layout
@@ -897,6 +931,52 @@ export function EmployeeProfilePage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {showTransferModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-indigo-100 bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-slate-900 mb-1">Transfer Employee</h2>
+            <p className="text-xs text-slate-500 mb-6 font-medium">Record a department change and update role details for {employee.fullName}.</p>
+            <FormBuilder
+              fields={[
+                { 
+                  name: "toDepartment", 
+                  type: "select", 
+                  label: "Target Department", 
+                  required: true,
+                  options: departments.map(d => ({ value: d.name, label: d.name }))
+                },
+                { name: "newPosition", type: "text", label: "New Job Title (Optional)", placeholder: employee.position },
+                { name: "newSalary", type: "number", label: "New Base Salary (Optional)", placeholder: employee.financial?.baseSalary },
+                { name: "resetYearlyIncreaseDate", type: "checkbox", label: "Reset Yearly Increase Cycle (Set to 1 year from now)" },
+                { name: "notes", type: "textarea", label: "Transfer Notes" },
+              ]}
+              submitLabel="Process Transfer"
+              onCancel={() => setShowTransferModal(false)}
+              onSubmit={handleTransfer}
+            />
+          </div>
+        </div>
+      )}
+
+      {showSalaryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-teal-100 bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-slate-900 mb-1">Process Salary Increase</h2>
+            <p className="text-xs text-slate-500 mb-6 font-medium">Apply a base salary adjustment for {employee.fullName}.</p>
+            <FormBuilder
+              fields={[
+                { name: "increasePercentage", type: "number", label: "Increase Percentage (%)", placeholder: "e.g. 10" },
+                { name: "increaseAmount", type: "number", label: "OR Fixed Increase Amount", placeholder: "e.g. 500" },
+                { name: "effectiveDate", type: "date", label: "Effective Date", required: true },
+                { name: "reason", type: "text", label: "Reason / Context", placeholder: "Annual Performance Review" },
+              ]}
+              submitLabel="Update Salary"
+              onCancel={() => setShowSalaryModal(false)}
+              onSubmit={handleSalaryIncrease}
+            />
+          </div>
         </div>
       )}
     </div>
