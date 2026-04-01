@@ -8,73 +8,38 @@ import { Department } from "../models/Department.js";
 import { requireAuth } from "../middleware/auth.js";
 import { UserPermission } from "../models/Permission.js";
 import { hashPassword } from "../middleware/auth.js";
+import { resolveEmployeeAccess } from "../services/accessService.js";
 
 const router = Router();
 
 /** Empty strings from JSON must not be cast to Date (Mongoose CastError). */
-function optionalDate(value) {
-  if (value == null || value === "") return undefined;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? undefined : value;
+function optionalDate(val) {
+  if (!val) return undefined;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? undefined : d;
 }
 
-/**
- * Computes `{ scope, actions[, teams] }` for listing/mutating employees.
- * @param {{ id: string, email: string, role: string }} user From `req.user` after `requireAuth`.
- * @returns {Promise<{ scope: 'all'|'department'|'team'|'self', actions: string[], teams?: string[] }>}
- *
- * Data flow: Admin → full actions + `all`; HR dept head → same; dept head / MANAGER → department + view/create;
- * team manager → team names + view; else self + view only.
- */
-async function resolveEmployeeAccess(user) {
-  // 1. Admin gets EVERYTHING
-  if (user.role === "ADMIN" || user.role === 3) {
-    return {
-      scope: "all",
-      actions: ["view", "create", "edit", "delete", "export"],
-    };
+function calculateNextAnniversary(hireDate) {
+  if (!hireDate) return undefined;
+  const today = new Date();
+  const anniversary = new Date(hireDate);
+  if (isNaN(anniversary.getTime())) return undefined;
+
+  // Find this year's anniversary
+  anniversary.setFullYear(today.getFullYear());
+
+  // If this year's anniversary was more than 30 days ago, 
+  // it means we've passed the window for this year; suggest next year.
+  const threshold = new Date(today);
+  threshold.setDate(threshold.getDate() - 30);
+
+  if (anniversary < threshold) {
+    anniversary.setFullYear(today.getFullYear() + 1);
   }
-
-  // 2. Head of HR gets EVERYTHING
-  const hrDept = await Department.findOne({ code: "HR" });
-  const isHrHead = hrDept && hrDept.head === user.email;
-  if (isHrHead) {
-    return {
-      scope: "all",
-      actions: ["view", "create", "edit", "delete", "export"],
-    };
-  }
-
-  // 3. Department Head (MANAGER) sees all but is Read-Only
-  const isDeptHead = await Department.findOne({ head: user.email });
-  if (isDeptHead || user.role === "MANAGER" || user.role === 2) {
-    return { scope: "department", actions: ["view"] };
-  }
-
-  // 4. Team Leader see his team only
-  // Check if they are listed as a leader in any team within any department
-  const deptsWithTeams = await Department.find({ "teams.leaderEmail": user.email });
-  const managedTeamNames = [];
-  deptsWithTeams.forEach((d) => {
-    d.teams.forEach((t) => {
-      if (t.leaderEmail === user.email) managedTeamNames.push(t.name);
-    });
-  });
-
-  if (user.role === "TEAM_LEADER" || managedTeamNames.length > 0) {
-    return { scope: "team", actions: ["view"], teams: managedTeamNames };
-  }
-
-  // 5. Fallback for generic Employee
-  return { scope: "self", actions: ["view"] };
+  return anniversary;
 }
 
-/**
- * Whether `userEmail` may act inside `targetDepartment` (owns dept as head or works there).
- * @param {string} userEmail
- * @param {string} targetDepartment Department name string on Employee / Department.
- * @returns {Promise<boolean>}
- */
+
 async function checkScopeDepartment(userEmail, targetDepartment) {
   const employeeRecord = await Employee.findOne({ email: userEmail });
   let deptNames = await Department.find({ head: userEmail }).distinct("name");
@@ -82,34 +47,107 @@ async function checkScopeDepartment(userEmail, targetDepartment) {
   return deptNames.includes(targetDepartment);
 }
 
+/**
+ * GET /api/employees
+ * Query params for filtering:
+ *   ?salaryIncreaseFrom=YYYY-MM-DD&salaryIncreaseTo=YYYY-MM-DD
+ *   ?hireDateFrom=YYYY-MM-DD&hireDateTo=YYYY-MM-DD
+ *   ?idExpiringSoon=true (within 60 days)
+ *   ?recentTransfers=true (last 30 days)
+ *   ?department=dept
+ *   ?status=ACTIVE
+ *   ?salaryMin=1000&salaryMax=5000
+ *   ?manager=email@example.com
+ *   ?location=Cairo HQ
+ */
 router.get("/", requireAuth, async (req, res) => {
   const access = await resolveEmployeeAccess(req.user);
   if (!access.actions.includes("view"))
     return res.status(403).json({ error: "Forbidden" });
 
+  let query = {};
+
+  const { 
+    salaryIncreaseFrom, salaryIncreaseTo, 
+    idExpiringSoon, idExpired, recentTransfers,
+    hireDateFrom, hireDateTo,
+    department, status,
+    salaryMin, salaryMax,
+    manager, location, search
+  } = req.query;
+
+  if (department) query.department = department;
+  if (status) query.status = status;
+  if (location) query.workLocation = location;
+  if (manager) query["team"] = { $exists: true }; // Simplified for now since 'manager' isn't explicitly tied strictly beyond department head/team lead. Can implement exact team match if managed properly.
+
+  if (hireDateFrom || hireDateTo) {
+    query.dateOfHire = {};
+    if (hireDateFrom) query.dateOfHire.$gte = new Date(hireDateFrom);
+    if (hireDateTo) query.dateOfHire.$lte = new Date(hireDateTo);
+  }
+
+  if (salaryMin || salaryMax) {
+    query["financial.baseSalary"] = {};
+    if (salaryMin) query["financial.baseSalary"].$gte = Number(salaryMin);
+    if (salaryMax) query["financial.baseSalary"].$lte = Number(salaryMax);
+  }
+
+  if (salaryIncreaseFrom || salaryIncreaseTo) {
+    query.yearlySalaryIncreaseDate = {};
+    if (salaryIncreaseFrom) query.yearlySalaryIncreaseDate.$gte = new Date(salaryIncreaseFrom);
+    if (salaryIncreaseTo) query.yearlySalaryIncreaseDate.$lte = new Date(salaryIncreaseTo);
+  }
+
+  if (idExpiringSoon === "true") {
+    const now = new Date();
+    const sixtyDays = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+    query.nationalIdExpiryDate = { $gte: now, $lte: sixtyDays };
+  }
+
+  if (idExpired === "true") {
+    const now = new Date();
+    query.nationalIdExpiryDate = { $lt: now };
+  }
+
+  if (recentTransfers === "true") {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    query["transferHistory.transferDate"] = { $gte: thirtyDaysAgo };
+  }
+
+  if (search) {
+    query.$or = [
+      { fullName: { $regex: search, $options: "i" } },
+      { fullNameArabic: { $regex: search, $options: "i" } },
+      { employeeCode: { $regex: search, $options: "i" } }
+    ];
+  }
+
   if (access.scope === "all") {
-    return res.json(await Employee.find());
+    return res.json(await Employee.find(query).populate("managerId teamLeaderId"));
   }
 
   if (access.scope === "department") {
     const employeeRecord = await Employee.findOne({ email: req.user.email });
-    let deptNames = await Department.find({ head: req.user.email }).distinct(
-      "name",
-    );
+    let deptNames = await Department.find({ head: req.user.email }).distinct("name");
     if (employeeRecord) deptNames.push(employeeRecord.department);
-    return res.json(await Employee.find({ department: { $in: deptNames } }));
+    return res.json(await Employee.find({ ...query, department: { $in: deptNames } }).populate("managerId teamLeaderId"));
   }
 
   if (access.scope === "team") {
-    return res.json(
-      await Employee.find({
-        $or: [{ team: { $in: access.teams } }, { email: req.user.email }],
-      }),
-    );
+    let finalQuery = { ...query };
+    const teamScopeOr = [{ team: { $in: access.teams } }, { email: req.user.email }];
+    if (finalQuery.$or) {
+      finalQuery.$and = [ { $or: finalQuery.$or }, { $or: teamScopeOr } ];
+      delete finalQuery.$or;
+    } else {
+      finalQuery.$or = teamScopeOr;
+    }
+    return res.json(await Employee.find(finalQuery).populate("managerId teamLeaderId"));
   }
 
   if (access.scope === "self") {
-    return res.json(await Employee.find({ email: req.user.email }));
+    return res.json(await Employee.find({ ...query, email: req.user.email }).populate("managerId teamLeaderId"));
   }
 
   return res.json([]);
@@ -126,19 +164,13 @@ router.get("/:id", requireAuth, async (req, res) => {
   if (access.scope === "all") return res.json(employee);
 
   if (access.scope === "department") {
-    const isAllowedDept = await checkScopeDepartment(
-      req.user.email,
-      employee.department,
-    );
+    const isAllowedDept = await checkScopeDepartment(req.user.email, employee.department);
     if (isAllowedDept) return res.json(employee);
     return res.status(403).json({ error: "Forbidden: Not in your scope" });
   }
 
   if (access.scope === "team") {
-    if (
-      employee.email === req.user.email ||
-      access.teams.includes(employee.team)
-    ) {
+    if (employee.email === req.user.email || access.teams.includes(employee.team)) {
       return res.json(employee);
     }
     return res.status(403).json({ error: "Forbidden: Not in your team scope" });
@@ -158,62 +190,32 @@ router.post("/", requireAuth, async (req, res) => {
     return res.status(403).json({ error: "Forbidden" });
 
   const {
-    fullName,
-    email,
-    department,
-    team,
-    position,
-    status,
-    employmentType,
-    managerId,
-    employeeCode,
-    gender,
-    maritalStatus,
-    age,
-    dateOfBirth,
-    nationality,
-    idNumber,
-    profilePicture,
-    workEmail,
-    phoneNumber,
-    address,
-    additionalContact,
-    dateOfHire,
-    workLocation,
-    onlineStorageLink,
-    education,
-    trainingCourses,
-    skills,
-    languages,
-    financial,
-    insurance,
+    fullName, email, department, team, position, status, employmentType,
+    managerId, teamLeaderId, employeeCode, gender, maritalStatus, age, dateOfBirth,
+    nationality, idNumber, profilePicture, workEmail, phoneNumber, address,
+    additionalContact, dateOfHire, workLocation, onlineStorageLink,
+    education, trainingCourses, skills, languages, financial, insurance,
+    fullNameArabic, nationalIdExpiryDate, governorate, city, emergencyPhone,
+    subLocation, insurances, medicalCondition, socialInsurance,
   } = req.body;
+
   if (!fullName || !email || !department || !position) {
     return res.status(400).json({ error: "Required fields are missing" });
   }
 
   if (access.scope === "department") {
-    const isAllowedDept = await checkScopeDepartment(
-      req.user.email,
-      department,
-    );
+    const isAllowedDept = await checkScopeDepartment(req.user.email, department);
     if (!isAllowedDept) {
-      return res.status(403).json({
-        error: "Cannot create employee outside your department scope",
-      });
+      return res.status(403).json({ error: "Cannot create employee outside your department scope" });
     }
   } else if (access.scope === "self") {
-    return res
-      .status(403)
-      .json({ error: "Scope 'self' cannot create employees" });
+    return res.status(403).json({ error: "Scope 'self' cannot create employees" });
   }
 
   const existing = await Employee.findOne({ email });
-  if (existing)
-    return res.status(409).json({ error: "Employee already exists" });
+  if (existing) return res.status(409).json({ error: "Employee already exists" });
 
   try {
-    // 2. Resolve Department Code & Generate Employee ID
     const deptDoc = await Department.findOne({ name: department });
     if (!deptDoc) return res.status(404).json({ error: "Department not found while generating code" });
 
@@ -225,19 +227,19 @@ router.post("/", requireAuth, async (req, res) => {
 
     const { role: requestedRole } = req.body;
     let finalRole = "EMPLOYEE";
-
     if (requestedRole) {
       if (access.scope === "all") {
         finalRole = requestedRole;
       } else if (access.scope === "department") {
-         // Managers can assign EMPLOYEE, TEAM_LEADER, or MANAGER
-         const allowed = ["EMPLOYEE", "TEAM_LEADER", "MANAGER"];
-         finalRole = allowed.includes(requestedRole) ? requestedRole : "EMPLOYEE";
+        const allowed = ["EMPLOYEE", "TEAM_LEADER", "MANAGER"];
+        finalRole = allowed.includes(requestedRole) ? requestedRole : "EMPLOYEE";
       }
     } else {
-      // Default logic if no role provided
       finalRole = department === "HR" ? "HR_STAFF" : "EMPLOYEE";
     }
+
+    // Auto-calculate anniversary date from hire date
+    const computedAnniversaryDate = calculateNextAnniversary(dateOfHire);
 
     const newEmployee = new Employee({
       ...req.body,
@@ -246,31 +248,22 @@ router.post("/", requireAuth, async (req, res) => {
       maritalStatus: maritalStatus || "SINGLE",
       age: age || null,
       dateOfBirth: optionalDate(dateOfBirth),
-      nationality,
-      idNumber,
-      profilePicture,
-      workEmail,
-      phoneNumber,
-      address,
-      additionalContact,
+      nationality, idNumber,
+      nationalIdExpiryDate: optionalDate(nationalIdExpiryDate),
+      profilePicture, workEmail, phoneNumber, emergencyPhone,
+      address, governorate, city, additionalContact,
       dateOfHire: optionalDate(dateOfHire),
-      workLocation,
-      onlineStorageLink,
-      education,
-      trainingCourses,
-      skills,
-      languages,
-      financial,
-      insurance:
-        insurance && typeof insurance === "object"
-          ? {
-              provider: insurance.provider || undefined,
-              policyNumber: insurance.policyNumber || undefined,
-              coverageType: insurance.coverageType || "HEALTH",
-              validUntil: optionalDate(insurance.validUntil),
-            }
-          : undefined,
-      // Auth fields - merged from User model
+      annualAnniversaryDate: optionalDate(computedAnniversaryDate),
+      workLocation, subLocation, onlineStorageLink,
+      education, trainingCourses, skills, languages, financial,
+      insurance: insurance && typeof insurance === "object"
+        ? { provider: insurance.provider || undefined, policyNumber: insurance.policyNumber || undefined, coverageType: insurance.coverageType || "HEALTH", validUntil: optionalDate(insurance.validUntil) }
+        : undefined,
+      insurances: insurances || [],
+      yearlySalaryIncreaseDate: computedAnniversaryDate,
+      fullNameArabic,
+      medicalCondition,
+      socialInsurance,
       passwordHash: await hashPassword("Welcome123!"),
       role: finalRole,
       requirePasswordChange: true,
@@ -285,12 +278,8 @@ router.post("/", requireAuth, async (req, res) => {
       defaultPassword: "Welcome123!",
     });
   } catch (err) {
-    if (err?.name === "ValidationError") {
-      return res.status(400).json({ error: err.message });
-    }
-    if (err?.code === 11000) {
-      return res.status(409).json({ error: "Employee already exists" });
-    }
+    if (err?.name === "ValidationError") return res.status(400).json({ error: err.message });
+    if (err?.code === 11000) return res.status(409).json({ error: "Employee already exists" });
     console.error("POST /employees:", err);
     return res.status(500).json({ error: "Failed to create employee" });
   }
@@ -302,70 +291,29 @@ router.put("/:id", requireAuth, async (req, res) => {
     return res.status(403).json({ error: "Forbidden" });
 
   const {
-    fullName,
-    email,
-    department,
-    team,
-    position,
-    status,
-    employmentType,
-    managerId,
-    employeeCode,
-    gender,
-    maritalStatus,
-    age,
-    dateOfBirth,
-    nationality,
-    idNumber,
-    profilePicture,
-    workEmail,
-    phoneNumber,
-    address,
-    additionalContact,
-    dateOfHire,
-    workLocation,
-    onlineStorageLink,
-    education,
-    trainingCourses,
-    skills,
-    languages,
-    financial,
-    insurance,
+    fullName, email, department, team, position, status, employmentType,
+    managerId, teamLeaderId, employeeCode, gender, maritalStatus, age, dateOfBirth,
+    nationality, idNumber, profilePicture, workEmail, phoneNumber, address,
+    additionalContact, dateOfHire, workLocation, onlineStorageLink,
+    education, trainingCourses, skills, languages, financial, insurance,
     documentChecklist,
+    fullNameArabic, nationalIdExpiryDate, governorate, city, emergencyPhone,
+    subLocation, insurances, medicalCondition, socialInsurance,
   } = req.body;
   const employee = await Employee.findById(req.params.id);
-
   if (!employee) return res.status(404).json({ error: "Employee not found" });
 
   if (access.scope === "department") {
-    const isAllowedDept = await checkScopeDepartment(
-      req.user.email,
-      employee.department,
-    );
-    if (!isAllowedDept)
-      return res
-        .status(403)
-        .json({ error: "Not authorized to edit this record" });
-
-    // Check if trying to move the employee to a restricted department
+    const isAllowedDept = await checkScopeDepartment(req.user.email, employee.department);
+    if (!isAllowedDept) return res.status(403).json({ error: "Not authorized to edit this record" });
     if (department && department !== employee.department) {
-      const isTargetAllowedDept = await checkScopeDepartment(
-        req.user.email,
-        department,
-      );
-      if (!isTargetAllowedDept)
-        return res
-          .status(403)
-          .json({ error: "Cannot move employee to a restricted department" });
+      const isTargetAllowedDept = await checkScopeDepartment(req.user.email, department);
+      if (!isTargetAllowedDept) return res.status(403).json({ error: "Cannot move employee to a restricted department" });
     }
   } else if (access.scope === "self") {
-    if (employee.email !== req.user.email)
-      return res.status(403).json({ error: "Forbidden: Can only edit self" });
-    if (department && department !== employee.department)
-      return res.status(403).json({ error: "Cannot change own department" });
+    if (employee.email !== req.user.email) return res.status(403).json({ error: "Forbidden: Can only edit self" });
+    if (department && department !== employee.department) return res.status(403).json({ error: "Cannot change own department" });
   }
-
-  const oldEmail = employee.email;
 
   employee.fullName = fullName ?? employee.fullName;
   employee.email = email ?? employee.email;
@@ -376,25 +324,29 @@ router.put("/:id", requireAuth, async (req, res) => {
   if (status !== undefined) employee.status = status;
   if (employmentType !== undefined) employee.employmentType = employmentType;
   if (managerId !== undefined) employee.managerId = managerId;
+  if (teamLeaderId !== undefined) employee.teamLeaderId = teamLeaderId;
   if (employeeCode !== undefined) employee.employeeCode = employeeCode;
   if (gender !== undefined) employee.gender = gender;
   if (maritalStatus !== undefined) employee.maritalStatus = maritalStatus;
   if (age !== undefined) employee.age = age;
-
-  if (dateOfBirth !== undefined)
-    employee.dateOfBirth = optionalDate(dateOfBirth);
+  if (dateOfBirth !== undefined) employee.dateOfBirth = optionalDate(dateOfBirth);
   if (nationality !== undefined) employee.nationality = nationality;
   if (idNumber !== undefined) employee.idNumber = idNumber;
   if (profilePicture !== undefined) employee.profilePicture = profilePicture;
   if (workEmail !== undefined) employee.workEmail = workEmail;
   if (phoneNumber !== undefined) employee.phoneNumber = phoneNumber;
   if (address !== undefined) employee.address = address;
-  if (additionalContact !== undefined)
-    employee.additionalContact = additionalContact;
-  if (dateOfHire !== undefined) employee.dateOfHire = optionalDate(dateOfHire);
+  if (additionalContact !== undefined) employee.additionalContact = additionalContact;
+  if (dateOfHire !== undefined) {
+    employee.dateOfHire = optionalDate(dateOfHire);
+    if (employee.dateOfHire) {
+      const computedAnniversaryDate = calculateNextAnniversary(employee.dateOfHire);
+      employee.annualAnniversaryDate = computedAnniversaryDate;
+      employee.yearlySalaryIncreaseDate = computedAnniversaryDate;
+    }
+  }
   if (workLocation !== undefined) employee.workLocation = workLocation;
-  if (onlineStorageLink !== undefined)
-    employee.onlineStorageLink = onlineStorageLink;
+  if (onlineStorageLink !== undefined) employee.onlineStorageLink = onlineStorageLink;
   if (education !== undefined) employee.education = education;
   if (trainingCourses !== undefined) employee.trainingCourses = trainingCourses;
   if (skills !== undefined) employee.skills = skills;
@@ -403,21 +355,87 @@ router.put("/:id", requireAuth, async (req, res) => {
   if (insurance !== undefined) employee.insurance = insurance;
   if (documentChecklist !== undefined) employee.documentChecklist = documentChecklist;
 
-  // Store new email for sync check
-  const newEmail = employee.email;
+  // New fields
+  if (fullNameArabic !== undefined) employee.fullNameArabic = fullNameArabic;
+  if (nationalIdExpiryDate !== undefined) employee.nationalIdExpiryDate = optionalDate(nationalIdExpiryDate);
+  if (governorate !== undefined) employee.governorate = governorate;
+  if (city !== undefined) employee.city = city;
+  if (emergencyPhone !== undefined) employee.emergencyPhone = emergencyPhone;
+  if (subLocation !== undefined) employee.subLocation = subLocation;
+  if (insurances !== undefined) employee.insurances = insurances;
+  if (medicalCondition !== undefined) employee.medicalCondition = medicalCondition;
+  if (socialInsurance !== undefined) employee.socialInsurance = socialInsurance;
+
+  if (employee.status === "TERMINATED" || employee.status === "RESIGNED") {
+    employee.isActive = false;
+  } else if (employee.status === "ACTIVE") {
+    employee.isActive = true;
+  }
 
   await employee.save();
 
-  // Update isActive based on employment status
-  if (employee.status === "TERMINATED" || employee.status === "RESIGNED") {
-    employee.isActive = false;
-    await employee.save();
-  } else if (employee.status === "ACTIVE") {
-    employee.isActive = true;
-    await employee.save();
+  return res.json(employee);
+});
+
+/**
+ * POST /api/employees/:id/transfer
+ * Transfer an employee to another department.
+ * Body: { toDepartment, newPosition, newSalary, resetYearlyIncreaseDate, notes }
+ */
+router.post("/:id/transfer", requireAuth, async (req, res) => {
+  const access = await resolveEmployeeAccess(req.user);
+  if (!access.actions.includes("edit"))
+    return res.status(403).json({ error: "Forbidden" });
+
+  const employee = await Employee.findById(req.params.id);
+  if (!employee) return res.status(404).json({ error: "Employee not found" });
+
+  const { toDepartment, newPosition, newSalary, resetYearlyIncreaseDate, notes } = req.body;
+  if (!toDepartment) return res.status(400).json({ error: "Target department is required" });
+
+  const toDeptDoc = await Department.findOne({ name: toDepartment });
+  if (!toDeptDoc) return res.status(404).json({ error: "Target department not found" });
+
+  const fromDeptDoc = await Department.findOne({ name: employee.department });
+  const transferDate = new Date();
+  let newYearlyIncreaseDate = employee.yearlySalaryIncreaseDate;
+
+  if (resetYearlyIncreaseDate) {
+    newYearlyIncreaseDate = new Date(transferDate);
+    newYearlyIncreaseDate.setFullYear(newYearlyIncreaseDate.getFullYear() + 1);
   }
 
-  return res.json(employee);
+  const transferRecord = {
+    fromDepartment: fromDeptDoc?._id,
+    fromDepartmentName: employee.department,
+    toDepartment: toDeptDoc._id,
+    toDepartmentName: toDepartment,
+    transferDate,
+    newPosition: newPosition || employee.position,
+    newSalary: newSalary || employee.financial?.baseSalary,
+    yearlyIncreaseDateChanged: !!resetYearlyIncreaseDate,
+    newYearlyIncreaseDate: resetYearlyIncreaseDate ? newYearlyIncreaseDate : undefined,
+    notes,
+    processedBy: req.user.email,
+  };
+
+  if (!employee.transferHistory) employee.transferHistory = [];
+  employee.transferHistory.push(transferRecord);
+
+  employee.department = toDepartment;
+  employee.departmentId = toDeptDoc._id;
+  if (newPosition) employee.position = newPosition;
+  if (newSalary) {
+    if (!employee.financial) employee.financial = {};
+    employee.financial.baseSalary = newSalary;
+  }
+  if (resetYearlyIncreaseDate) {
+    employee.yearlySalaryIncreaseDate = newYearlyIncreaseDate;
+  }
+
+  await employee.save();
+
+  return res.json({ message: "Employee transferred successfully", employee, transferRecord });
 });
 
 router.delete("/:id", requireAuth, async (req, res) => {
@@ -425,41 +443,95 @@ router.delete("/:id", requireAuth, async (req, res) => {
   if (!access.actions.includes("delete"))
     return res.status(403).json({ error: "Forbidden" });
 
-  // Explicit policy: Only Managers and Admins can delete data.
   if (req.user.role === "EMPLOYEE" || req.user.role === 1) {
-    return res.status(403).json({
-      error: "Policy Restriction: Only Managers and Admins can delete data.",
-    });
+    return res.status(403).json({ error: "Policy Restriction: Only Managers and Admins can delete data." });
   }
 
   const employee = await Employee.findById(req.params.id);
   if (!employee) return res.status(404).json({ error: "Employee not found" });
 
   if (access.scope === "department") {
-    // Only Managers can delete FROM their managed departments explicitly, not just from the dept they belong to!
-    const deptNames = await Department.find({ head: req.user.email }).distinct(
-      "name",
-    );
+    const deptNames = await Department.find({ head: req.user.email }).distinct("name");
     if (!deptNames.includes(employee.department)) {
-      return res.status(403).json({
-        error:
-          "Managers can only delete employees from departments they explicitly manage.",
-      });
+      return res.status(403).json({ error: "Managers can only delete employees from departments they explicitly manage." });
     }
   } else if (access.scope === "self") {
-    return res
-      .status(403)
-      .json({ error: "Scope 'self' cannot delete records." });
+    return res.status(403).json({ error: "Scope 'self' cannot delete records." });
   }
 
   const employee_id = employee._id.toString();
-
   await Employee.findByIdAndDelete(req.params.id);
-
-  // Clean up associated permissions
   await UserPermission.deleteMany({ userId: employee_id });
 
   return res.json({ success: true });
+});
+
+/**
+ * Process Annual Salary Increase
+ * @route POST /api/employees/:id/process-increase
+ */
+router.post("/:id/process-increase", requireAuth, async (req, res) => {
+  const { role, email } = req.user;
+  if (!["ADMIN", "HR_MANAGER", "HR_STAFF"].includes(role)) {
+    return res.status(403).json({ error: "Unauthorized to process salary increases" });
+  }
+
+  const { increasePercentage, increaseAmount, reason, effectiveDate } = req.body;
+  const employee = await Employee.findById(req.params.id);
+
+  if (!employee) {
+    return res.status(404).json({ error: "Employee not found" });
+  }
+
+  const currentSalary = employee.financial?.baseSalary || 0;
+  let computedNewSalary = currentSalary;
+  let computedAmount = 0;
+  let computedPercent = 0;
+
+  if (increasePercentage) {
+    computedPercent = Number(increasePercentage);
+    computedAmount = (currentSalary * computedPercent) / 100;
+    computedNewSalary = currentSalary + computedAmount;
+  } else if (increaseAmount) {
+    computedAmount = Number(increaseAmount);
+    computedNewSalary = currentSalary + computedAmount;
+    computedPercent = currentSalary > 0 ? (computedAmount / currentSalary) * 100 : 0;
+  } else {
+    return res.status(400).json({ error: "Must provide increasePercentage or increaseAmount" });
+  }
+
+  // Record Transaction
+  const transaction = {
+    previousSalary: currentSalary,
+    newSalary: Math.round(computedNewSalary),
+    increaseAmount: Math.round(computedAmount),
+    increasePercentage: Number(computedPercent.toFixed(2)),
+    effectiveDate: effectiveDate || new Date(),
+    reason: reason || "Annual Increase",
+    processedBy: email,
+  };
+
+  if (!employee.salaryHistory) employee.salaryHistory = [];
+  employee.salaryHistory.push(transaction);
+
+  // Update Current Salary
+  if (!employee.financial) employee.financial = {};
+  employee.financial.baseSalary = Math.round(computedNewSalary);
+
+  // Roll forward the Next Increase Date
+  // Logic: Set to exactly 1 year from the processing date (or the effective date)
+  const nextDate = new Date(transaction.effectiveDate);
+  nextDate.setFullYear(nextDate.getFullYear() + 1);
+  employee.yearlySalaryIncreaseDate = nextDate;
+
+  // Track the change in transfer/salary logs if needed, but salaryHistory is enough.
+  await employee.save();
+
+  return res.json({
+    message: "Salary increase processed successfully",
+    employee,
+    nextIncreaseDate: nextDate,
+  });
 });
 
 export default router;

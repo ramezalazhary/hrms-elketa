@@ -4,6 +4,7 @@ import {
   getEmployeesApi,
   deleteEmployeeApi,
   updateEmployeeApi,
+  processSalaryIncreaseApi,
 } from "./api";
 
 const initialState = {
@@ -13,7 +14,7 @@ const initialState = {
 
 export const fetchEmployeesThunk = createAsyncThunk(
   "employees/fetch",
-  async () => getEmployeesApi(),
+  async (params) => getEmployeesApi(params),
 );
 
 export const createEmployeeThunk = createAsyncThunk(
@@ -29,6 +30,11 @@ export const deleteEmployeeThunk = createAsyncThunk(
 export const updateEmployeeThunk = createAsyncThunk(
   "employees/update",
   async (payload) => updateEmployeeApi(payload),
+);
+
+export const processSalaryIncreaseThunk = createAsyncThunk(
+  "employees/processIncrease",
+  async (payload) => processSalaryIncreaseApi(payload),
 );
 
 const employeesSlice = createSlice({
@@ -56,6 +62,13 @@ const employeesSlice = createSlice({
     builder.addCase(updateEmployeeThunk.fulfilled, (state, action) => {
       state.items = state.items.map((item) =>
         item.id === action.payload.id ? action.payload : item,
+      );
+    });
+    builder.addCase(processSalaryIncreaseThunk.fulfilled, (state, action) => {
+      // Backend returns { message, employee, nextIncreaseDate } or just employee
+      const emp = action.payload.employee || action.payload;
+      state.items = state.items.map((item) =>
+        item.id === emp.id ? emp : item,
       );
     });
     builder.addCase(deleteEmployeeThunk.fulfilled, (state, action) => {

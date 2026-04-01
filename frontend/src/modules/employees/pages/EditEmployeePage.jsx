@@ -8,6 +8,8 @@ import { updateEmployeeThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { getDocumentRequirementsApi } from "@/modules/organization/api";
 import { API_URL } from "@/shared/api/apiBase";
+import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
+import { ArrowRightLeft, Clock } from "lucide-react";
 
 export function EditEmployeePage() {
   const dispatch = useAppDispatch();
@@ -20,17 +22,32 @@ export function EditEmployeePage() {
   const { showToast } = useToast();
 
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [documentChecklist, setDocumentChecklist] = useState([]);
+  const [activeTab, setActiveTab] = useState("profile");
+  const [selectedGovernorate, setSelectedGovernorate] = useState("");
+  const [selectedCity, setSelectedCity] = useState("");
+  const [socialInsuranceStatus, setSocialInsuranceStatus] = useState("NOT_INSURED");
+  const [hasMedicalInsurance, setHasMedicalInsurance] = useState("NO");
+  const [policyLocations, setPolicyLocations] = useState([]);
+
   const employee = useMemo(
     () => employees.find((item) => item.id === employeeId),
     [employeeId, employees],
   );
 
   useEffect(() => {
-    if (!departments.length) {
-      dispatch(fetchDepartmentsThunk());
-    }
+    if (!departments.length) dispatch(fetchDepartmentsThunk());
   }, [dispatch, departments.length]);
+
+  useEffect(() => {
+    if (employee) {
+      setSelectedGovernorate(employee.governorate || "");
+      setSelectedCity(employee.city || "");
+      setSocialInsuranceStatus(employee.socialInsurance?.status || "NOT_INSURED");
+      setHasMedicalInsurance(employee.insurance?.provider ? "YES" : "NO");
+    }
+  }, [employee]);
 
   useEffect(() => {
     async function syncChecklist() {
@@ -39,7 +56,6 @@ export function EditEmployeePage() {
           const data = await getDocumentRequirementsApi();
           const required = data.documentRequirements || [];
           const existing = employee.documentChecklist || [];
-          
           const merged = required.map(req => {
             const found = existing.find(e => e.documentName === req.name);
             return {
@@ -57,27 +73,67 @@ export function EditEmployeePage() {
       }
     }
     syncChecklist();
+
+    const loadPolicy = async () => {
+      try {
+        const data = await getDocumentRequirementsApi();
+        if (data.workLocations) setPolicyLocations(data.workLocations);
+      } catch (err) {}
+    };
+    loadPolicy();
   }, [employee]);
+
+  const cityOptions = useMemo(() => {
+    return getCitiesForGovernorate(selectedGovernorate).map((c) => ({ label: c, value: c }));
+  }, [selectedGovernorate]);
+
+  const selectedBranches = useMemo(() => {
+    return policyLocations.find((l) => l.city === selectedCity)?.branches || [];
+  }, [policyLocations, selectedCity]);
+
+  const branchOptions = selectedBranches.length > 0 
+      ? selectedBranches.map((b) => ({ label: b, value: b }))
+      : [{ label: "— Select city or register branches in Policy —", value: "" }];
 
   const handleResetPassword = async (values) => {
     try {
       const res = await fetch(`${API_URL}/auth/reset-password`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
         body: JSON.stringify({ targetEmail: employee.email, newPassword: values.newPassword })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to reset password");
-      
       showToast(`Password successfully forced to new value for ${employee.email}`, "success");
       setShowResetModal(false);
     } catch(err) {
       showToast(err.message, "error");
     }
-  }
+  };
+
+  const handleTransfer = async (values) => {
+    try {
+      const res = await fetch(`${API_URL}/employees/${employee.id}/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          toDepartment: values.toDepartment,
+          newPosition: values.newPosition || undefined,
+          newSalary: values.newSalary ? Number(values.newSalary) : undefined,
+          resetYearlyIncreaseDate: values.resetYearlyIncreaseDate === "YES",
+          notes: values.notes,
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to process transfer");
+      showToast(`${employee.fullName} transferred to ${values.toDepartment} successfully`, "success");
+      setShowTransferModal(false);
+    } catch(err) {
+      showToast(err.message, "error");
+    }
+  };
+
+  const canAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "HR_MANAGER";
 
   if (!employee) {
     return (
@@ -89,12 +145,23 @@ export function EditEmployeePage() {
     );
   }
 
+  const transferHistory = employee.transferHistory || [];
+
   return (
     <Layout
       title="Edit Employee"
       description="Update employee information and organizational assignment."
       actions={
         <div className="flex items-center gap-2">
+          {canAdmin && (
+            <button
+              onClick={() => setShowTransferModal(true)}
+              className="rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 px-3 py-1.5 text-sm font-medium transition hover:bg-indigo-100 shadow-sm flex items-center gap-1.5"
+            >
+              <ArrowRightLeft className="h-3.5 w-3.5" />
+              Transfer
+            </button>
+          )}
           {currentUser?.role === "ADMIN" && (
             <button
               onClick={() => setShowResetModal(true)}
@@ -106,18 +173,16 @@ export function EditEmployeePage() {
         </div>
       }
     >
+      {/* Reset Password Modal */}
       {showResetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/30 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl relative z-10 animate-in zoom-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl relative z-10">
             <h2 className="text-xl font-bold text-slate-800 mb-2">Reset User Password</h2>
             <p className="text-sm text-slate-600 mb-6">
-              You are about to forcibly override the password for <strong>{employee?.email}</strong>. 
-              They will be locked out of their old account and forced to change this new temporary password immediately.
+              You are about to forcibly override the password for <strong>{employee?.email}</strong>.
             </p>
-            <FormBuilder 
-              fields={[
-                { name: "newPassword", type: "password", label: "New Secure Password", required: true }
-              ]}
+            <FormBuilder
+              fields={[{ name: "newPassword", type: "password", label: "New Secure Password", required: true }]}
               submitLabel="Execute Reset"
               onCancel={() => setShowResetModal(false)}
               onSubmit={handleResetPassword}
@@ -126,203 +191,476 @@ export function EditEmployeePage() {
         </div>
       )}
 
-      <FormBuilder
-        onCancel={() => navigate("/employees")}
-        fields={[
-          { type: "section", label: "1. Personal Information" },
-          { name: "fullName", label: "Full Name", type: "text", required: true },
-          { name: "dateOfBirth", label: "Date of Birth", type: "date" },
-          {
-            name: "gender",
-            label: "Gender",
-            type: "select",
-            required: true,
-            options: [
-              { label: "Male", value: "MALE" },
-              { label: "Female", value: "FEMALE" },
-              { label: "Other", value: "OTHER" },
-              { label: "Prefer not to say", value: "PREFER_NOT_TO_SAY" },
-            ]
-          },
-          {
-            name: "maritalStatus",
-            label: "Marital Status",
-            type: "select",
-            required: true,
-            options: [
-              { label: "Single", value: "SINGLE" },
-              { label: "Married", value: "MARRIED" },
-              { label: "Divorced", value: "DIVORCED" },
-              { label: "Widowed", value: "WIDOWED" },
-            ]
-          },
-          { name: "nationality", label: "Nationality", type: "text" },
-          { name: "idNumber", label: "ID Number", type: "text" },
-
-          { type: "section", label: "2. Contact Information" },
-          { name: "email", label: "Personal Email", type: "email", required: true },
-          { name: "workEmail", label: "Work Email", type: "email" },
-          { name: "phoneNumber", label: "Phone Number", type: "text" },
-          { name: "address", label: "Current Address", type: "text", fullWidth: true },
-
-          { type: "section", label: "3. Job & Administrative" },
-          { name: "employeeCode", label: "Employee Code", type: "text" },
-          { name: "position", label: "Job Title", type: "text", required: true },
-          { 
-            name: "department", 
-            label: "Department", 
-            type: "select", 
-            required: true,
-            options: departments.map(d => ({ label: d.name, value: d.name }))
-          },
-          {
-            name: "team",
-            label: "Team / Unit",
-            type: "select",
-            options: departments.flatMap(d => (d.teams || []).map(t => ({ label: `${t.name} (${d.name})`, value: t.name })))
-          },
-          { name: "workLocation", label: "Work Location", type: "text" },
-          { name: "onlineStorageLink", label: "Online Storage Link", type: "text" },
-          { name: "dateOfHire", label: "Date of Hire", type: "date" },
-          {
-            name: "employmentType",
-            label: "Contract Type",
-            type: "select",
-            required: true,
-            options: [
-              { label: "Full-Time", value: "FULL_TIME" },
-              { label: "Part-Time", value: "PART_TIME" },
-              { label: "Contractor", value: "CONTRACTOR" },
-              { label: "Temporary", value: "TEMPORARY" },
-            ]
-          },
-          {
-            name: "status",
-            label: "Status",
-            type: "select",
-            required: true,
-            options: [
-              { label: "Active", value: "ACTIVE" },
-              { label: "On Leave", value: "ON_LEAVE" },
-              { label: "Resigned", value: "RESIGNED" },
-              { label: "Terminated", value: "TERMINATED" },
-            ]
-          },
-          
-          { type: "section", label: "4. Benefits & Compensation" },
-          { name: "insuranceProvider", label: "Insurance Provider", type: "text" },
-          { name: "insurancePolicy", label: "Policy Number", type: "text" },
-          {
-             name: "insuranceCoverage",
-             label: "Coverage Type",
-             type: "select",
-             options: [
-                { label: "Health", value: "HEALTH" },
-                { label: "Life", value: "LIFE" },
-                { label: "Dental", value: "DENTAL" },
-                { label: "Vision", value: "VISION" },
-                { label: "Comprehensive", value: "COMPREHENSIVE" },
-             ]
-          },
-          { name: "baseSalary", label: "Base Salary", type: "number" },
-          { name: "currency", label: "Currency", type: "text", placeholder: "USD" },
-        ]}
-        initialValues={{
-          ...employee,
-          dateOfBirth: employee.dateOfBirth ? new Date(employee.dateOfBirth).toISOString().split('T')[0] : '',
-          dateOfHire: employee.dateOfHire ? new Date(employee.dateOfHire).toISOString().split('T')[0] : '',
-          insuranceProvider: employee.insurance?.provider || '',
-          insurancePolicy: employee.insurance?.policyNumber || '',
-          insuranceCoverage: employee.insurance?.coverageType || 'HEALTH',
-          baseSalary: employee.financial?.baseSalary || '',
-          currency: employee.financial?.currency || 'USD',
-        }}
-        submitLabel="Save Changes"
-        onSubmit={async (values) => {
-          try {
-            const payload = { ...values };
-            payload.insurance = {
-              provider: values.insuranceProvider,
-              policyNumber: values.insurancePolicy,
-              coverageType: values.insuranceCoverage
-            };
-            payload.financial = {
-              baseSalary: Number(values.baseSalary) || 0,
-              currency: values.currency || 'USD'
-            };
-            
-            // Add checklist
-            payload.documentChecklist = documentChecklist;
-
-            await dispatch(
-              updateEmployeeThunk({
-                id: employee.id,
-                ...payload,
-              }),
-            ).unwrap();
-            showToast("Employee updated successfully", "success");
-            navigate("/employees");
-          } catch (error) {
-            console.error(error);
-            showToast("Failed to update employee", "error");
-          }
-        }}
-      />
-
-      {/* Document Checklist Section */}
-      <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between border-b pb-4 mb-4">
-           <div>
-              <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wide">Document Checklist</h3>
-              <p className="text-xs text-slate-500 italic">Mark documents as received from the employee.</p>
-           </div>
-           <div className="text-right">
-              <span className="text-sm font-bold text-indigo-600">
-                 {documentChecklist.filter(d => d.status === "RECEIVED").length} / {documentChecklist.length} Submitted
-              </span>
-              <div className="w-48 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                 <div 
-                   className="h-full bg-indigo-500 transition-all duration-500" 
-                   style={{ width: `${(documentChecklist.filter(d => d.status === "RECEIVED").length / Math.max(1, documentChecklist.length)) * 100}%` }}
-                 />
-              </div>
-           </div>
+      {/* Transfer Modal */}
+      {showTransferModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/30 backdrop-blur-[2px] p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl relative z-10">
+            <h2 className="text-xl font-bold text-slate-800 mb-1">Transfer Employee</h2>
+            <p className="text-sm text-slate-500 mb-5">
+              Moving <strong>{employee.fullName}</strong> from <strong>{employee.department}</strong>
+            </p>
+            <FormBuilder
+              fields={[
+                {
+                  name: "toDepartment",
+                  label: "Transfer To Department",
+                  type: "select",
+                  required: true,
+                  options: departments.filter(d => d.name !== employee.department).map(d => ({ label: d.name, value: d.name }))
+                },
+                { name: "newPosition", label: "New Position (optional)", type: "text" },
+                { name: "newSalary", label: "New Base Salary (optional)", type: "number" },
+                {
+                  name: "resetYearlyIncreaseDate",
+                  label: "Reset Yearly Increase Date?",
+                  type: "radio",
+                  required: true,
+                  options: [
+                    { label: "Keep existing date (preserves salary cycle)", value: "NO" },
+                    { label: "Reset yearly salary increase date (Set to 1 year from now)", value: "YES" },
+                  ]
+                },
+                { name: "notes", label: "Transfer Notes", type: "textarea" },
+              ]}
+              submitLabel="Confirm Transfer"
+              onCancel={() => setShowTransferModal(false)}
+              onSubmit={handleTransfer}
+            />
+          </div>
         </div>
-        <div className="grid md:grid-cols-2 gap-4">
-           {documentChecklist.map((doc, idx) => (
-             <div key={idx} className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${doc.status === "RECEIVED" ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
-                <input 
-                  type="checkbox"
-                  id={`doc-${idx}`}
-                  checked={doc.status === "RECEIVED"}
-                  onChange={(e) => {
-                    const next = [...documentChecklist];
-                    next[idx].status = e.target.checked ? "RECEIVED" : "MISSING";
-                    if (e.target.checked && !next[idx].submissionDate) {
-                        next[idx].submissionDate = new Date().toISOString();
-                    }
-                    setDocumentChecklist(next);
-                  }}
-                  className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                />
-                <div className="flex-1">
-                   <label htmlFor={`doc-${idx}`} className="text-sm font-bold text-slate-800 block cursor-pointer">{doc.documentName}</label>
-                   {doc.description && <p className="text-[10px] text-slate-500 italic">{doc.description}</p>}
-                </div>
-                {doc.status === "RECEIVED" && doc.submissionDate && (
-                  <span className="text-[10px] font-medium text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
-                     Received {new Date(doc.submissionDate).toLocaleDateString()}
+      )}
+
+      {/* Tab nav */}
+      <div className="flex gap-1 mb-6 border-b border-zinc-200">
+        {["profile", "transfer_history"].map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
+              activeTab === tab
+                ? "bg-white border border-b-white border-zinc-200 text-zinc-900 -mb-px"
+                : "text-zinc-500 hover:text-zinc-700"
+            }`}
+          >
+            {tab === "profile" ? "Profile" : (
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" />
+                Transfer History
+                {transferHistory.length > 0 && (
+                  <span className="ml-1 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5">
+                    {transferHistory.length}
                   </span>
                 )}
-             </div>
-           ))}
-           {documentChecklist.length === 0 && (
-             <p className="col-span-2 text-center py-6 text-slate-400 text-sm italic">
-               No documents required for this department.
-             </p>
-           )}
-        </div>
+              </span>
+            )}
+          </button>
+        ))}
       </div>
+
+      {activeTab === "profile" ? (
+        <>
+          <FormBuilder
+            onCancel={() => navigate("/employees")}
+            onChange={(name, value) => {
+              if (name === "governorate") {
+                setSelectedGovernorate(value);
+                setSelectedCity("");
+              }
+              if (name === "city") setSelectedCity(value);
+              if (name === "socialInsuranceStatus") setSocialInsuranceStatus(value);
+              if (name === "hasMedicalInsurance") setHasMedicalInsurance(value);
+            }}
+            fields={[
+              { type: "section", label: "1. Personal Information" },
+              { name: "fullName", label: "Full Name (English)", type: "text", required: true },
+              { name: "fullNameArabic", label: "Full Name (Arabic)", type: "text", placeholder: "كما في البطاقة الوطنية" },
+              { name: "dateOfBirth", label: "Date of Birth", type: "date" },
+              {
+                name: "gender",
+                label: "Gender",
+                type: "select",
+                required: true,
+                options: [
+                  { label: "Male", value: "MALE" },
+                  { label: "Female", value: "FEMALE" },
+                  { label: "Other", value: "OTHER" },
+                  { label: "Prefer not to say", value: "PREFER_NOT_TO_SAY" },
+                ]
+              },
+              {
+                name: "maritalStatus",
+                label: "Marital Status",
+                type: "select",
+                required: true,
+                options: [
+                  { label: "Single", value: "SINGLE" },
+                  { label: "Married", value: "MARRIED" },
+                  { label: "Divorced", value: "DIVORCED" },
+                  { label: "Widowed", value: "WIDOWED" },
+                ]
+              },
+              { name: "nationality", label: "Nationality", type: "text" },
+              { name: "idNumber", label: "National ID Number", type: "text" },
+              { name: "nationalIdExpiryDate", label: "National ID Expiry Date", type: "date" },
+
+              { type: "section", label: "2. Contact Information" },
+              { name: "email", label: "Personal Email", type: "email", required: true },
+              { name: "workEmail", label: "Work Email", type: "email" },
+              { name: "phoneNumber", label: "Phone Number", type: "text" },
+              { name: "emergencyPhone", label: "Emergency Contact Phone", type: "text" },
+              { name: "address", label: "Current Address", type: "text", fullWidth: true },
+              {
+                name: "governorate",
+                label: "Governorate",
+                type: "select",
+                options: EGYPT_GOVERNORATES.map((g) => ({ label: `${g.name} (${g.nameAr})`, value: g.name })),
+              },
+              {
+                name: "city",
+                label: "City",
+                type: "select",
+                options: cityOptions.length > 0
+                  ? cityOptions
+                  : [{ label: "— Select governorate first —", value: "" }],
+              },
+
+              { type: "section", label: "3. Job & Administrative" },
+              { name: "employeeCode", label: "Employee Code", type: "text" },
+              { name: "position", label: "Job Title", type: "text", required: true },
+              {
+                name: "department",
+                label: "Department",
+                type: "select",
+                required: true,
+                options: departments.map(d => ({ label: d.name, value: d.name }))
+              },
+              {
+                name: "team",
+                label: "Team / Unit",
+                type: "select",
+                options: departments.flatMap(d => (d.teams || []).map(t => ({ label: `${t.name} (${d.name})`, value: t.name })))
+              },
+              {
+                name: "workLocation",
+                label: "Work Location / Branch",
+                type: "select",
+                options: branchOptions
+              },
+              { name: "subLocation", label: "Sub-Location (Floor / Wing)", type: "text" },
+              { name: "onlineStorageLink", label: "Online Storage Link", type: "text" },
+              { name: "dateOfHire", label: "Date of Hire", type: "date" },
+              {
+                name: "employmentType",
+                label: "Contract Type",
+                type: "select",
+                required: true,
+                options: [
+                  { label: "Full-Time", value: "FULL_TIME" },
+                  { label: "Part-Time", value: "PART_TIME" },
+                  { label: "Contractor", value: "CONTRACTOR" },
+                  { label: "Temporary", value: "TEMPORARY" },
+                ]
+              },
+              {
+                name: "status",
+                label: "Status",
+                type: "select",
+                required: true,
+                options: [
+                  { label: "Active", value: "ACTIVE" },
+                  { label: "On Leave", value: "ON_LEAVE" },
+                  { label: "Resigned", value: "RESIGNED" },
+                  { label: "Terminated", value: "TERMINATED" },
+                ]
+              },
+
+              { type: "section", label: "4. Benefits & Compensation" },
+              { name: "baseSalary", label: "Base Salary", type: "number" },
+              {
+                 name: "paymentMethod",
+                 label: "Payment Method",
+                 type: "select",
+                 options: [
+                    { label: "Bank Transfer", value: "BANK_TRANSFER" },
+                    { label: "Cash", value: "CASH" },
+                    { label: "Cheque", value: "CHEQUE" },
+                    { label: "E-Wallet", value: "E_WALLET" },
+                 ]
+              },
+              { name: "bankAccount", label: "Bank Account Number", type: "text" },
+              { name: "currency", label: "Currency", type: "text", placeholder: "EGP" },
+
+              { type: "section", label: "5. Social Insurance & Health" },
+              {
+                 name: "hasMedicalInsurance",
+                 label: "Has Medical Insurance?",
+                 type: "select",
+                 options: [
+                    { label: "No", value: "NO" },
+                    { label: "Yes", value: "YES" },
+                 ]
+              },
+              ...(hasMedicalInsurance === "YES" ? [
+                { name: "insuranceProvider", label: "Insurance Provider", type: "text" },
+                { name: "insurancePolicy", label: "Policy Number", type: "text" },
+                {
+                   name: "insuranceCoverage",
+                   label: "Coverage Type",
+                   type: "select",
+                   options: [
+                      { label: "Health", value: "HEALTH" },
+                      { label: "Life", value: "LIFE" },
+                      { label: "Dental", value: "DENTAL" },
+                      { label: "Vision", value: "VISION" },
+                      { label: "Comprehensive", value: "COMPREHENSIVE" },
+                   ]
+                },
+                { name: "medicalCondition", label: "Medical Condition / Disease Type", type: "text" },
+              ] : []),
+              {
+                 name: "socialInsuranceStatus",
+                 label: "Social Insurance Enrollment",
+                 type: "select",
+                 options: [
+                    { label: "Not Insured", value: "NOT_INSURED" },
+                    { label: "Life and Social", value: "INSURED" },
+                 ]
+              },
+              ...(socialInsuranceStatus === "INSURED" ? [
+                { name: "dateOfHireDummy", label: "Date of Hire (Reference)", type: "text", disabled: true, value: employee?.dateOfHire ? new Date(employee.dateOfHire).toLocaleDateString() : "" },
+                { name: "insuranceDate", label: "Insurance Date", type: "date" },
+                { name: "subscriptionWage", label: "Subscription Wage", type: "number", placeholder: "أجر الأشتراك" },
+                { name: "basicWage", label: "Basic Wage / Fixed Wage", type: "number", placeholder: "أجر أساسي" },
+                { name: "comprehensiveWage", label: "Comprehensive Wage / Total Wage", type: "number", placeholder: "الأجر الشامل" },
+                { name: "jobType", label: "Job Type / Work Type", type: "text", placeholder: "نوع العمل" },
+                { name: "form6Date", label: "Form 6 Date (Insurance End)", type: "date" },
+                { name: "insuranceNumber", label: "Insurance Number", type: "text" },
+              ] : [])
+            ]}
+            initialValues={{
+              ...employee,
+              dateOfBirth: employee.dateOfBirth ? new Date(employee.dateOfBirth).toISOString().split('T')[0] : '',
+              dateOfHire: employee.dateOfHire ? new Date(employee.dateOfHire).toISOString().split('T')[0] : '',
+              nationalIdExpiryDate: employee.nationalIdExpiryDate ? new Date(employee.nationalIdExpiryDate).toISOString().split('T')[0] : '',
+              annualAnniversaryDate: employee.annualAnniversaryDate ? new Date(employee.annualAnniversaryDate).toISOString().split('T')[0] : '',
+              governorate: employee.governorate || '',
+              city: employee.city || '',
+              emergencyPhone: employee.emergencyPhone || '',
+              subLocation: employee.subLocation || '',
+              fullNameArabic: employee.fullNameArabic || '',
+              hasMedicalInsurance: employee.insurance?.provider ? "YES" : "NO",
+              insuranceProvider: employee.insurance?.provider || '',
+              insurancePolicy: employee.insurance?.policyNumber || '',
+              insuranceCoverage: employee.insurance?.coverageType || 'HEALTH',
+              baseSalary: employee.financial?.baseSalary || '',
+              paymentMethod: employee.financial?.paymentMethod || 'BANK_TRANSFER',
+              bankAccount: employee.financial?.bankAccount || '',
+              currency: employee.financial?.currency || 'EGP',
+              socialInsuranceStatus: employee.socialInsurance?.status || 'NOT_INSURED',
+              insuranceDate: employee.socialInsurance?.insuranceDate ? new Date(employee.socialInsurance.insuranceDate).toISOString().split('T')[0] : '',
+              subscriptionWage: employee.socialInsurance?.subscriptionWage || '',
+              basicWage: employee.socialInsurance?.basicWage || '',
+              comprehensiveWage: employee.socialInsurance?.comprehensiveWage || '',
+              jobType: employee.socialInsurance?.jobType || '',
+              form6Date: employee.socialInsurance?.form6Date ? new Date(employee.socialInsurance.form6Date).toISOString().split('T')[0] : '',
+              insuranceNumber: employee.socialInsurance?.insuranceNumber || '',
+              medicalCondition: employee.medicalCondition || '',
+            }}
+            submitLabel="Save Changes"
+            onSubmit={async (values) => {
+              try {
+                const payload = { ...values };
+                if (values.hasMedicalInsurance === "YES") {
+                  payload.insurance = {
+                    provider: values.insuranceProvider,
+                    policyNumber: values.insurancePolicy,
+                    coverageType: values.insuranceCoverage
+                  };
+                  payload.medicalCondition = values.medicalCondition || undefined;
+                } else {
+                  payload.insurance = { provider: "", policyNumber: "", coverageType: "HEALTH" };
+                  payload.medicalCondition = ""; // Clear if no health insurance
+                }
+                
+                payload.financial = {
+                  baseSalary: values.baseSalary ? Number(values.baseSalary) : undefined,
+                  paymentMethod: values.paymentMethod || "BANK_TRANSFER",
+                  bankAccount: values.bankAccount || undefined,
+                  currency: values.currency || 'EGP'
+                };
+                payload.socialInsurance = {
+                  status: values.socialInsuranceStatus || "NOT_INSURED",
+                  insuranceDate: values.insuranceDate || undefined,
+                  subscriptionWage: values.subscriptionWage ? Number(values.subscriptionWage) : undefined,
+                  basicWage: values.basicWage ? Number(values.basicWage) : undefined,
+                  comprehensiveWage: values.comprehensiveWage ? Number(values.comprehensiveWage) : undefined,
+                  jobType: values.jobType || undefined,
+                  form6Date: values.form6Date || undefined,
+                  insuranceNumber: values.insuranceNumber || undefined,
+                };
+                payload.documentChecklist = documentChecklist;
+                
+                // Cleanup pseudo-fields from values
+                delete payload.dateOfHireDummy;
+                delete payload.hasMedicalInsurance;
+                delete payload.insuranceProvider;
+                delete payload.insurancePolicy;
+                delete payload.insuranceCoverage;
+                delete payload.baseSalary;
+                delete payload.paymentMethod;
+                delete payload.bankAccount;
+                delete payload.currency;
+                delete payload.socialInsuranceStatus;
+                delete payload.insuranceDate;
+                delete payload.subscriptionWage;
+                delete payload.basicWage;
+                delete payload.comprehensiveWage;
+                delete payload.jobType;
+                delete payload.form6Date;
+                delete payload.insuranceNumber;
+
+                await dispatch(updateEmployeeThunk({ id: employee.id, ...payload })).unwrap();
+                showToast("Employee updated successfully", "success");
+                navigate("/employees");
+              } catch (error) {
+                console.error(error);
+                showToast("Failed to update employee", "error");
+              }
+            }}
+          />
+
+          {/* Document Checklist Section */}
+          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between border-b pb-4 mb-4">
+               <div>
+                  <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wide">Document Checklist</h3>
+                  <p className="text-xs text-slate-500 italic">Mark documents as received from the employee.</p>
+               </div>
+               <div className="text-right">
+                  <span className="text-sm font-bold text-indigo-600">
+                     {documentChecklist.filter(d => d.status === "RECEIVED").length} / {documentChecklist.length} Submitted
+                  </span>
+                  <div className="w-48 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                     <div
+                       className="h-full bg-indigo-500 transition-all duration-500"
+                       style={{ width: `${(documentChecklist.filter(d => d.status === "RECEIVED").length / Math.max(1, documentChecklist.length)) * 100}%` }}
+                     />
+                  </div>
+               </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+               {documentChecklist.map((doc, idx) => (
+                 <div key={idx} className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${doc.status === "RECEIVED" ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                    <input
+                      type="checkbox"
+                      id={`doc-${idx}`}
+                      checked={doc.status === "RECEIVED"}
+                      onChange={(e) => {
+                        const next = [...documentChecklist];
+                        next[idx].status = e.target.checked ? "RECEIVED" : "MISSING";
+                        if (e.target.checked && !next[idx].submissionDate) {
+                            next[idx].submissionDate = new Date().toISOString();
+                        }
+                        setDocumentChecklist(next);
+                      }}
+                      className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <div className="flex-1">
+                       <label htmlFor={`doc-${idx}`} className="text-sm font-bold text-slate-800 block cursor-pointer">{doc.documentName}</label>
+                       {doc.description && <p className="text-[10px] text-slate-500 italic">{doc.description}</p>}
+                    </div>
+                    {doc.status === "RECEIVED" && doc.submissionDate && (
+                      <span className="text-[10px] font-medium text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
+                         Received {new Date(doc.submissionDate).toLocaleDateString()}
+                      </span>
+                    )}
+                 </div>
+               ))}
+               {documentChecklist.length === 0 && (
+                 <p className="col-span-2 text-center py-6 text-slate-400 text-sm italic">
+                   No documents required for this department.
+                 </p>
+               )}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Transfer History Tab */
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">Transfer History</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Department transfers for {employee.fullName}</p>
+            </div>
+            <span className="text-sm font-semibold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1">
+              {transferHistory.length} record{transferHistory.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          {transferHistory.length === 0 ? (
+            <div className="py-16 text-center">
+              <ArrowRightLeft className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-400 italic text-sm">No transfers recorded yet.</p>
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-100" />
+              <ol className="space-y-6">
+                {[...transferHistory].reverse().map((record, idx) => (
+                  <li key={idx} className="relative pl-12">
+                    <div className="absolute left-3.5 top-1.5 w-3 h-3 rounded-full bg-indigo-500 border-2 border-white shadow" />
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                          <span className="text-slate-500">{record.fromDepartmentName || "—"}</span>
+                          <ArrowRightLeft className="h-3.5 w-3.5 text-indigo-500" />
+                          <span className="text-indigo-700">{record.toDepartmentName}</span>
+                        </div>
+                        <span className="text-xs text-slate-500 bg-white border border-slate-200 rounded-full px-2.5 py-0.5">
+                          {new Date(record.transferDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                        {record.newPosition && (
+                          <div>
+                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">New Position</p>
+                            <p className="font-medium text-slate-700">{record.newPosition}</p>
+                          </div>
+                        )}
+                        {record.newSalary && (
+                          <div>
+                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">New Salary</p>
+                            <p className="font-medium text-slate-700">{new Intl.NumberFormat("en-EG", { style: "currency", currency: "EGP", maximumFractionDigits: 0 }).format(record.newSalary)}</p>
+                          </div>
+                        )}
+                        {record.yearlyIncreaseDateChanged && record.newYearlyIncreaseDate && (
+                          <div>
+                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">New Increase Date</p>
+                            <p className="font-medium text-indigo-600">{new Date(record.newYearlyIncreaseDate).toLocaleDateString()}</p>
+                          </div>
+                        )}
+                        {record.processedBy && (
+                          <div className="col-span-full">
+                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">Processed By</p>
+                            <p className="font-medium text-slate-600">{record.processedBy}</p>
+                          </div>
+                        )}
+                        {record.notes && (
+                          <div className="col-span-full border-t border-slate-200 pt-2 mt-1">
+                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">Notes</p>
+                            <p className="text-slate-600">{record.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+      )}
     </Layout>
   );
 }

@@ -10,6 +10,20 @@ const OrganizationPolicySchema = new Schema(
         description: { type: String }
       }
     ],
+    workLocations: [
+      {
+        governorate: { type: String, required: true },
+        city: { type: String, required: true },
+        branches: [String]
+      }
+    ],
+    salaryIncreaseRules: [
+      {
+        type: { type: String, enum: ["DEFAULT", "DEPARTMENT", "EMPLOYEE"], required: true },
+        target: { type: String }, // Dept name or Employee ID/Code
+        percentage: { type: Number, required: true, min: 0 }
+      }
+    ],
   },
   { timestamps: true }
 );

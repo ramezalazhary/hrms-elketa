@@ -10,15 +10,15 @@ export async function getDocumentRequirementsApi() {
   return response.json();
 }
 
-export async function updateDocumentRequirementsApi(documentRequirements) {
+export async function updateDocumentRequirementsApi(payload) {
   const response = await fetchWithAuth(`${API_URL}/policy/documents`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ documentRequirements }),
+    body: JSON.stringify(payload),
   });
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.error || "Failed to update document requirements");
+    throw new Error(error.error || "Failed to update organization policy");
   }
   return response.json();
 }

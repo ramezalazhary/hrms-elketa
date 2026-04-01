@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Layout } from "@/shared/components/Layout";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
@@ -16,10 +17,11 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { Calendar } from "lucide-react";
+import { Calendar, Clock, AlertTriangle, TrendingUp, FileWarning, ShieldCheck } from "lucide-react";
 import { StatusBadge } from "@/shared/components/EntityBadges";
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
 import { API_URL } from "@/shared/api/apiBase";
+import { DashboardAlerts } from "./DashboardAlerts";
 
 const STATUS_PIE_COLORS = {
   Active: "#10b981",
@@ -28,73 +30,277 @@ const STATUS_PIE_COLORS = {
   Terminated: "#ef4444",
 };
 
-function EmployeeDashboard({ currentUser, requests, onSendRequest }) {
-  const hrRequest = requests?.find(r => r.type === 'HR_MODULES');
-  const [sending, setSending] = useState(false);
+function WelcomeBanner({ employee, attendanceHistory }) {
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  const handleRequest = async () => {
-    setSending(true);
-    try {
-      await onSendRequest({
-        type: "HR_MODULES",
-        message: "Personal metrics request.",
-        // No departmentId here, which backend handles
-      });
-    } finally {
-      setSending(false);
-    }
-  };
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const hour = currentTime.getHours();
+  const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
+  
+  const todayRecord = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return attendanceHistory.find(h => h.date.startsWith(today));
+  }, [attendanceHistory]);
+
+  return (
+    <div className="relative overflow-hidden rounded-3xl bg-slate-950 p-8 shadow-2xl mb-8 group border border-white/10">
+      {/* Dynamic Mesh Gradient Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/40 via-teal-900/40 to-slate-950 opacity-100 transition-all duration-500 group-hover:scale-110" />
+      <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
+      <div className="absolute bottom-0 left-0 -ml-16 -mb-16 h-64 w-64 rounded-full bg-teal-500/10 blur-3xl" />
+
+      <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+             <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-indigo-200 border border-white/5">
+               {greeting}
+             </span>
+             {todayRecord && (
+               <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-emerald-400 border border-emerald-500/20 animate-pulse">
+                 <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,1)]" />
+                 Active Duty
+               </span>
+             )}
+          </div>
+          <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white">
+            {employee.fullName.split(' ')[0]} <span className="text-white/40">[{employee.employeeCode}]</span>
+          </h1>
+          <p className="text-indigo-100/60 text-sm font-medium">
+            Strategic operations at <span className="text-white font-bold">{employee.department}</span> unit
+          </p>
+        </div>
+
+        <div className="flex items-center gap-6 md:border-l md:border-white/10 md:pl-8">
+           <div className="text-right">
+             <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">Current Sync</p>
+             <p className="text-2xl font-black text-white tabular-nums">
+               {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+             </p>
+             <p className="text-[10px] font-bold text-indigo-300">
+               {currentTime.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}
+             </p>
+           </div>
+           
+           {todayRecord && (
+             <div className="hidden sm:block px-4 py-3 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
+               <p className="text-[9px] font-bold text-white/40 uppercase mb-1">Today's Check-in</p>
+               <p className="text-lg font-black text-white">{todayRecord.checkIn}</p>
+             </div>
+           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeDashboard({ currentUser, employees }) {
+  const [attendanceHistory, setAttendanceHistory] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const employee = useMemo(() => 
+    employees.find(e => e.email === currentUser?.email),
+    [employees, currentUser]
+  );
+
+  useEffect(() => {
+    if (!employee?._id) return;
+    const fetchHistory = async () => {
+      try {
+        const res = await fetchWithAuth(`${API_URL}/attendance/employee/${employee._id}`);
+        if (res.ok) setAttendanceHistory(await res.json());
+      } catch (e) {
+        console.error("Failed to fetch personal attendance", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchHistory();
+  }, [employee]);
+
+  if (!employee) return (
+    <div className="py-20 text-center animate-pulse">
+      <div className="h-10 w-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+      <p className="text-sm font-medium text-zinc-400">Synchronizing Personal Records...</p>
+    </div>
+  );
+
+  const idExpiryDays = employee.nationalIdExpiryDate ? Math.ceil((new Date(employee.nationalIdExpiryDate) - new Date()) / (1000 * 60 * 60 * 24)) : null;
 
   return (
     <Layout
-      title={`Welcome, ${currentUser?.email?.split("@")[0] || "Employee"}`}
-      description="Your profile overview."
+      title={`Welcome back, ${employee.fullName.split(' ')[0]}`}
+      description="Your professional overview and presence log."
+      hideHeader={true}
     >
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <article className="rounded-lg border border-zinc-200 bg-white p-6 shadow-card flex flex-col items-center col-span-1 lg:col-span-1">
-          <div className="h-20 w-20 rounded-full border border-zinc-200 bg-zinc-50 mb-4 flex items-center justify-center text-zinc-700 text-xl font-medium">
-            {currentUser?.email?.[0]?.toUpperCase() || "U"}
-          </div>
-          <h2 className="text-sm font-medium text-zinc-900">{currentUser?.email || "User"}</h2>
-          <span className="mt-2 text-[11px] font-medium text-zinc-500 uppercase tracking-wide">
-            Employee
-          </span>
-        </article>
+      <div className="space-y-6">
+        <WelcomeBanner employee={employee} attendanceHistory={attendanceHistory} />
+        
+        {/* Personal Pulse Row */}
+        <div className="grid gap-4 md:grid-cols-4">
+          <article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Days Present</p>
+            <p className="mt-1 text-2xl font-black text-zinc-900">{attendanceHistory.filter(h => h.status === 'PRESENT').length}</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">Current Month</p>
+          </article>
+          <article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Late Arrivals</p>
+            <p className="mt-1 text-2xl font-black text-amber-600">{attendanceHistory.filter(h => h.status === 'LATE').length}</p>
+            <p className="text-[10px] text-amber-500 font-bold mt-1">Requires Attention</p>
+          </article>
+          <article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">ID Status</p>
+            <div className="mt-1 flex items-baseline gap-2">
+               <p className={`text-xl font-black ${idExpiryDays !== null && idExpiryDays <= 30 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                 {idExpiryDays !== null ? (idExpiryDays <= 0 ? "Expired" : `${idExpiryDays}d Left`) : "Valid"}
+               </p>
+               {idExpiryDays !== null && idExpiryDays <= 30 && (
+                 <span className="flex h-2 w-2 rounded-full bg-rose-500 animate-ping" />
+               )}
+            </div>
+            <p className="text-[10px] text-zinc-500 font-medium mt-1">Renewal Compliance</p>
+          </article>
+          <article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Position</p>
+            <p className="mt-1 text-sm font-bold text-zinc-900 truncate">{employee.position || '—'}</p>
+            <p className="text-[10px] text-indigo-500 font-bold mt-1">{employee.department}</p>
+          </article>
+        </div>
 
-        <article className="rounded-lg border border-zinc-200 bg-white p-6 shadow-card col-span-1 lg:col-span-2">
-          <h3 className="text-sm font-medium text-zinc-900 mb-4">Analytics & Metrics</h3>
-          <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-10 text-center min-h-[12rem] flex flex-col items-center justify-center">
-            <p className="text-sm text-zinc-600 font-medium">Detailed metrics are currently locked.</p>
-            <p className="text-xs text-zinc-400 mt-2 mb-6">Optional HR modules for leads and managers.</p>
-            
-            {currentUser?.role === "TEAM_LEADER" && (
-               <button
-                 onClick={handleRequest}
-                 disabled={sending || (hrRequest && hrRequest.status === 'PENDING')}
-                 className={`px-6 py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
-                   hrRequest?.status === 'PENDING' ? 'bg-amber-50 text-amber-600 cursor-not-allowed' :
-                   hrRequest?.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 cursor-default' :
-                   'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-md'
-                 }`}
-               >
-                 {hrRequest?.status === 'PENDING' ? 'Approval Pending (Manager & HR)' : 
-                  hrRequest?.status === 'APPROVED' ? '✓ Metrics Enabled' : 
-                  sending ? 'Sending...' : 'Request Optional HR Modules'}
-               </button>
-            )}
-            
-            {hrRequest && hrRequest.status === 'PENDING' && (
-               <div className="mt-4 flex gap-4 text-[10px] font-bold uppercase tracking-tight">
-                  <span className={hrRequest.managerApproval?.status === 'APPROVED' ? 'text-emerald-500' : 'text-zinc-400'}>
-                    Manager: {hrRequest.managerApproval?.status}
-                  </span>
-                  <span className={hrRequest.hrApproval?.status === 'APPROVED' ? 'text-emerald-500' : 'text-zinc-400'}>
-                    HR: {hrRequest.hrApproval?.status}
-                  </span>
-               </div>
-            )}
+        {/* Compliance & Hierarchy Row */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Missing Documents Checklist */}
+          <article className="rounded-3xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
+               <h3 className="text-xs font-black uppercase tracking-widest text-zinc-900 border-l-2 border-indigo-500 pl-3">Compliance Checklist</h3>
+               <span className="text-[9px] font-bold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full uppercase tracking-widest">Documents</span>
+            </div>
+            <div className="p-6">
+               {(employee.documentChecklist || []).filter(d => d.status === 'MISSING').length > 0 ? (
+                 <div className="space-y-4">
+                   <p className="text-xs text-zinc-500 font-medium mb-4">
+                     Please submit the following original documents to HR to finalize your file:
+                   </p>
+                   {(employee.documentChecklist || []).filter(d => d.status === 'MISSING').map((doc, idx) => (
+                     <div key={idx} className="flex items-center justify-between p-3 bg-rose-50/50 border border-rose-100 rounded-xl group transition-all hover:bg-rose-50">
+                        <div className="flex items-center gap-3">
+                           <div className="h-8 w-8 rounded-lg bg-rose-100 flex items-center justify-center">
+                              <FileWarning className="h-4 w-4 text-rose-600" />
+                           </div>
+                           <span className="text-sm font-bold text-rose-900 truncate max-w-[200px]">{doc.documentName}</span>
+                        </div>
+                        <span className="text-[9px] font-black bg-rose-200 text-rose-700 px-2 py-0.5 rounded uppercase tracking-tighter shadow-sm">MISSING</span>
+                     </div>
+                   ))}
+                 </div>
+               ) : (
+                 <div className="py-10 text-center">
+                    <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4 border border-emerald-100">
+                       <ShieldCheck className="h-6 w-6 text-emerald-600" />
+                    </div>
+                    <p className="text-sm font-bold text-zinc-900">Records Clear</p>
+                    <p className="text-xs text-zinc-400 mt-1">All required documents have been verified.</p>
+                 </div>
+               )}
+            </div>
+          </article>
+
+          {/* Management Hierarchy Section */}
+          <article className="rounded-3xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-zinc-100">
+               <h3 className="text-xs font-black uppercase tracking-widest text-zinc-900 border-l-2 border-indigo-500 pl-3">Management & Reporting</h3>
+            </div>
+            <div className="p-6">
+              <div className="space-y-6">
+                <div>
+                  <p className="text-[9px] font-bold text-zinc-400 uppercase mb-2">Direct Manager</p>
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-500 shadow-inner">
+                      {employee.managerId?.fullName?.[0] || '?'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-zinc-900">{employee.managerId?.fullName || "Not Assigned"}</p>
+                      <p className="text-[10px] text-zinc-400">{employee.managerId?.email || "No contact info"}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="h-px bg-zinc-100" />
+                <div>
+                  <p className="text-[9px] font-bold text-zinc-400 uppercase mb-2">Team Leader</p>
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-sm font-bold text-emerald-500 shadow-inner">
+                      {employee.teamLeaderId?.fullName?.[0] || '?'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-zinc-900">{employee.teamLeaderId?.fullName || "Not Assigned"}</p>
+                      <p className="text-[10px] text-zinc-400">{employee.teamLeaderId?.email || "Unit support"}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Daily Attendance History */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="flex items-center justify-between px-1">
+               <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                 <Clock size={14} className="text-indigo-500" /> Recent Presence Logs
+               </h3>
+               {attendanceHistory.length > 0 && <span className="text-[10px] font-bold text-zinc-300">Last 30 Records</span>}
+            </div>
+            <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-zinc-50/50 border-b border-zinc-100">
+                    <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-400">Date</th>
+                    <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-400">Status</th>
+                    <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-400">Log</th>
+                    <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 text-right">Hours</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 italic font-medium text-zinc-800">
+                  {isLoading ? (
+                    <tr><td colSpan="4" className="px-6 py-10 text-center animate-pulse">Syncing...</td></tr>
+                  ) : attendanceHistory.length === 0 ? (
+                    <tr><td colSpan="4" className="px-6 py-10 text-center text-zinc-400">No attendance logs detected.</td></tr>
+                  ) : (
+                    attendanceHistory.map(record => (
+                      <tr key={record._id} className="hover:bg-zinc-50/50 transition-colors">
+                        <td className="px-6 py-4 text-xs font-bold text-zinc-900">
+                          {new Date(record.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${
+                            record.status === 'PRESENT' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                            record.status === 'LATE' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                            'bg-rose-50 text-rose-600 border-rose-100'
+                          }`}>
+                            {record.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-xs font-mono text-zinc-500">{record.checkIn || '—'} / {record.checkOut || '—'}</td>
+                        <td className="px-6 py-4 text-right pr-8 text-xs font-black text-zinc-900">{record.totalHours ? `${record.totalHours}h` : '—'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </article>
+
+          <article className="rounded-2xl border border-dashed border-zinc-200 p-6 bg-zinc-50/30">
+             <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Professional Tip</p>
+             <p className="text-xs text-zinc-500 italic leading-relaxed">
+               You can review your full historical documents and salary cycle details in your profile tab.
+             </p>
+          </article>
+        </div>
       </div>
     </Layout>
   );
@@ -272,7 +478,7 @@ function TeamLeaderDashboard({ teams, employees, currentUserEmployee }) {
   );
 }
 
-function DepartmentManagerDashboard({ department, employees, requests, onHandleRequest, currentUserEmployee }) {
+function DepartmentManagerDashboard({ department, employees, requests, onHandleRequest, currentUserEmployee, alertsSummary }) {
   const [dailyAttendance, setDailyAttendance] = useState([]);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
 
@@ -304,6 +510,8 @@ function DepartmentManagerDashboard({ department, employees, requests, onHandleR
 
   return (
     <Layout title={`${department.name} Department`} description={department.headTitle}>
+      <DashboardAlerts alerts={alertsSummary} />
+
       <section className="mb-8 p-6 rounded-2xl border border-zinc-200 bg-white shadow-sm flex flex-col md:flex-row items-center gap-6">
         <div className="h-20 w-20 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 text-3xl font-bold shadow-inner">
           {department.name[0]}
@@ -415,6 +623,7 @@ function DepartmentManagerDashboard({ department, employees, requests, onHandleR
           </div>
         </section>
       )}
+      
       <div className="grid gap-4 md:grid-cols-3 mb-8">
         <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Total Staff</p>
@@ -460,27 +669,28 @@ function DepartmentManagerDashboard({ department, employees, requests, onHandleR
           </div>
         </section>
 
-        <section className="rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+        <section className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-zinc-100 flex justify-between items-center bg-zinc-50/30">
             <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-widest">Department Staff List</h3>
+            <span className="text-[10px] font-bold text-zinc-400">{deptEmployees.length} Personnel</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-100">
-                  <th className="px-6 py-3 font-bold text-zinc-400 uppercase">Employee</th>
-                  <th className="px-6 py-3 font-bold text-zinc-400 uppercase">Position</th>
-                  <th className="px-6 py-3 font-bold text-zinc-400 uppercase">Status</th>
+                  <th className="px-6 py-4 font-bold text-zinc-400 uppercase tracking-widest">Employee</th>
+                  <th className="px-6 py-4 font-bold text-zinc-400 uppercase tracking-widest">Position</th>
+                  <th className="px-6 py-4 font-bold text-zinc-400 uppercase tracking-widest">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-zinc-100 italic font-medium text-zinc-800">
                 {deptEmployees.map(emp => (
-                  <tr key={emp.id} className="hover:bg-zinc-50/50">
+                  <tr key={emp.id} className="hover:bg-zinc-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="font-bold text-zinc-900">{emp.fullName}</div>
                       <div className="text-[10px] text-zinc-400">{emp.email}</div>
                     </td>
-                    <td className="px-6 py-4 font-medium text-zinc-600">{emp.position}</td>
+                    <td className="px-6 py-4">{emp.position}</td>
                     <td className="px-6 py-4"><StatusBadge status={emp.status} /></td>
                   </tr>
                 ))}
@@ -493,7 +703,7 @@ function DepartmentManagerDashboard({ department, employees, requests, onHandleR
   );
 }
 
-function AdminDashboard({ employees, departments, employeesPerDepartment, requests, onHandleRequest }) {
+function AdminDashboard({ employees, departments, employeesPerDepartment, requests, onHandleRequest, alertsSummary, metricsSummary }) {
   const pendingRequests = requests.filter(r => r.status === 'PENDING');
   const totalPayroll = useMemo(() => {
     return employees.reduce((sum, emp) => sum + (emp.financial?.baseSalary || 0), 0);
@@ -533,6 +743,8 @@ function AdminDashboard({ employees, departments, employeesPerDepartment, reques
       title="Global Overview"
       description="Headcount, payroll, and organization distribution."
     >
+      <DashboardAlerts alerts={alertsSummary} />
+
       {/* Management Requests Section for Admin/HR */}
       <section className="mb-8">
         <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-4">Pending Management Requests</h3>
@@ -582,7 +794,7 @@ function AdminDashboard({ employees, departments, employeesPerDepartment, reques
           </div>
         )}
       </section>
-      <div className="grid gap-4 md:grid-cols-4 mb-8">
+      <div className="grid gap-4 md:grid-cols-4 mb-4">
         <article className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Headcount</p>
           <div className="mt-2 flex flex-wrap items-baseline gap-2">
@@ -597,7 +809,7 @@ function AdminDashboard({ employees, departments, employeesPerDepartment, reques
               style: "currency",
               currency: "USD",
               maximumFractionDigits: 0,
-            }).format(totalPayroll)}
+            }).format(metricsSummary?.totalPayroll || totalPayroll)}
           </p>
         </article>
         <article className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -605,11 +817,38 @@ function AdminDashboard({ employees, departments, employeesPerDepartment, reques
           <p className="mt-2 text-2xl font-bold text-zinc-900 tabular-nums">{departments.length}</p>
         </article>
         <article className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Density</p>
-          <p className="mt-2 text-2xl font-bold text-zinc-900 tabular-nums">
-            {departments.length > 0 ? (employees.length / departments.length).toFixed(1) : "0.0"}
+          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Average Salary</p>
+          <p className="mt-2 text-2xl font-bold text-emerald-600 tabular-nums">
+            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(metricsSummary?.avgSalary || 0)}
           </p>
         </article>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3 mb-8">
+        <Link to="/employees?salaryIncreaseFrom=today" className="block w-full rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm hover:shadow-md transition cursor-pointer group">
+          <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest flex items-center justify-between">
+            Upcoming Salary Increases
+            <span className="text-amber-400 group-hover:text-amber-600 transition">→</span>
+          </p>
+          <p className="mt-2 text-3xl font-black text-amber-900 tabular-nums">{metricsSummary?.upcomingSalaryIncreases || 0}</p>
+          <p className="text-xs text-amber-700 mt-1 font-medium italic">Pending within 30 days</p>
+        </Link>
+        <Link to="/employees?idExpiringSoon=true" className="block w-full rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-white p-5 shadow-sm hover:shadow-md transition cursor-pointer group">
+          <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest flex items-center justify-between">
+            IDs Expiring Soon
+            <span className="text-red-400 group-hover:text-red-600 transition">→</span>
+          </p>
+          <p className="mt-2 text-3xl font-black text-red-900 tabular-nums">{metricsSummary?.idExpiringSoon || 0}</p>
+          <p className="text-xs text-red-700 mt-1 font-medium italic">Expiring within 60 days</p>
+        </Link>
+        <Link to="/employees?recentTransfers=true" className="block w-full rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm hover:shadow-md transition cursor-pointer group">
+          <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest flex items-center justify-between">
+            Recent Transfers
+            <span className="text-indigo-400 group-hover:text-indigo-600 transition">→</span>
+          </p>
+          <p className="mt-2 text-3xl font-black text-indigo-900 tabular-nums">{alertsSummary?.recentTransfers || 0}</p>
+          <p className="text-xs text-indigo-700 mt-1 font-medium italic">Moved within 30 days</p>
+        </Link>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 mb-8">
@@ -683,6 +922,8 @@ export function DashboardPage() {
   const { items: departments } = useAppSelector((state) => state.departments);
 
   const [requests, setRequests] = useState([]);
+  const [alertsSummary, setAlertsSummary] = useState(null);
+  const [metricsSummary, setMetricsSummary] = useState(null);
 
   const refreshRequests = async () => {
     try {
@@ -731,8 +972,14 @@ export function DashboardPage() {
       try {
         const res = await fetchWithAuth(`${API_URL}/management-requests`);
         if (!cancelled && res.ok) setRequests(await res.json());
+
+        const resAlerts = await fetchWithAuth(`${API_URL}/dashboard/alerts`);
+        if (!cancelled && resAlerts.ok) setAlertsSummary(await resAlerts.json());
+
+        const resMetrics = await fetchWithAuth(`${API_URL}/dashboard/metrics`);
+        if (!cancelled && resMetrics.ok) setMetricsSummary(await resMetrics.json());
       } catch (e) {
-        console.error("Failed to fetch requests", e);
+        console.error("Failed to fetch dashboard summaries", e);
       }
     })();
     return () => {
@@ -780,8 +1027,16 @@ export function DashboardPage() {
         employeesPerDepartment={employeesPerDepartment}
         requests={requests}
         onHandleRequest={handleUpdateRequest}
+        alertsSummary={alertsSummary}
+        metricsSummary={metricsSummary}
       />
     );
+  }
+
+  const isEmployee = currentUser?.role === "EMPLOYEE";
+
+  if (isEmployee) {
+    return <EmployeeDashboard currentUser={currentUser} employees={employees} />;
   }
 
   if (managedDepartments.length > 0) {
@@ -791,6 +1046,8 @@ export function DashboardPage() {
       requests={requests}
       onHandleRequest={handleUpdateRequest}
       currentUserEmployee={currentUserEmployee}
+      alertsSummary={alertsSummary}
+      metricsSummary={metricsSummary}
     />;
   }
 

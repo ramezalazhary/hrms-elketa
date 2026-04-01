@@ -21,6 +21,10 @@ import reportsRouter from "./routes/reports.js";
 import organizationPolicyRouter from "./routes/organizationPolicy.js";
 import attendanceRouter from "./routes/attendance.js";
 import managementRequestsRouter from "./routes/managementRequests.js";
+import onboardingRouter from "./routes/onboarding.js";
+import alertsRouter from "./routes/alerts.js";
+import dashboardRouter from "./routes/dashboard.js";
+import bulkRouter from "./routes/bulk.js";
 import { securityHeaders, apiLimiter } from "./middleware/security.js";
 
 dotenv.config();
@@ -36,14 +40,14 @@ const corsOptions =
     ? {
         origin: process.env.FRONTEND_URL || "http://localhost:5173",
         credentials: true,
-        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowedHeaders: ["Content-Type", "Authorization"],
       }
     : {
         // In development allow any origin (useful when Vite picks different ports)
         origin: (origin, cb) => cb(null, true),
         credentials: true,
-        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowedHeaders: ["Content-Type", "Authorization"],
       };
 
@@ -62,7 +66,11 @@ app.use("/api/employments", employmentsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/attendance", attendanceRouter);
 app.use("/api/management-requests", managementRequestsRouter);
+app.use("/api/onboarding", onboardingRouter);
+app.use("/api/alerts", alertsRouter);
+app.use("/api/dashboard", dashboardRouter);
 app.use("/api/policy", organizationPolicyRouter);
+app.use("/api/bulk", bulkRouter);
 
 /** Unmatched `/api/*` paths return JSON 404 (does not catch non-API routes if added later). */
 app.use("/api/*", (req, res) => {

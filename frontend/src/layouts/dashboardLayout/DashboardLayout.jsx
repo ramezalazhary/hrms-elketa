@@ -22,6 +22,7 @@ import {
   X,
   CalendarRange,
   Settings,
+  UserPlus,
 } from "lucide-react";
 
 /** Minimal dashboard chrome: neutral sidebar, hairline borders, no heavy shadows. */
@@ -102,6 +103,8 @@ export function DashboardLayout() {
       label: "My Department",
       icon: LayoutDashboard,
     });
+  } else if (currentRole === "EMPLOYEE") {
+    // Employees only have Home (Dashboard)
   }
 
   // Organizations & Employees restricted to HR/Admin
@@ -114,6 +117,7 @@ export function DashboardLayout() {
         { type: "link", to: "/organizations", label: "Structure", icon: Network },
         { type: "link", to: "/employees", label: "Employees", icon: Users },
         { type: "link", to: "/departments", label: "Departments", icon: Briefcase },
+        { type: "link", to: "/employees/onboarding", label: "Onboarding", icon: UserPlus },
         { type: "link", to: "/admin/organization-rules", label: "Organization Rules", icon: Settings },
       ],
     });

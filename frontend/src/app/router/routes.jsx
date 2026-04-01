@@ -23,7 +23,7 @@ export const appRoutes = [
       { path: "/forgot-password", element: <ForgotPasswordPage /> },
       { path: "/change-password", element: <ChangePasswordPage /> },
       {
-        path: "/welcome",
+        path: "/welcome/:token",
         element: <WelcomePage />,
       },
     ],

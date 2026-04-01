@@ -1,236 +1,582 @@
-import { useNavigate } from "react-router-dom";
-import { FormBuilder } from "@/shared/components/FormBuilder";
-import { Layout } from "@/shared/components/Layout";
+import { useParams } from "react-router-dom";
 import { useToast } from "@/shared/components/ToastProvider";
-import { useState, useMemo } from "react";
-import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
+import { useState, useEffect, useMemo } from "react";
+import { verifyOnboardingTokenApi, submitOnboardingApi } from "@/modules/employees/api";
+import { getDocumentRequirementsApi } from "@/modules/organization/api";
+import {
+  User,
+  Phone,
+  Briefcase,
+  ChevronRight,
+  ChevronLeft,
+  CheckCircle,
+  Loader2,
+  AlertTriangle,
+  Sparkles,
+  MapPin,
+  Mail,
+  Shield,
+  GraduationCap,
+} from "lucide-react";
+
+const STEPS = [
+  { id: 1, label: "Personal", icon: User },
+  { id: 2, label: "Contact", icon: Phone },
+  { id: 3, label: "Professional", icon: Briefcase },
+];
 
 export function WelcomePage() {
-  const dispatch = useAppDispatch();
-  const navigate = useNavigate();
+  const { token } = useParams();
   const { showToast } = useToast();
-  const [provisionedData, setProvisionedData] = useState(null);
-  const role = useAppSelector((state) => state.identity.currentUser?.role);
 
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [initialData, setInitialData] = useState({});
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [policy, setPolicy] = useState(null);
+  const [currentStep, setCurrentStep] = useState(1);
 
+  // Form values
+  const [values, setValues] = useState({
+    fullNameEng: "",
+    fullNameAr: "",
+    dateOfBirth: "",
+    gender: "",
+    maritalStatus: "",
+    nationality: "",
+    idNumber: "",
+    educationDegree: "",
+    email: "",
+    phoneNumber: "",
+    emergencyPhoneNumber: "",
+    workCity: "",
+    workBranch: "",
+    address: "",
+    department: "",
+    position: "",
+  });
 
+  const [fieldErrors, setFieldErrors] = useState({});
 
-  if (provisionedData) {
+  const LOCATIONS = useMemo(() => {
+    const defaults = [
+      { city: "Alexandria", branches: ["Janakless", "Saba Basha", "Gleem"] },
+      { city: "Desouk", branches: ["Location 1", "Location 2"] },
+    ];
+    if (!policy?.workLocations) return defaults;
+    const merged = [...defaults];
+    policy.workLocations.forEach((loc) => {
+      const existing = merged.find(
+        (m) => m.city.toLowerCase() === loc.city.toLowerCase()
+      );
+      if (existing) {
+        existing.branches = [...new Set([...existing.branches, ...loc.branches])];
+      } else {
+        merged.push(loc);
+      }
+    });
+    return merged;
+  }, [policy]);
+
+  const selectedBranches =
+    LOCATIONS.find((l) => l.city === values.workCity)?.branches || [];
+
+  useEffect(() => {
+    if (!token) {
+      setError("No onboarding token provided.");
+      setLoading(false);
+      return;
+    }
+    const loadData = async () => {
+      try {
+        const [tokenRes, policyRes] = await Promise.all([
+          verifyOnboardingTokenApi(token),
+          getDocumentRequirementsApi().catch(() => ({ workLocations: [] })),
+        ]);
+        if (tokenRes.valid) {
+          const pre = tokenRes.prefilledData || {};
+          setInitialData(pre);
+          setValues((prev) => ({ ...prev, ...pre }));
+        }
+        setPolicy(policyRes);
+      } catch (err) {
+        setError(err.error || "Invalid or expired onboarding link.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [token]);
+
+  const updateField = (name, value) => {
+    setValues((prev) => ({ ...prev, [name]: value }));
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
+    }
+  };
+
+  // Validation per step
+  const validateStep = (step) => {
+    const errors = {};
+    if (step === 1) {
+      if (!values.fullNameEng?.trim()) errors.fullNameEng = "Full name (English) is required";
+      if (!values.fullNameAr?.trim()) errors.fullNameAr = "Full name (Arabic) is required";
+      if (!values.dateOfBirth) errors.dateOfBirth = "Date of birth is required";
+      if (!values.gender) errors.gender = "Gender is required";
+      if (!values.maritalStatus) errors.maritalStatus = "Marital status is required";
+      if (!values.nationality?.trim()) errors.nationality = "Nationality is required";
+      if (!values.idNumber?.trim()) errors.idNumber = "ID/Passport number is required";
+      if (!values.educationDegree?.trim()) errors.educationDegree = "Education degree is required";
+    } else if (step === 2) {
+      if (!values.email?.trim()) errors.email = "Email is required";
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) errors.email = "Invalid email format";
+      if (!values.phoneNumber?.trim()) errors.phoneNumber = "Phone number is required";
+      if (!values.workCity) errors.workCity = "Work city is required";
+      if (!values.workBranch) errors.workBranch = "Work branch is required";
+      if (!values.address?.trim()) errors.address = "Address is required";
+    }
+    // Step 3 has optional fields (department & position may be prefilled)
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleNext = () => {
+    if (validateStep(currentStep)) {
+      setCurrentStep((prev) => Math.min(prev + 1, 3));
+    } else {
+      showToast("Please fill all required fields", "error");
+    }
+  };
+
+  const handleBack = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
+
+  const handleSubmit = async () => {
+    if (!validateStep(currentStep)) {
+      showToast("Please fill all required fields", "error");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const payload = {
+        ...values,
+        workPlaceDetails: {
+          city: values.workCity,
+          branch: values.workBranch,
+        },
+      };
+      delete payload.workCity;
+      delete payload.workBranch;
+      if (payload.dateOfBirth === "") delete payload.dateOfBirth;
+
+      await submitOnboardingApi(token, payload);
+      showToast("Information submitted successfully", "success");
+      setSubmitted(true);
+    } catch (err) {
+      console.error(err);
+      const msg = err?.error || err?.message || "Failed to submit information";
+      showToast(msg, "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ─── Loading ──────────────────────────────────────
+  if (loading) {
     return (
-      <Layout
-        title="Employee created"
-        description="A login was created with a temporary password."
-      >
-        <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-card space-y-5 max-w-xl">
-          <div>
-            <p className="text-sm text-zinc-700">
-              Sign-in was enabled for{" "}
-              <span className="font-medium text-zinc-900">
-                {provisionedData.email}
-              </span>
-              . Share the temporary password through a secure channel (not
-              email, if possible).
-            </p>
-          </div>
-          <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-                Temporary password
-              </p>
-              <p className="font-mono text-lg font-medium text-zinc-900 mt-1">
-                {provisionedData.defaultPassword}
-              </p>
+      <div className="min-h-screen w-full flex items-center justify-center bg-zinc-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="h-16 w-16 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                void navigator.clipboard.writeText(
-                  provisionedData.defaultPassword,
-                );
-              }}
-              className="px-3 py-2 rounded-md border border-zinc-200 bg-white text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-            >
-              Copy
-            </button>
           </div>
-          <ol className="text-sm text-zinc-600 space-y-2 list-decimal list-inside border-t border-zinc-100 pt-4">
-            <li>
-              They open <strong>Sign in</strong> and use this email and
-              temporary password.
-            </li>
-            <li>
-              They are taken to <strong>Change password</strong> and must pick a
-              new password before using the app.
-            </li>
-            <li>
-              If they forget before changing it, they can use{" "}
-              <strong>Forgot password</strong> so an admin can set another
-              temporary password.
-            </li>
-          </ol>
-          <button
-            type="button"
-            onClick={() => navigate("/employees")}
-            className="w-full sm:w-auto px-4 py-2 bg-zinc-900 text-white rounded-md hover:bg-zinc-800 text-sm font-medium"
-          >
-            Back to employees
-          </button>
+          <div className="text-center">
+            <p className="text-sm font-bold text-zinc-900">Verifying your link</p>
+            <p className="text-xs text-zinc-400 mt-1">This only takes a moment...</p>
+          </div>
         </div>
-      </Layout>
+      </div>
     );
   }
 
-  return (
-    <div className="w-full min-h-screen bg-slate-700 flex justify-center items-center">
-      <Layout
-        title="Create Employee"
-        description="Capture core employee identity and organizational assignment."
-      >
-        <FormBuilder
-          onCancel={() => navigate("/")}
-          fields={[
-            { type: "section", label: "1. Personal Information" },
-            {
-              name: "fullNameEng",
-              label: "Full Name (English)",
-              type: "text",
-              required: true,
-            },
-            {
-              name: "fullNameAr",
-              label: "Full Name (arabic)",
-              type: "text",
-              required: true,
-            },
-            { name: "dateOfBirth", label: "Date of Birth", type: "date" },
-            {
-              name: "gender",
-              label: "Gender",
-              type: "select",
-              required: true,
-              options: [
-                { label: "Male", value: "MALE" },
-                { label: "Female", value: "FEMALE" },
-              ],
-            },
-            {
-              name: "maritalStatus",
-              label: "Marital Status",
-              type: "select",
-              required: true,
-              options: [
-                { label: "Single", value: "SINGLE" },
-                { label: "Married", value: "MARRIED" },
-                { label: "Divorced", value: "DIVORCED" },
-                { label: "Widowed", value: "WIDOWED" },
-              ],
-            },
-            { name: "nationality", label: "Nationality", type: "text" },
-            { name: "idNumber", label: "ID Number", type: "text" },
+  // ─── Error ────────────────────────────────────────
+  if (error) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-zinc-50 p-6">
+        <div className="w-full max-w-md text-center">
+          <div className="bg-white rounded-3xl border border-zinc-200 shadow-xl shadow-zinc-200/50 p-10">
+            <div className="h-16 w-16 mx-auto rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mb-6">
+              <AlertTriangle className="h-8 w-8 text-red-500" />
+            </div>
+            <h2 className="text-xl font-bold text-zinc-900 mb-2">Access Denied</h2>
+            <p className="text-sm text-zinc-500 leading-relaxed">{error}</p>
+            <div className="mt-6 pt-6 border-t border-zinc-100">
+              <p className="text-xs text-zinc-400">
+                Please contact your HR representative for a new onboarding link.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-            { type: "section", label: "2. Contact Information" },
-            {
-              name: "email",
-              label: "Personal Email",
-              type: "email",
-              required: true,
-            },
-            { name: "workEmail", label: "Work Email", type: "email" },
-            { name: "phoneNumber", label: "Phone Number", type: "text" },
-            {
-              name: "address",
-              label: "Current Address",
-              type: "text",
-              fullWidth: true,
-            },
+  // ─── Success ──────────────────────────────────────
+  if (submitted) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-zinc-50 p-6">
+        <div className="w-full max-w-lg text-center">
+          <div className="bg-white rounded-3xl border border-zinc-200 shadow-xl shadow-zinc-200/50 p-12">
+            <div className="relative mx-auto mb-8">
+              <div className="h-20 w-20 mx-auto rounded-3xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-200 animate-bounce">
+                <CheckCircle className="h-10 w-10 text-white" />
+              </div>
+              <div className="absolute -top-2 -right-4 w-8 h-8">
+                <Sparkles className="h-6 w-6 text-amber-400 animate-pulse" />
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold text-zinc-900 mb-3">You're All Set!</h2>
+            <p className="text-sm text-zinc-500 leading-relaxed max-w-sm mx-auto">
+              Your information has been successfully submitted for review by our HR team.
+            </p>
+            <div className="mt-8 bg-zinc-50 rounded-2xl border border-zinc-100 p-6 text-left space-y-3">
+              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">What happens next?</h3>
+              {[
+                "Our HR team will review your submitted data",
+                "Once approved, your employee profile will be created",
+                "You'll receive an email with your login credentials",
+              ].map((text, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div className="mt-0.5 h-5 w-5 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                    <span className="text-[10px] font-bold text-indigo-600">{i + 1}</span>
+                  </div>
+                  <p className="text-sm text-zinc-600">{text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-4 text-[11px] text-zinc-400">
+            Elkheta HR Department &copy; {new Date().getFullYear()}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-            { type: "section", label: "3. Job & Administrative" },
-            { name: "employeeCode", label: "Employee Code", type: "text" },
-            {
-              name: "position",
-              label: "Job Title",
-              type: "text",
-              required: true,
-            },
-            {
-              name: "department",
-              label: "Department",
-              type: "select",
-              required: true,
-              options: [],
-            },
-            { name: "workLocation", label: "Work Location", type: "text" },
-            {
-              name: "onlineStorageLink",
-              label: "Online Storage Link",
-              type: "text",
-            },
-            { name: "dateOfHire", label: "Date of Hire", type: "date" },
-            {
-              name: "employmentType",
-              label: "Contract Type",
-              type: "select",
-              required: true,
-              options: [
-                { label: "Full-Time", value: "FULL_TIME" },
-                { label: "Part-Time", value: "PART_TIME" },
-                { label: "Contractor", value: "CONTRACTOR" },
-                { label: "Temporary", value: "TEMPORARY" },
-              ],
-            },
-          ]}
-          submitLabel="Create Employee"
-          onSubmit={async (values) => {
-            try {
-              const {
-                insuranceProvider,
-                insurancePolicy,
-                insuranceCoverage,
-                baseSalary,
-                currency,
-                ...rest
-              } = values;
+  // ─── Form Wizard ──────────────────────────────────
+  const inputClass =
+    "w-full px-4 py-3 bg-zinc-50/50 border border-zinc-200 rounded-xl text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed";
 
-              const payload = { ...rest };
-              for (const key of ["dateOfBirth", "dateOfHire"]) {
-                if (payload[key] === "") delete payload[key];
-              }
+  const selectClass = `${inputClass} appearance-none cursor-pointer`;
 
-              payload.insurance = {
-                provider: insuranceProvider || undefined,
-                policyNumber: insurancePolicy || undefined,
-                coverageType: insuranceCoverage || "HEALTH",
-              };
-              payload.financial = {
-                baseSalary: baseSalary === "" ? undefined : Number(baseSalary),
-                currency: currency || "USD",
-              };
+  const labelClass = "text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5 block";
 
-              const response = await dispatch(
-                createEmployeeThunk(payload),
-              ).unwrap();
+  const errorClass = "text-[11px] text-red-500 mt-1 font-medium";
 
-              if (response.userProvisioned) {
-                setProvisionedData({
-                  email: values.email,
-                  defaultPassword: response.defaultPassword,
-                });
-              } else {
-                showToast("Employee created successfully", "success");
-                navigate("/employees");
-              }
-            } catch (error) {
-              console.error(error);
-              const msg =
-                error?.error ||
-                error?.message ||
-                (typeof error === "string" ? error : null) ||
-                "Failed to create employee";
-              showToast(msg, "error");
-            }
+  const renderField = (name, label, type, opts = {}) => (
+    <div className={opts.fullWidth ? "col-span-full" : ""}>
+      <label className={labelClass}>
+        {label}
+        {opts.required !== false && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      {type === "select" ? (
+        <select
+          className={selectClass}
+          value={values[name] || ""}
+          disabled={opts.disabled}
+          onChange={(e) => {
+            updateField(name, e.target.value);
+            opts.onChange?.(e.target.value);
           }}
+        >
+          <option value="">Select...</option>
+          {(opts.options || []).map((o, i) => (
+            <option key={i} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      ) : (
+        <input
+          className={inputClass}
+          type={type}
+          value={values[name] || ""}
+          disabled={opts.disabled}
+          placeholder={opts.placeholder}
+          onChange={(e) => updateField(name, e.target.value)}
         />
-      </Layout>
+      )}
+      {fieldErrors[name] ? <p className={errorClass}>{fieldErrors[name]}</p> : null}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-start bg-zinc-50 font-sans text-zinc-900 py-10 px-4">
+      {/* Header */}
+      <div className="w-full max-w-2xl mb-8 text-center">
+        <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 border border-indigo-100 shadow-sm mb-4 rotate-3 hover:rotate-0 transition-transform duration-300">
+          <Sparkles className="h-7 w-7 text-indigo-600" />
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Welcome to the Team!</h1>
+        <p className="text-sm text-zinc-500 mt-2 max-w-md mx-auto">
+          We're excited to have you join us. Please fill in your details to help us set up your professional profile.
+        </p>
+      </div>
+
+      {/* Step Indicator */}
+      <div className="w-full max-w-2xl mb-8">
+        <div className="flex items-center justify-between relative">
+          {/* Connection line */}
+          <div className="absolute top-5 left-0 right-0 h-[2px] bg-zinc-200 mx-12" />
+          <div
+            className="absolute top-5 left-0 h-[2px] bg-indigo-500 mx-12 transition-all duration-500 ease-out"
+            style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * (100 - 15)}%` }}
+          />
+          {STEPS.map((step) => {
+            const Icon = step.icon;
+            const isActive = currentStep === step.id;
+            const isCompleted = currentStep > step.id;
+            return (
+              <div key={step.id} className="relative z-10 flex flex-col items-center">
+                <div
+                  className={`h-10 w-10 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                    isCompleted
+                      ? "bg-indigo-600 shadow-lg shadow-indigo-200"
+                      : isActive
+                      ? "bg-white border-2 border-indigo-500 shadow-lg shadow-indigo-100"
+                      : "bg-white border-2 border-zinc-200"
+                  }`}
+                >
+                  {isCompleted ? (
+                    <CheckCircle className="h-5 w-5 text-white" />
+                  ) : (
+                    <Icon
+                      className={`h-5 w-5 ${isActive ? "text-indigo-600" : "text-zinc-400"}`}
+                    />
+                  )}
+                </div>
+                <span
+                  className={`mt-2 text-[11px] font-bold uppercase tracking-wider ${
+                    isActive ? "text-indigo-600" : isCompleted ? "text-zinc-600" : "text-zinc-400"
+                  }`}
+                >
+                  {step.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Form Card */}
+      <div className="w-full max-w-2xl bg-white rounded-3xl border border-zinc-200 shadow-xl shadow-zinc-200/50 overflow-hidden">
+        <div className="p-8 space-y-6">
+          {/* Step 1: Personal */}
+          {currentStep === 1 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="h-8 w-8 rounded-lg bg-indigo-50 flex items-center justify-center">
+                  <User className="h-4 w-4 text-indigo-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-zinc-900">Personal Information</h2>
+                  <p className="text-xs text-zinc-400">Tell us about yourself</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                {renderField("fullNameEng", "Full Name (English)", "text", {
+                  placeholder: "e.g. John Doe",
+                })}
+                {renderField("fullNameAr", "Full Name (Arabic)", "text", {
+                  placeholder: "مثال: محمد أحمد",
+                })}
+                {renderField("dateOfBirth", "Date of Birth", "date")}
+                {renderField("gender", "Gender", "select", {
+                  options: [
+                    { label: "Male", value: "MALE" },
+                    { label: "Female", value: "FEMALE" },
+                  ],
+                })}
+                {renderField("maritalStatus", "Marital Status", "select", {
+                  options: [
+                    { label: "Single", value: "SINGLE" },
+                    { label: "Married", value: "MARRIED" },
+                    { label: "Divorced", value: "DIVORCED" },
+                    { label: "Widowed", value: "WIDOWED" },
+                  ],
+                })}
+                {renderField("nationality", "Nationality", "text", {
+                  placeholder: "e.g. Egyptian",
+                })}
+                {renderField("idNumber", "ID / Passport Number", "text", {
+                  placeholder: "National ID or Passport",
+                })}
+                {renderField("educationDegree", "Education Degree", "text", {
+                  placeholder: "e.g. Bachelor of Computer Science",
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Contact & Location */}
+          {currentStep === 2 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                  <MapPin className="h-4 w-4 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-zinc-900">Contact & Location</h2>
+                  <p className="text-xs text-zinc-400">How can we reach you?</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                {renderField("email", "Personal Email", "email", {
+                  placeholder: "your.email@example.com",
+                })}
+                {renderField("phoneNumber", "Phone Number", "tel", {
+                  placeholder: "+20 1XX XXX XXXX",
+                })}
+                {renderField("emergencyPhoneNumber", "Emergency Contact Number", "tel", {
+                  required: false,
+                  placeholder: "+20 1XX XXX XXXX",
+                })}
+                {renderField("workCity", "Work City", "select", {
+                  options: LOCATIONS.map((l) => ({ label: l.city, value: l.city })),
+                  onChange: () => updateField("workBranch", ""),
+                })}
+                {renderField("workBranch", "Work Branch / Location", "select", {
+                  disabled: !values.workCity,
+                  options: selectedBranches.map((b) => ({ label: b, value: b })),
+                })}
+                {renderField("address", "Current Residence Address", "text", {
+                  fullWidth: true,
+                  placeholder: "Full address",
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Professional */}
+          {currentStep === 3 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="h-8 w-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                  <Briefcase className="h-4 w-4 text-amber-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-zinc-900">Professional Details</h2>
+                  <p className="text-xs text-zinc-400">
+                    These may be prefilled by HR. Review and confirm.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                {renderField("department", "Department", "text", {
+                  required: false,
+                  disabled: !!initialData.department,
+                  placeholder: initialData.department ? "" : "e.g. Engineering",
+                })}
+                {renderField("position", "Proposed Job Title", "text", {
+                  required: false,
+                  disabled: !!initialData.position,
+                  placeholder: initialData.position ? "" : "e.g. Software Engineer",
+                })}
+              </div>
+
+              {/* Summary Panel */}
+              <div className="mt-6 bg-zinc-50 rounded-2xl border border-zinc-100 p-6 space-y-3">
+                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                  <Shield className="h-3.5 w-3.5" />
+                  Submission Summary
+                </h3>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-zinc-400">Name (EN)</span>
+                    <p className="font-semibold text-zinc-800">{values.fullNameEng || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400">Name (AR)</span>
+                    <p className="font-semibold text-zinc-800">{values.fullNameAr || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400">Email</span>
+                    <p className="font-semibold text-zinc-800">{values.email || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400">Phone</span>
+                    <p className="font-semibold text-zinc-800">{values.phoneNumber || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400">Department</span>
+                    <p className="font-semibold text-zinc-800">{values.department || "To be assigned"}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400">Position</span>
+                    <p className="font-semibold text-zinc-800">{values.position || "To be assigned"}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Navigation Footer */}
+        <div className="px-8 py-5 bg-zinc-50/80 border-t border-zinc-100 flex items-center justify-between">
+          <div>
+            {currentStep > 1 ? (
+              <button
+                type="button"
+                onClick={handleBack}
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-zinc-600 bg-white border border-zinc-200 rounded-xl hover:bg-zinc-50 transition active:scale-[0.97]"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Back
+              </button>
+            ) : (
+              <span className="text-xs text-zinc-400">Step {currentStep} of {STEPS.length}</span>
+            )}
+          </div>
+          <div>
+            {currentStep < 3 ? (
+              <button
+                type="button"
+                onClick={handleNext}
+                className="flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition active:scale-[0.97]"
+              >
+                Continue
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="flex items-center gap-2 px-8 py-3 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    Complete Onboarding
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <p className="mt-6 text-[11px] text-zinc-400">
+        Elkheta HR Department &copy; {new Date().getFullYear()}
+      </p>
     </div>
   );
 }

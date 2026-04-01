@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   ResponsiveContainer,
@@ -24,9 +24,18 @@ import {
   MapPin,
   TrendingUp,
   ArrowRight,
+  AlertTriangle,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  RefreshCw,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Layout } from "@/shared/components/Layout";
 import { DepartmentBadge } from "@/shared/components/EntityBadges";
+import { API_URL } from "@/shared/api/apiBase";
+import { useAppSelector } from "@/shared/hooks/reduxHooks";
 
 const CHART_COLORS = ["#3f3f46", "#71717a", "#a1a1aa", "#d4d4d8", "#10b981", "#f59e0b", "#6366f1"];
 const STATUS_COLORS = {
@@ -59,6 +68,87 @@ export function LeadershipOrgOverview({
   isLoading,
 }) {
   const [asOfMs] = useState(() => Date.now());
+  const accessToken = useAppSelector((state) => state.identity.accessToken);
+  const [alerts, setAlerts] = useState([]);
+  const [alertsExpanded, setAlertsExpanded] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await fetch(`${API_URL}/bulk/template`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) throw new Error("Failed to download template");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "HRMS_Template.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(error);
+      alert("Custom template download failed.");
+    }
+  };
+
+  const handleUploadSync = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const confirmed = window.confirm(
+      "⚠️ CRITICAL ACTION: This will PERMANENTLY DELETE all current organizational data (Employees, Departments, etc.) and reset it using the uploaded file. \n\nAre you absolutely sure you want to proceed?"
+    );
+
+    if (!confirmed) {
+      e.target.value = "";
+      return;
+    }
+
+    setIsSyncing(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch(`${API_URL}/bulk/upload`, {
+        method: "POST",
+        body: formData,
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert("✓ Synchronization successful. The system has been reset with the new data.");
+        window.location.reload();
+      } else {
+        alert(data.error || "Sync failed. Please check the Excel format.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("A network error occurred during the synchronization process.");
+    } finally {
+      setIsSyncing(false);
+      e.target.value = "";
+    }
+  };
+
+  useEffect(() => {
+    async function fetchAlerts() {
+      try {
+        const res = await fetch(`${API_URL}/alerts`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setAlerts(data.alerts || []);
+      } catch (e) {
+        console.error("Failed to fetch alerts:", e);
+      }
+    }
+    if (accessToken) fetchAlerts();
+  }, [accessToken]);
 
   const teamCountByDepartmentId = useMemo(() => {
     const m = new Map();
@@ -261,29 +351,158 @@ export function LeadershipOrgOverview({
       className="max-w-[min(100%,1440px)]"
       title={`Organization overview`}
       description={`Workforce and structure snapshot for ${name}. Data reflects employees and departments you can access.`}
-      actions={
-        <div className="flex flex-wrap gap-2">
-          <Link
-            to="/employees"
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50"
-          >
-            Employees <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-          <Link
-            to="/organizations"
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50"
-          >
-            Structure <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      }
+      hideHeader={true}
     >
+      <div className="relative overflow-hidden rounded-3xl bg-zinc-900 p-8 shadow-xl mb-8 group border border-zinc-800">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent" />
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-8">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Strategic Intelligence</span>
+            </div>
+            <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white">
+              Institutional <span className="text-indigo-500">Overview</span>
+            </h1>
+            <p className="text-zinc-400 text-sm max-w-xl font-medium leading-relaxed">
+              Real-time synchronization across {departments.length} departments and {teams.length} operational units. 
+              Currently monitoring <span className="text-white font-bold">{employees.length} personnel</span> records.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 md:border-l md:border-zinc-800 md:pl-8">
+            <Link
+              to="/employees"
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-zinc-950 text-xs font-black uppercase tracking-widest hover:bg-zinc-100 transition-all active:scale-95 shadow-lg shadow-white/5"
+            >
+              Roster <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+            <Link
+              to="/organizations"
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-zinc-800 text-white text-xs font-black uppercase tracking-widest border border-zinc-700 hover:bg-zinc-700 transition-all active:scale-95"
+            >
+              Org Map <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          {(currentUser?.role === "ADMIN" || currentUser?.role === 3) && (
+            <div className="flex flex-col gap-3 md:border-l md:border-zinc-800 md:pl-8">
+              <div className="flex flex-col space-y-1 mb-1">
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Sync Center</span>
+                <span className="text-[9px] text-zinc-600 font-medium">Bulk Data Management</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 text-zinc-300 text-[10px] font-bold uppercase tracking-wider border border-zinc-700 hover:bg-zinc-700 hover:text-white transition-all active:scale-95 whitespace-nowrap"
+                >
+                  <Download className="h-3 w-3" /> Get Template
+                </button>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    onChange={handleUploadSync}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
+                    disabled={isSyncing}
+                  />
+                  <button
+                    disabled={isSyncing}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-wider border transition-all active:scale-95 whitespace-nowrap ${
+                      isSyncing 
+                        ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" 
+                        : "bg-indigo-500/10 text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/20"
+                    }`}
+                  >
+                    {isSyncing ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 animate-spin" /> Syncing...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3 w-3" /> Sync & Reset
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
       {isLoading ? (
         <div className="rounded-lg border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-500">
           Loading organization data…
         </div>
       ) : (
         <div className="space-y-8">
+
+          {/* Alerts Widget */}
+          {alerts.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 overflow-hidden shadow-sm">
+              <button
+                type="button"
+                onClick={() => setAlertsExpanded((p) => !p)}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-amber-100/60 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-900">
+                    {alerts.length} Active Alert{alerts.length !== 1 ? "s" : ""}
+                  </span>
+                  <span className="flex gap-1.5 ml-2">
+                    {alerts.filter(a => a.type === "ID_EXPIRY").length > 0 && (
+                      <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">
+                        {alerts.filter(a => a.type === "ID_EXPIRY").length} ID Expiry
+                      </span>
+                    )}
+                    {alerts.filter(a => a.type === "SALARY_INCREASE").length > 0 && (
+                      <span className="text-[10px] font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">
+                        {alerts.filter(a => a.type === "SALARY_INCREASE").length} Salary Due
+                      </span>
+                    )}
+                    {alerts.filter(a => a.severity === "critical").length > 0 && (
+                      <span className="text-[10px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                        {alerts.filter(a => a.severity === "critical").length} Critical
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {alertsExpanded ? <ChevronUp className="h-4 w-4 text-amber-600" /> : <ChevronDown className="h-4 w-4 text-amber-600" />}
+              </button>
+              {alertsExpanded && (
+                <div className="border-t border-amber-200 divide-y divide-amber-100">
+                  {alerts.map((alert, idx) => (
+                    <div key={idx} className={`flex items-center gap-3 px-4 py-2.5 text-sm ${
+                      alert.severity === "critical" ? "bg-red-50" : "bg-amber-50/50"
+                    }`}>
+                      {alert.type === "ID_EXPIRY" ? (
+                        <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${alert.severity === "critical" ? "text-red-500" : "text-amber-500"}`} />
+                      ) : (
+                        <Clock className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                      )}
+                      <span className={`flex-1 ${alert.severity === "critical" ? "text-red-800" : "text-amber-900"}`}>
+                        {alert.message}
+                      </span>
+                      {alert.department && (
+                        <span className="text-[10px] text-zinc-500 border border-zinc-200 bg-white rounded-full px-2 py-0.5 shrink-0">
+                          {alert.department}
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 shrink-0 ${
+                        alert.daysRemaining <= 7 ? "bg-red-100 text-red-700"
+                        : alert.daysRemaining <= 14 ? "bg-orange-100 text-orange-700"
+                        : "bg-zinc-100 text-zinc-600"
+                      }`}>
+                        {alert.daysRemaining}d
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* KPI strip */}
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
             <Kpi icon={Users} label="Total people" value={metrics.total} sub={`${metrics.activeRate}% active`} />

@@ -15,6 +15,7 @@ const EmployeeSchema = new Schema(
 
     // Personal Information
     fullName: { type: String, required: true },
+    fullNameArabic: { type: String },
     dateOfBirth: { type: Date },
     gender: {
       type: String,
@@ -28,13 +29,17 @@ const EmployeeSchema = new Schema(
     },
     nationality: { type: String },
     idNumber: { type: String },
+    nationalIdExpiryDate: { type: Date },
     profilePicture: { type: String }, // URL or Base64
 
     // Contact Information
     email: { type: String, required: true, unique: true }, // Personal Email
     workEmail: { type: String },
     phoneNumber: { type: String },
+    emergencyPhone: { type: String },
     address: { type: String },
+    governorate: { type: String },
+    city: { type: String },
     additionalContact: {
       whatsapp: { type: String },
       skype: { type: String },
@@ -47,14 +52,18 @@ const EmployeeSchema = new Schema(
     departmentId: { type: Schema.Types.ObjectId, ref: "Department" },
     team: { type: String }, // Sub-unit within department
     teamId: { type: Schema.Types.ObjectId, ref: "Team" },
-    managerId: { type: String }, // Direct Manager
+    managerId: { type: Schema.Types.ObjectId, ref: "Employee" }, // Direct Manager
+    teamLeaderId: { type: Schema.Types.ObjectId, ref: "Employee" }, // Team Leader
     dateOfHire: { type: Date },
+    annualAnniversaryDate: { type: Date }, // Auto-calculated: dateOfHire + 1 year, HR can override
     employmentType: {
       type: String,
       enum: ["FULL_TIME", "PART_TIME", "CONTRACTOR", "TEMPORARY"],
       default: "FULL_TIME",
     },
     workLocation: { type: String }, // Branch/Office
+    branchId: { type: Schema.Types.ObjectId, ref: "Branch" },
+    subLocation: { type: String },
     status: {
       type: String,
       enum: ["ACTIVE", "ON_LEAVE", "TERMINATED", "RESIGNED"],
@@ -85,7 +94,7 @@ const EmployeeSchema = new Schema(
       },
     ],
 
-    // Insurance Information
+    // Insurance Information (multiple records)
     insurance: {
       provider: { type: String },
       policyNumber: { type: String },
@@ -96,21 +105,67 @@ const EmployeeSchema = new Schema(
       },
       validUntil: { type: Date },
     },
+    insurances: [
+      {
+        providerName: { type: String },
+        policyNumber: { type: String },
+        coverageType: { type: String },
+        startDate: { type: Date },
+        expiryDate: { type: Date },
+      },
+    ],
 
-    // Financial Information (Expansion-ready)
+    // Financial Information
     financial: {
-      bankAccount: { type: String },
-      baseSalary: { type: Number },
-      currency: { type: String, default: "USD" },
+      bankAccount: { type: String }, // رقم الحساب
+      baseSalary: { type: Number }, // الراتب الاساسي
+      paymentMethod: { 
+        type: String, 
+        enum: ["BANK_TRANSFER", "CASH", "CHEQUE", "E_WALLET"], 
+        default: "BANK_TRANSFER" 
+      }, // طريقة الدفع
+      currency: { type: String, default: "EGP" },
       allowances: { type: Number },
       socialSecurity: { type: String },
       lastSalaryIncrease: { type: Date },
     },
+    yearlySalaryIncreaseDate: { type: Date },
+
+    // Social Insurance (Egyptian Social Security) - التأمينات
+    socialInsurance: {
+      status: { type: String, enum: ["INSURED", "NOT_INSURED"], default: "NOT_INSURED" }, // حالة التامين
+      insuranceDate: { type: Date }, // تاريخ التامين
+      subscriptionWage: { type: Number }, // أجر الأشتراك
+      basicWage: { type: Number }, // أجر اساسي
+      comprehensiveWage: { type: Number }, // الأجر الشامل
+      jobType: { type: String }, // نوع العمل
+      form6Date: { type: Date }, // تاريخ انتهاء التامين وتقديم استمارة 6
+      insuranceNumber: { type: String }, // الرقم التاميني
+    },
+
+    medicalCondition: { type: String }, // نوع المرض
+
+    // Transfer History
+    transferHistory: [
+      {
+        fromDepartment: { type: Schema.Types.ObjectId, ref: "Department" },
+        fromDepartmentName: { type: String },
+        toDepartment: { type: Schema.Types.ObjectId, ref: "Department" },
+        toDepartmentName: { type: String },
+        transferDate: { type: Date, required: true },
+        newPosition: { type: String },
+        newSalary: { type: Number },
+        yearlyIncreaseDateChanged: { type: Boolean, default: false },
+        newYearlyIncreaseDate: { type: Date },
+        notes: { type: String },
+        processedBy: { type: String }, // Admin email
+      },
+    ],
 
     // Legacy / Hidden from UI initially
     age: { type: Number }, // Derived from DOB? Keeping for compatibility if needed.
 
-    // NEW: ObjectId References (for normalized schema)
+    // ObjectId References (for normalized schema)
     // These work alongside existing string fields for backward compatibility
     departmentId: {
       type: Schema.Types.ObjectId,
@@ -130,8 +185,19 @@ const EmployeeSchema = new Schema(
       optional: true,
       index: true,
     },
-
-    // NEW: Documents Checklist
+    // Salary History
+    salaryHistory: [
+      {
+        previousSalary: { type: Number },
+        newSalary: { type: Number },
+        increaseAmount: { type: Number },
+        increasePercentage: { type: Number },
+        effectiveDate: { type: Date, default: Date.now },
+        reason: { type: String, default: "Annual Increase" },
+        processedBy: { type: String }, // User email
+      }
+    ],
+    // Documents Checklist
     documentChecklist: [
       {
         documentName: { type: String, required: true },

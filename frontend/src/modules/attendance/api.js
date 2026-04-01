@@ -47,6 +47,15 @@ export const deleteAttendanceApi = async (id) => {
   return handleResponse(response);
 };
 
+export const deleteAttendanceBulkApi = async (ids) => {
+  const response = await fetchWithAuth(`${API_URL}/attendance/bulk`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  return handleResponse(response);
+};
+
 export const importAttendanceApi = async (file, overwrite = false) => {
   const formData = new FormData();
   formData.append("file", file);

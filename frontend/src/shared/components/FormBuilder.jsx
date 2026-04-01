@@ -9,6 +9,8 @@ export function FormBuilder({
   error,
   disabled,
   onCancel,
+  /** Called whenever any field value changes: (fieldName, newValue) => void */
+  onChange,
   /** Dev only: `{ getValues, label?, afterFill? }` — button merges returned fields; `afterFill(patch)` runs after apply. */
   devDemoFill,
 }) {
@@ -72,11 +74,13 @@ export function FormBuilder({
                 <select
                   className={inputClass}
                   required={field.required}
+                  disabled={disabled || field.disabled}
                   value={values[field.name] || ""}
                   onChange={(event) => {
                     const v = event.target.value;
                     setValues((prev) => ({ ...prev, [field.name]: v }));
                     field.onChange?.(v);
+                    onChange?.(field.name, v);
                   }}
                 >
                   <option value="">Select...</option>
@@ -103,27 +107,55 @@ export function FormBuilder({
                   onChange={(v) => {
                     setValues((prev) => ({ ...prev, [field.name]: v }));
                     field.onChange?.(v);
+                    onChange?.(field.name, v);
                   }}
                 />
+              ) : field.type === "radio" ? (
+                <div className="mt-2 space-y-2">
+                  {(field.options || []).map((option, optIdx) => (
+                    <label key={`${field.name}-${optIdx}`} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name={field.name}
+                        value={option.value}
+                        checked={values[field.name] === option.value}
+                        onChange={(event) => {
+                          const v = event.target.value;
+                          setValues((prev) => ({ ...prev, [field.name]: v }));
+                          onChange?.(field.name, v);
+                        }}
+                        className="h-4 w-4 border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                        disabled={disabled || field.disabled}
+                      />
+                      <span className="text-sm font-medium text-zinc-700">{option.label}</span>
+                    </label>
+                  ))}
+                </div>
               ) : field.type === "textarea" ? (
                 <textarea
                   className={inputClass}
                   rows={3}
                   required={field.required}
+                  disabled={disabled || field.disabled}
                   value={values[field.name] || ""}
-                  onChange={(event) =>
-                    setValues((prev) => ({ ...prev, [field.name]: event.target.value }))
-                  }
+                  onChange={(event) => {
+                    const v = event.target.value;
+                    setValues((prev) => ({ ...prev, [field.name]: v }));
+                    onChange?.(field.name, v);
+                  }}
                 />
               ) : (
                 <input
                   className={inputClass}
                   type={field.type}
                   required={field.required}
+                  disabled={disabled || field.disabled}
                   value={values[field.name] || ""}
-                  onChange={(event) =>
-                    setValues((prev) => ({ ...prev, [field.name]: event.target.value }))
-                  }
+                  onChange={(event) => {
+                    const v = event.target.value;
+                    setValues((prev) => ({ ...prev, [field.name]: v }));
+                    onChange?.(field.name, v);
+                  }}
                 />
               )}
             </label>

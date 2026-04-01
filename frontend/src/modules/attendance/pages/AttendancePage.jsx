@@ -3,10 +3,11 @@ import { Layout } from "@/shared/components/Layout";
 import { DataTable } from "@/shared/components/DataTable";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { useToast } from "@/shared/components/ToastProvider";
-import { fetchAttendanceThunk, importAttendanceThunk, createAttendanceThunk, updateAttendanceThunk, deleteAttendanceThunk } from "../store";
+import { fetchAttendanceThunk, importAttendanceThunk, createAttendanceThunk, updateAttendanceThunk, deleteAttendanceThunk, bulkDeleteAttendanceThunk } from "../store";
+import { Pagination } from "@/shared/components/Pagination";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
 import { StatusBadge } from "@/shared/components/EntityBadges";
-import { FileUp, Trash2, Edit2, Plus, ShieldCheck, AlertTriangle, Download, Info, Search, Clock, CalendarRange } from "lucide-react";
+import { FileUp, Trash2, Edit2, Plus, ShieldCheck, AlertTriangle, Download, Info, Search, Clock, CalendarRange, CloudCog } from "lucide-react";
 import { downloadAttendanceTemplateApi } from "../api";
 import {
   formatAttendanceDate,
@@ -36,6 +37,12 @@ export function AttendancePage() {
   const [isImporting, setIsImporting] = useState(false);
   const [isOverwriteEnabled, setIsOverwriteEnabled] = useState(false);
 
+  // Pagination & Selection
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+
   // Manual Entry State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
@@ -61,12 +68,22 @@ export function AttendancePage() {
   useEffect(() => {
     void dispatch(fetchAttendanceThunk(listQuery));
     if (isAdmin) void dispatch(fetchEmployeesThunk());
+    setPage(1); // Reset page on filter change
+    setSelectedIds(new Set()); // Reset selection
   }, [dispatch, listQuery, isAdmin]);
+
+  const pagedItems = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return items.slice(start, start + pageSize);
+  }, [items, page, pageSize]);
+
+  const totalPages = Math.ceil(items.length / pageSize);
+
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+console.log(file , "the attendacne file")
     setIsImporting(true);
     try {
       const result = await dispatch(importAttendanceThunk({ file, overwrite: isOverwriteEnabled })).unwrap();
@@ -119,6 +136,37 @@ export function AttendancePage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.size} records?`)) return;
+
+    try {
+      const ids = Array.from(selectedIds);
+      await dispatch(bulkDeleteAttendanceThunk(ids)).unwrap();
+      showToast(`Deleted ${ids.length} records`, "success");
+      setSelectedIds(new Set());
+      void dispatch(fetchAttendanceThunk(listQuery));
+    } catch (err) {
+      showToast("Bulk delete failed", "error");
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === pagedItems.length && pagedItems.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(pagedItems.map(item => item._id)));
+    }
+  };
+
+  const toggleSelectItem = (id) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+
   const handleEditClick = (row) => {
     setEditingId(row._id);
     setFormData({
@@ -164,6 +212,15 @@ export function AttendancePage() {
                  {isImporting ? "Importing..." : "Import Excel"}
                </div>
              </label>
+             {selectedIds.size > 0 && (
+               <button
+                 onClick={handleBulkDelete}
+                 className="flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 transition"
+               >
+                 <Trash2 size={16} />
+                 Delete ({selectedIds.size})
+               </button>
+             )}
           </div>
         )
       }
@@ -268,6 +325,25 @@ export function AttendancePage() {
       <DataTable
         columns={[
           {
+            key: "selection",
+            header: (
+              <input
+                type="checkbox"
+                className="rounded border-zinc-300 text-teal-600 focus:ring-teal-500"
+                checked={pagedItems.length > 0 && selectedIds.size === pagedItems.length}
+                onChange={toggleSelectAll}
+              />
+            ),
+            render: (row) => (
+              <input
+                type="checkbox"
+                className="rounded border-zinc-300 text-teal-600 focus:ring-teal-500"
+                checked={selectedIds.has(row._id)}
+                onChange={() => toggleSelectItem(row._id)}
+              />
+            ),
+          },
+          {
             key: "code",
             header: "Code",
             render: (row) => {
@@ -360,7 +436,7 @@ export function AttendancePage() {
             ),
           },
         ]}
-        data={items}
+        data={pagedItems}
         emptyText={
           isLoading
             ? "Loading…"
@@ -368,6 +444,8 @@ export function AttendancePage() {
         }
         getRowKey={(row, index) => getAttendanceRowId(row, index)}
       />
+
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
 
       {/* Manual Add/Edit Modal */}
       {isAddModalOpen && (

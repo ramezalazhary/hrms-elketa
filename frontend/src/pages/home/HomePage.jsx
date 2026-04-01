@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Navigate } from "react-router-dom";
 import { Layout } from "@/shared/components/Layout";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
@@ -41,6 +42,10 @@ export function HomePage() {
         isLoading={employeesLoading}
       />
     );
+  }
+
+  if (!showAnalytics && role === "EMPLOYEE") {
+    return <Navigate to="/dashboard" replace />;
   }
 
   const roleDisplay = currentUser?.role?.replace("_", " ") || "Member";

@@ -4,6 +4,8 @@ import { EditEmployeePage } from './pages/EditEmployeePage'
 import { EmployeeProfilePage } from './pages/EmployeeProfilePage'
 import { EmployeesListPage } from './pages/EmployeesListPage'
 
+import { OnboardingApprovalsPage } from './pages/OnboardingApprovalsPage'
+
 export const employeesRoutes = [
   { 
     path: '/employees', 
@@ -12,6 +14,14 @@ export const employeesRoutes = [
         <EmployeesListPage />
       </RequireRole>
     ) 
+  },
+  {
+    path: '/employees/onboarding',
+    element: (
+      <RequireRole roles={[3, "HR_STAFF", "ADMIN"]}>
+        <OnboardingApprovalsPage />
+      </RequireRole>
+    ),
   },
   {
     path: '/employees/create',

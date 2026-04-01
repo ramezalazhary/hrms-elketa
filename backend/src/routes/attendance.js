@@ -139,7 +139,10 @@ async function resolveAttendanceAccess(user) {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
+
+
     const access = await resolveAttendanceAccess(req.user);
+    console.log(req.query , " bacend")
     const { startDate, endDate, employeeId, employeeCode, todayOnly } = req.query;
     let filter = {};
 
@@ -193,6 +196,27 @@ router.get("/", requireAuth, async (req, res) => {
     res.json(attendance);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch attendance data" });
+  }
+});
+
+/**
+ * GET /api/attendance/employee/:id
+ * Fetches the last 30 days of attendance for a specific employee.
+ */
+router.get("/employee/:id", requireAuth, async (req, res) => {
+  try {
+    const access = await resolveAttendanceAccess(req.user);
+    if (access.scope === "self" && req.user.id !== req.params.id) {
+      return res.status(403).json({ error: "Forbidden: Can only view self attendance" });
+    }
+    // TODO: Add more granular scope checks if needed (e.g., manager check)
+
+    const attendance = await Attendance.find({ employeeId: req.params.id })
+      .sort({ date: -1 })
+      .limit(30);
+    res.json(attendance);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch employee attendance" });
   }
 });
 
@@ -309,6 +333,37 @@ router.put("/:id", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/attendance/bulk
+ * Admin only: Bulk delete records by an array of IDs.
+ */
+router.delete("/bulk", requireAuth, async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "No IDs provided for bulk deletion" });
+    }
+
+    // Role check (Admin/HR only)
+    if (!["ADMIN", "HR_STAFF", 3].includes(req.user.role)) {
+       return res.status(403).json({ error: "Forbidden: Only Admin/HR can bulk delete." });
+    }
+
+    console.log(`[BULK DELETE] Auth User: ${req.user.email}, Role: ${req.user.role}`);
+    console.log(`[BULK DELETE] Received IDs:`, ids);
+
+    // Cast strings to ObjectIds for the $in filter
+    const objectIds = ids.map(id => new mongoose.Types.ObjectId(id));
+    const result = await Attendance.deleteMany({ _id: { $in: objectIds } });
+    
+    console.log(`[BULK DELETE] Result:`, result);
+    res.json({ message: `Successfully deleted ${result.deletedCount} records.` });
+  } catch (error) {
+    console.error("Bulk Delete Error:", error);
+    res.status(500).json({ error: "Failed to perform bulk delete" });
+  }
+});
+
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
     const access = await resolveAttendanceAccess(req.user);
@@ -349,63 +404,60 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "Excel file is empty" });
 
     // Find headers (case-insensitive, trimmed comparison)
-    const firstRow = data[0];
-    const headers = Object.keys(firstRow);
+    let firstRow = data[0];
+    let headers = Object.keys(firstRow);
 
-    const codeHeader = headers.find((h) =>
-      [
-        "employee code",
-        "employee",
-        "code",
-        "emp code",
-        "employee_code",
-      ].includes(h.toLowerCase().trim()),
-    );
-    const dateHeader = headers.find((h) =>
-      ["date", "attendance date", "attendance_date"].includes(
-        h.toLowerCase().trim(),
-      ),
-    );
-    const checkInHeader = headers.find((h) =>
-      [
-        "check in",
-        "check-in",
-        "checkin",
-        "clock in",
-        "clock_in",
-        "start time",
-      ].includes(h.toLowerCase().trim()),
-    );
-    const checkOutHeader = headers.find((h) =>
-      [
-        "check out",
-        "check-out",
-        "checkout",
-        "clock out",
-        "clock_out",
-        "end time",
-      ].includes(h.toLowerCase().trim()),
-    );
+    // Dynamic header mapping: check both the key and the value of the first row
+    const findHeader = (possibleNames) => {
+      // 1. Check if any key matches
+      let found = headers.find(h => possibleNames.includes(h.toLowerCase().trim()));
+      if (found) return found;
+
+      // 2. Check if the value in the first row matches (common in some exports)
+      found = headers.find(h => {
+        const val = firstRow[h]?.toString().toLowerCase().trim();
+        return val && possibleNames.includes(val);
+      });
+      return found;
+    };
+
+    const codeHeader = findHeader([
+      "employee code", "employee", "code", "emp code", "employee_code", 
+      "name", "__empty"
+    ]);
+    const dateHeader = findHeader([
+      "date", "attendance date", "attendance_date", "max of date", "data"
+    ]);
+    const checkInHeader = findHeader([
+      "check in", "check-in", "checkin", "clock in", "clock_in", "start time", "min of time"
+    ]);
+    const checkOutHeader = findHeader([
+      "check out", "check-out", "checkout", "clock out", "clock_out", "end time", "max of time2"
+    ]);
 
     const missingHeaders = [];
-    if (!codeHeader)
-      missingHeaders.push("Employee Code (or: employee, code, emp code)");
-    if (!dateHeader) missingHeaders.push("Date (or: attendance date)");
-    if (!checkInHeader)
-      missingHeaders.push(
-        "Check In (or: check-in, checkin, clock in, start time)",
-      );
-    if (!checkOutHeader)
-      missingHeaders.push(
-        "Check Out (or: check-out, checkout, clock out, end time)",
-      );
+    if (!codeHeader) missingHeaders.push("Employee Code");
+    if (!dateHeader) missingHeaders.push("Date");
+    if (!checkInHeader) missingHeaders.push("Check In");
+    if (!checkOutHeader) missingHeaders.push("Check Out");
 
     if (missingHeaders.length > 0) {
       return res.status(400).json({
         error: `Missing required columns: ${missingHeaders.join(", ")}`,
         receivedHeaders: headers,
+        firstRowValues: firstRow,
         tip: "Excel file should have columns: Employee Code, Date, Check In, Check Out",
       });
+    }
+
+    // If the first row was actually the header row (contains "Name", "Date", etc.), skip it
+    const isHeaderRow = 
+      firstRow[codeHeader]?.toString().toLowerCase().includes("name") || 
+      firstRow[codeHeader]?.toString().toLowerCase().includes("code") ||
+      firstRow[dateHeader]?.toString().toLowerCase().includes("date");
+    
+    if (isHeaderRow) {
+      data.shift();
     }
 
     const logs = [];
@@ -417,10 +469,18 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
 
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
-      const code = row[codeHeader]?.toString().trim();
+      let code = row[codeHeader]?.toString().trim();
       const rawDate = row[dateHeader];
-      const checkInStr = row[checkInHeader]?.toString().trim();
-      const checkOutStr = row[checkOutHeader]?.toString().trim();
+      const checkInStr = row[checkInHeader];
+      const checkOutStr = row[checkOutHeader];
+
+      // Real Data parsing: If code contains a hyphen (e.g. #CODE-Name), extract only the code
+      if (code && code.includes('-')) {
+         const match = code.match(/^(#[A-Z0-9]+)/i);
+         if (match) code = match[1];
+      } else if (code && code.startsWith('#')) {
+         code = code.split(' ')[0]; // Handle "#CODE Name"
+      }
 
       // Validate required fields
       if (!code) {

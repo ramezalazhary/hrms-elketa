@@ -4,7 +4,8 @@ import {
   importAttendanceApi, 
   createAttendanceApi, 
   updateAttendanceApi, 
-  deleteAttendanceApi 
+  deleteAttendanceApi,
+  deleteAttendanceBulkApi
 } from "./api";
 
 export const fetchAttendanceThunk = createAsyncThunk(
@@ -25,6 +26,11 @@ export const updateAttendanceThunk = createAsyncThunk(
 export const deleteAttendanceThunk = createAsyncThunk(
   "attendance/delete",
   async (id) => deleteAttendanceApi(id),
+);
+
+export const bulkDeleteAttendanceThunk = createAsyncThunk(
+  "attendance/bulkDelete",
+  async (ids) => deleteAttendanceBulkApi(ids),
 );
 
 export const importAttendanceThunk = createAsyncThunk(

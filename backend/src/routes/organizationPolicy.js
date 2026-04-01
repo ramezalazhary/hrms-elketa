@@ -23,16 +23,20 @@ router.get("/documents", requireAuth, async (req, res) => {
 // PUT /policy/documents (Admin only)
 router.put("/documents", requireAuth, requireRole(3), strictLimiter, async (req, res) => {
   try {
-    const { documentRequirements } = req.body;
+    const { documentRequirements, workLocations, salaryIncreaseRules } = req.body;
     let policy = await OrganizationPolicy.findOne({ name: "default" });
     
     if (policy) {
-      policy.documentRequirements = documentRequirements;
+      if (documentRequirements !== undefined) policy.documentRequirements = documentRequirements;
+      if (workLocations !== undefined) policy.workLocations = workLocations;
+      if (salaryIncreaseRules !== undefined) policy.salaryIncreaseRules = salaryIncreaseRules;
       await policy.save();
     } else {
       policy = new OrganizationPolicy({
         name: "default",
-        documentRequirements
+        documentRequirements: documentRequirements || [],
+        workLocations: workLocations || [],
+        salaryIncreaseRules: salaryIncreaseRules || []
       });
       await policy.save();
     }
