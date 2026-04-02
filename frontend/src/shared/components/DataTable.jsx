@@ -1,47 +1,362 @@
+import { useState, useMemo } from "react";
+import { cn } from "@/lib/utils";
+import {
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  Search,
+  Download,
+  RefreshCw,
+  Settings,
+} from "lucide-react";
+
+/**
+ * Modern DataTable component with sorting, filtering, and actions
+ * Provides a clean, accessible table with built-in loading and empty states
+ */
 export function DataTable({
   data,
   columns,
-  emptyText = "No records found.",
+  isLoading = false,
+  searchable = false,
+  sortable = true,
+  pagination = false,
+  pageSize = 10,
+  onRowClick,
+  onSort,
+  onSearch,
+  className,
+  emptyState,
+  emptyText,
   getRowKey,
+  ...props
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Handle search
+  const handleSearch = (value) => {
+    setSearchQuery(value);
+    setCurrentPage(1);
+    onSearch?.(value);
+  };
+
+  // Handle sorting
+  const handleSort = (columnKey) => {
+    if (!sortable) return;
+
+    let direction = "asc";
+    if (sortConfig.key === columnKey && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+
+    const newSortConfig = { key: columnKey, direction };
+    setSortConfig(newSortConfig);
+    onSort?.(newSortConfig);
+  };
+
+  // Filter and sort data
+  const processedData = useMemo(() => {
+    let filtered = data || [];
+
+    // Apply search filter
+    if (searchQuery && searchable) {
+      filtered = filtered.filter((item) => {
+        return columns.some((column) => {
+          const value = item[column.accessor];
+          return value
+            ?.toString()
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase());
+        });
+      });
+    }
+
+    // Apply sorting
+    if (sortConfig.key && sortable) {
+      filtered = [...filtered].sort((a, b) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+
+        if (aValue === null || aValue === undefined) return 1;
+        if (bValue === null || bValue === undefined) return -1;
+
+        if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return filtered;
+  }, [data, searchQuery, sortConfig, columns, searchable, sortable]);
+
+  // Pagination
+  const paginatedData = useMemo(() => {
+    if (!pagination) return processedData;
+
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return processedData.slice(startIndex, endIndex);
+  }, [processedData, currentPage, pageSize, pagination]);
+
+  const totalPages = Math.ceil(processedData.length / pageSize);
+  const startRecord = (currentPage - 1) * pageSize + 1;
+  const endRecord = Math.min(currentPage * pageSize, processedData.length);
+
+  // Get sort icon
+  const getSortIcon = (columnKey) => {
+    if (!sortable) return null;
+
+    if (sortConfig.key !== columnKey) {
+      return <ChevronsUpDown className="w-4 h-4 text-zinc-400" />;
+    }
+
+    return sortConfig.direction === "asc" ? (
+      <ChevronUp className="w-4 h-4 text-zinc-700" />
+    ) : (
+      <ChevronDown className="w-4 h-4 text-zinc-700" />
+    );
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div
+        className={cn(
+          "rounded-lg border border-zinc-200 bg-white overflow-hidden",
+          className,
+        )}
+      >
+        <div className="p-4 border-b border-zinc-200">
+          <div className="flex items-center justify-between">
+            <div className="h-4 w-32 bg-zinc-200 rounded animate-pulse" />
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 bg-zinc-200 rounded animate-pulse" />
+              <div className="h-8 w-8 bg-zinc-200 rounded animate-pulse" />
+            </div>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-zinc-50 border-b border-zinc-200">
+              <tr>
+                {columns.map((column) => (
+                  <th key={column.accessor} className="px-4 py-3 text-left">
+                    <div className="h-4 bg-zinc-200 rounded animate-pulse" />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i} className="border-b border-zinc-100">
+                  {columns.map((_, j) => (
+                    <td key={j} className="px-4 py-3">
+                      <div className="h-4 bg-zinc-100 rounded animate-pulse" />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state
+  if (!processedData.length) {
+    return (
+      emptyState || (
+        <div
+          className={cn(
+            "rounded-lg border border-zinc-200 bg-white p-8 text-center",
+            className,
+          )}
+        >
+          <div className="w-12 h-12 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Search className="w-6 h-6 text-zinc-400" />
+          </div>
+          <h3 className="text-lg font-medium text-zinc-900 mb-2">
+            {emptyText || "No data found"}
+          </h3>
+          <p className="text-sm text-zinc-500">
+            {searchQuery
+              ? `No results match "${searchQuery}"`
+              : "No records available"}
+          </p>
+        </div>
+      )
+    );
+  }
+
   return (
-    <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-card">
-      <table className="w-full border-collapse text-left text-sm">
-        <thead className="bg-zinc-50/80">
-          <tr>
-            {columns.map((column) => (
-              <th
-                className="border-b border-zinc-200 px-4 py-3 text-xs font-medium text-zinc-600 uppercase tracking-wide"
-                key={column.key}
-              >
-                {column.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.length === 0 ? (
+    <div
+      className={cn(
+        "rounded-lg border border-zinc-200 bg-white overflow-hidden",
+        className,
+      )}
+      {...props}
+    >
+      {/* Header */}
+      <div className="p-4 border-b border-zinc-200 bg-zinc-50/50">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {searchable && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-zinc-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+            <button className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors">
+              <Download className="w-4 h-4" />
+            </button>
+            <button className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors">
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-zinc-50 border-b border-zinc-200">
             <tr>
-              <td className="px-4 py-8 text-center text-zinc-500" colSpan={columns.length}>
-                {emptyText}
-              </td>
+              {columns.map((column) => (
+                <th
+                  key={column.accessor || column.key}
+                  className={cn(
+                    "px-4 py-3 text-left text-xs font-medium text-zinc-700 uppercase tracking-wider",
+                    sortable &&
+                      column.sortable !== false &&
+                      "cursor-pointer hover:bg-zinc-100 transition-colors",
+                  )}
+                  onClick={() =>
+                    sortable &&
+                    column.sortable !== false &&
+                    handleSort(column.accessor || column.key)
+                  }
+                >
+                  <div className="flex items-center gap-2">
+                    {column.header}
+                    {sortable &&
+                      column.sortable !== false &&
+                      getSortIcon(column.accessor || column.key)}
+                  </div>
+                </th>
+              ))}
             </tr>
-          ) : (
-            data.map((row, index) => (
+          </thead>
+          <tbody className="divide-y divide-zinc-100">
+            {paginatedData.map((row, rowIndex) => (
               <tr
-                className="border-b border-zinc-100 transition hover:bg-zinc-50/80 last:border-b-0"
-                key={getRowKey?.(row, index) ?? index}
+                key={getRowKey ? getRowKey(row) : (row.id || row._id || rowIndex)}
+                className={cn(
+                  "hover:bg-zinc-50 transition-colors",
+                  onRowClick && "cursor-pointer",
+                )}
+                onClick={() => onRowClick?.(row)}
               >
                 {columns.map((column) => (
-                  <td className="px-4 py-3 text-zinc-800" key={column.key}>
-                    {column.render(row)}
+                  <td
+                    key={column.accessor || column.key}
+                    className="px-4 py-3 text-sm text-zinc-900"
+                  >
+                    {column.render ? column.render(row) : (column.cell ? column.cell(row) : row[column.accessor || column.key])}
                   </td>
                 ))}
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {pagination && totalPages > 1 && (
+        <div className="px-4 py-3 border-t border-zinc-200 bg-zinc-50/50">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-zinc-700">
+              Showing {startRecord} to {endRecord} of {processedData.length}{" "}
+              results
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm border border-zinc-300 rounded-md hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Previous
+              </button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={cn(
+                        "px-3 py-1 text-sm border rounded-md transition-colors",
+                        currentPage === pageNum
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "border-zinc-300 hover:bg-zinc-100",
+                      )}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                }
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 text-sm border border-zinc-300 rounded-md hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+/**
+ * Column configuration helper
+ */
+export function createColumn(accessor, header, options = {}) {
+  return {
+    accessor,
+    header,
+    sortable: true,
+    ...options,
+  };
 }

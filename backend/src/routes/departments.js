@@ -201,6 +201,7 @@ router.put(
         }
       }
 
+      const oldName = department.name;
       department.name = currentName;
       if (code !== undefined) department.code = code;
       if (head !== undefined) {
@@ -250,19 +251,19 @@ router.put(
         }));
       }
 
-      const isRenaming = name && name !== department.name;
+      const isRenaming = name && name !== oldName;
       await department.save();
 
       // If renaming, synchronize the department name for all assigned employees
       if (isRenaming) {
         await Employee.updateMany(
-          { departmentId: department._id },
-          { $set: { department: department.name } }
-        );
-        // Also update legacy-style assignments that might not have ID yet
-        await Employee.updateMany(
-          { department: department._id?.toString() }, // some legacy code uses ID in the name field
-          { $set: { department: department.name, departmentId: department._id } }
+          {
+            $or: [
+              { departmentId: department._id },
+              { department: oldName },
+            ],
+          },
+          { $set: { department: name } },
         );
       }
 

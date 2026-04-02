@@ -26,6 +26,8 @@ import {
   userCreationSchema,
 } from "../middleware/validation.js";
 import { PasswordResetRequest } from "../models/PasswordResetRequest.js";
+import { Department } from "../models/Department.js";
+import { Team } from "../models/Team.js";
 
 const router = Router();
 
@@ -427,6 +429,24 @@ router.put("/:id/status", async (req, res) => {
 
     targetUser.isActive = isActive;
     await targetUser.save();
+
+    if (isActive === false) {
+      // Clear org leadership slots when account is deactivated
+      // mirrors the cleanup done on TERMINATED / RESIGNED in employees.js
+      await Department.updateMany(
+        { head: targetUser.email },
+        { $set: { head: null } },
+      );
+      await Department.updateMany(
+        { "teams.leaderEmail": targetUser.email },
+        { $set: { "teams.$[t].leaderEmail": null } },
+        { arrayFilters: [{ "t.leaderEmail": targetUser.email }] },
+      );
+      await Team.updateMany(
+        { leaderEmail: targetUser.email },
+        { $set: { leaderEmail: null } },
+      );
+    }
 
     res.json({
       message: `User status successfully updated to ${isActive ? "ACTIVE" : "BLOCKED"}.`,

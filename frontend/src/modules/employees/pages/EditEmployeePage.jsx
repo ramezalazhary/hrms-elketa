@@ -34,6 +34,7 @@ export function EditEmployeePage() {
   const [socialInsuranceStatus, setSocialInsuranceStatus] = useState("NOT_INSURED");
   const [hasMedicalInsurance, setHasMedicalInsurance] = useState("NO");
   const [policyLocations, setPolicyLocations] = useState([]);
+  const [orgPolicy, setOrgPolicy] = useState(null);
 
   const employee = useMemo(
     () => employees.find((item) => item.id === employeeId),
@@ -58,6 +59,7 @@ export function EditEmployeePage() {
       if (employee) {
         try {
           const data = await getDocumentRequirementsApi();
+          setOrgPolicy(data);
           const required = data.documentRequirements || [];
           const existing = employee.documentChecklist || [];
           const merged = required.map(req => {
@@ -124,7 +126,8 @@ export function EditEmployeePage() {
           toDepartment: values.toDepartment,
           newPosition: values.newPosition || undefined,
           newSalary: values.newSalary ? Number(values.newSalary) : undefined,
-          resetYearlyIncreaseDate: values.resetYearlyIncreaseDate === "YES",
+          resetYearlyIncreaseDate: Boolean(values.resetYearlyIncreaseDate),
+          newEmployeeCode: values.newEmployeeCode ?? undefined,
           notes: values.notes,
         })
       });
@@ -240,6 +243,7 @@ export function EditEmployeePage() {
       {showSalaryModal && (
         <SalaryIncreaseModal
           employee={employee}
+          orgPolicy={orgPolicy}
           onClose={() => setShowSalaryModal(false)}
           onSubmit={handleSalaryIncrease}
         />

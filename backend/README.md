@@ -52,3 +52,9 @@ Default demo credentials:
 - Admin: `admin@hr.local` / `admin123` (role `3`)
 - Manager: `manager@hr.local` / `manager123` (role `2`)
 - Employee: `employee@hr.local` / `employee123` (role `1`)
+
+
+
+<!-- cd backend
+node scripts/seed-real-data.js
+node scripts/seed-real-data.js --apply -->

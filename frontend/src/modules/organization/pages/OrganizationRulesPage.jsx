@@ -1,9 +1,50 @@
-import { useEffect, useState } from "react";
-import { Trash2, Save } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Trash2,
+  Save,
+  FileStack,
+  MapPinned,
+  Percent,
+  Plus,
+  Loader2,
+  ShieldCheck,
+  Building2,
+  User,
+} from "lucide-react";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { getDocumentRequirementsApi, updateDocumentRequirementsApi } from "../api";
 import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
+
+function SkeletonBlock() {
+  return (
+    <div className="animate-pulse space-y-4 rounded-2xl border border-zinc-200/80 bg-white p-6">
+      <div className="h-5 w-40 rounded-md bg-zinc-200" />
+      <div className="h-24 rounded-xl bg-zinc-100" />
+      <div className="h-24 rounded-xl bg-zinc-100" />
+    </div>
+  );
+}
+
+function ruleBadge(type) {
+  const styles = {
+    DEFAULT: "bg-emerald-50 text-emerald-800 ring-emerald-200/60",
+    DEPARTMENT: "bg-sky-50 text-sky-800 ring-sky-200/60",
+    EMPLOYEE: "bg-violet-50 text-violet-800 ring-violet-200/60",
+  };
+  const labels = {
+    DEFAULT: "Global default",
+    DEPARTMENT: "Department",
+    EMPLOYEE: "Employee",
+  };
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${styles[type] || "bg-zinc-100 text-zinc-700 ring-zinc-200"}`}
+    >
+      {labels[type] || type}
+    </span>
+  );
+}
 
 export function OrganizationRulesPage() {
   const [requiredDocs, setRequiredDocs] = useState([]);
@@ -43,7 +84,6 @@ export function OrganizationRulesPage() {
     setRequiredDocs(requiredDocs.filter((_, i) => i !== index));
   };
 
-  // Location Management Logic
   const addLocation = () => {
     setWorkLocations([...workLocations, { governorate: "", city: "", branches: [""] }]);
   };
@@ -52,7 +92,7 @@ export function OrganizationRulesPage() {
     const newLocs = [...workLocations];
     if (field === "governorate") {
       newLocs[index].governorate = value;
-      newLocs[index].city = ""; // Reset city when governorate changes
+      newLocs[index].city = "";
     } else {
       newLocs[index][field] = value;
     }
@@ -81,7 +121,6 @@ export function OrganizationRulesPage() {
     setWorkLocations(newLocs);
   };
 
-  // Salary Rules Management Logic
   const addSalaryRule = () => {
     setSalaryIncreaseRules([...salaryIncreaseRules, { type: "DEPARTMENT", target: "", percentage: 10 }]);
   };
@@ -100,9 +139,11 @@ export function OrganizationRulesPage() {
     setSaving(true);
     try {
       await updateDocumentRequirementsApi({
-        documentRequirements: requiredDocs.filter(d => d.name),
-        workLocations: workLocations.filter(loc => loc.governorate && loc.city),
-        salaryIncreaseRules: salaryIncreaseRules.filter(r => r.type === "DEFAULT" ? true : r.target)
+        documentRequirements: requiredDocs.filter((d) => d.name),
+        workLocations: workLocations.filter((loc) => loc.governorate && loc.city),
+        salaryIncreaseRules: salaryIncreaseRules.filter((r) =>
+          r.type === "DEFAULT" ? true : r.target,
+        ),
       });
       showToast("Organization settings updated successfully", "success");
     } catch (error) {
@@ -112,252 +153,455 @@ export function OrganizationRulesPage() {
     }
   };
 
+  const stats = useMemo(() => {
+    const filledDocs = requiredDocs.filter((d) => d.name?.trim()).length;
+    const filledLocs = workLocations.filter((l) => l.governorate && l.city).length;
+    const branchCount = workLocations.reduce((n, l) => n + (l.branches?.filter(Boolean).length || 0), 0);
+    const validRules = salaryIncreaseRules.filter((r) => (r.type === "DEFAULT" ? true : r.target)).length;
+    return { filledDocs, filledLocs, branchCount, validRules };
+  }, [requiredDocs, workLocations, salaryIncreaseRules]);
+
   return (
     <Layout
-      title="Organization Rules"
-      description="Define global policies and mandatory requirements for the entire company."
+      title="Organization rules"
+      description="Company-wide document requirements, workplaces, and salary increase defaults used by HR and onboarding."
       actions={
         <button
+          type="button"
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 disabled:pointer-events-none disabled:opacity-50"
         >
-          <Save size={18} />
-          {saving ? "Saving..." : "Save Policies"}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {saving ? "Saving…" : "Save changes"}
         </button>
       }
     >
-      <div className="space-y-12 pb-20">
-        {/* Section 1: Documents */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <div className="mb-6 flex items-center justify-between border-b pb-4">
-            <div>
-              <h3 className="text-xl font-bold text-slate-800 uppercase tracking-tight">Mandatory Document Needs</h3>
-              <p className="text-sm text-slate-500 italic">These documents will be required from EVERY employee regardless of their department.</p>
+      <div className="space-y-8 pb-16">
+        {/* At-a-glance summary */}
+        {!loading && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl border border-zinc-200/90 bg-white px-4 py-3 shadow-sm">
+              <p className="text-xs font-medium text-zinc-500">Documents</p>
+              <p className="mt-0.5 text-2xl font-semibold tabular-nums text-zinc-900">{stats.filledDocs}</p>
+              <p className="text-[11px] text-zinc-400">Named & saved</p>
+            </div>
+            <div className="rounded-xl border border-zinc-200/90 bg-white px-4 py-3 shadow-sm">
+              <p className="text-xs font-medium text-zinc-500">Workplaces</p>
+              <p className="mt-0.5 text-2xl font-semibold tabular-nums text-zinc-900">{stats.filledLocs}</p>
+              <p className="text-[11px] text-zinc-400">{stats.branchCount} branches total</p>
+            </div>
+            <div className="rounded-xl border border-zinc-200/90 bg-white px-4 py-3 shadow-sm">
+              <p className="text-xs font-medium text-zinc-500">Salary rules</p>
+              <p className="mt-0.5 text-2xl font-semibold tabular-nums text-zinc-900">{stats.validRules}</p>
+              <p className="text-[11px] text-zinc-400">Valid for save</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 px-4 py-3 shadow-sm">
+              <p className="text-xs font-medium text-emerald-800/80">Tip</p>
+              <p className="mt-1 text-sm leading-snug text-emerald-900/90">
+                Empty document rows are ignored on save. Add at least one global default salary rule if you use
+                increases.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Documents */}
+        <section className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-zinc-100 bg-zinc-50/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="flex gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+                <FileStack className="h-5 w-5 text-zinc-600" aria-hidden />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-zinc-900">Required documents</h2>
+                <p className="mt-0.5 max-w-xl text-sm text-zinc-500">
+                  Shown to employees in checklists. Mark items as mandatory to flag missing uploads.
+                </p>
+              </div>
             </div>
             <button
+              type="button"
               onClick={addDoc}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex items-center justify-center gap-1.5 self-start rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 sm:self-auto"
             >
-              + Add Document Type
+              <Plus className="h-4 w-4" />
+              Add document
             </button>
           </div>
 
-          {loading ? (
-             <div className="py-10 text-center text-slate-400">Loading policy foundations...</div>
-          ) : (
-            <div className="space-y-4">
-              {requiredDocs.map((doc, index) => (
-                <div key={index} className="group relative flex flex-wrap items-center gap-4 rounded-2xl border border-slate-100 bg-slate-50/50 p-6 transition hover:bg-white hover:shadow-md">
-                  <button
-                    onClick={() => removeDoc(index)}
-                    className="absolute -right-2 -top-2 rounded-full border border-red-100 bg-white p-1.5 text-slate-300 shadow-sm transition hover:text-red-500 group-hover:opacity-100 opacity-0"
+          <div className="p-5 sm:p-6">
+            {loading ? (
+              <SkeletonBlock />
+            ) : requiredDocs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/30 py-14 text-center">
+                <FileStack className="h-10 w-10 text-zinc-300" aria-hidden />
+                <p className="mt-3 text-sm font-medium text-zinc-600">No document types yet</p>
+                <p className="mt-1 max-w-sm text-sm text-zinc-500">Add national ID, contract, or any file your HR team must collect.</p>
+                <button
+                  type="button"
+                  onClick={addDoc}
+                  className="mt-4 text-sm font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-600"
+                >
+                  Add the first document
+                </button>
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {requiredDocs.map((doc, index) => (
+                  <li
+                    key={index}
+                    className={`relative rounded-xl border transition-shadow hover:shadow-md ${
+                      doc.isMandatory
+                        ? "border-teal-200/70 bg-gradient-to-r from-teal-50/40 to-white"
+                        : "border-zinc-200/90 bg-white"
+                    }`}
                   >
-                    <Trash2 size={16} />
-                  </button>
-                  <div className="flex-1 min-w-[250px]">
-                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Document Type Name</label>
-                    <input
-                      type="text"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
-                      placeholder="e.g. Identity Card, Military Certificate"
-                      value={doc.name}
-                      onChange={(e) => updateDoc(index, "name", e.target.value)}
-                    />
-                  </div>
-                  <div className="flex-[2] min-w-[300px]">
-                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">HR Notes / Instructions</label>
-                    <input
-                      type="text"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
-                      placeholder="e.g. Must be a high-resolution scan of the original"
-                      value={doc.description}
-                      onChange={(e) => updateDoc(index, "description", e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center gap-3 pt-5">
-                    <input
-                      type="checkbox"
-                      id={`mand-${index}`}
-                      className="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      checked={doc.isMandatory}
-                      onChange={(e) => updateDoc(index, "isMandatory", e.target.checked)}
-                    />
-                    <label htmlFor={`mand-${index}`} className="text-xs font-bold text-slate-600">Mandatory</label>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Section 2: Branch & Location Manager */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-           <div className="mb-6 flex items-center justify-between border-b pb-4">
-            <div>
-              <h3 className="text-xl font-bold text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                Branch & Location Manager
-              </h3>
-              <p className="text-sm text-slate-500 italic">Manage cities and their specific branches for the onboarding workplace selection.</p>
-            </div>
-            <button
-              onClick={addLocation}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-            >
-              + Add Workplace Location
-            </button>
-          </div>
-
-          {!loading && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {workLocations.map((loc, cityIndex) => (
-                <div key={cityIndex} className="p-6 rounded-3xl bg-slate-50 border border-slate-200 relative group">
-                  <button
-                    onClick={() => removeCity(cityIndex)}
-                    className="absolute -right-2 -top-2 rounded-full border border-red-100 bg-white p-1.5 text-slate-300 shadow-sm transition hover:text-red-500 opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                  
-                  <div className="grid grid-cols-2 gap-4 mb-6">
-                    <div>
-                      <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Governorate</label>
-                      <select
-                        className="w-full bg-white border-b-2 border-slate-200 focus:border-indigo-400 outline-none py-2 text-sm font-bold text-slate-800"
-                        value={loc.governorate}
-                        onChange={(e) => updateLocation(cityIndex, "governorate", e.target.value)}
-                      >
-                        <option value="">Select...</option>
-                        {EGYPT_GOVERNORATES.map((g) => (
-                          <option key={g.name} value={g.name}>{g.name} ({g.nameAr})</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">City</label>
-                      <select
-                        className="w-full bg-white border-b-2 border-slate-200 focus:border-indigo-400 outline-none py-2 text-sm font-bold text-slate-800"
-                        value={loc.city}
-                        onChange={(e) => updateLocation(cityIndex, "city", e.target.value)}
-                        disabled={!loc.governorate}
-                      >
-                        <option value="">Select...</option>
-                        {loc.governorate && getCitiesForGovernorate(loc.governorate).map((city) => (
-                          <option key={city} value={city}>{city}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 italic">Branches / Locations</label>
-                       <button onClick={() => addBranch(cityIndex)} className="text-[10px] font-black text-indigo-600 hover:underline">+ Add Branch</button>
-                    </div>
-                    {loc.branches.map((branch, branchIndex) => (
-                      <div key={branchIndex} className="flex items-center gap-2">
+                    <div className="flex flex-col gap-4 p-4 sm:flex-row sm:flex-wrap sm:items-end">
+                      <div className="min-w-0 flex-1 sm:min-w-[200px]">
+                        <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-zinc-500">
+                          <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded bg-zinc-200/80 px-1 text-[10px] font-semibold text-zinc-700">
+                            {index + 1}
+                          </span>
+                          Name
+                        </label>
                         <input
                           type="text"
-                          className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
-                          placeholder="e.g. Heliopolis"
-                          value={branch}
-                          onChange={(e) => updateBranchName(cityIndex, branchIndex, e.target.value)}
+                          className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400/20 transition focus:border-zinc-400 focus:ring-2"
+                          placeholder="e.g. National ID, employment contract"
+                          value={doc.name}
+                          onChange={(e) => updateDoc(index, "name", e.target.value)}
                         />
-                        <button onClick={() => removeBranch(cityIndex, branchIndex)} className="text-slate-300 hover:text-red-400"><Trash2 size={14}/></button>
                       </div>
-                    ))}
-                    {loc.branches.length === 0 && (
-                      <p className="text-[10px] text-slate-400 text-center py-2">No branches added yet.</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {workLocations.length === 0 && (
-                <div className="col-span-full rounded-2xl border-2 border-dashed border-slate-100 py-16 text-center">
-                   <p className="text-slate-400 italic font-medium">No cities defined. Add the first one to start branch management.</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        {/* Section 3: Salary Increase Rules */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-           <div className="mb-6 flex items-center justify-between border-b pb-4">
-            <div>
-              <h3 className="text-xl font-bold text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                Annual Salary Increase Rules
-              </h3>
-              <p className="text-sm text-slate-500 italic">Set default percentages for each year. Individual rules override departmental ones.</p>
+                      <div className="min-w-0 flex-[2] sm:min-w-[280px]">
+                        <label className="mb-1 block text-xs font-medium text-zinc-500">Instructions for HR</label>
+                        <input
+                          type="text"
+                          className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400/20 transition focus:border-zinc-400 focus:ring-2"
+                          placeholder="Optional — e.g. must be a clear color scan"
+                          value={doc.description}
+                          onChange={(e) => updateDoc(index, "description", e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-3 border-t border-zinc-100 pt-3 sm:border-0 sm:pt-0">
+                        <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-zinc-300 text-teal-600 focus:ring-teal-500/30"
+                            checked={doc.isMandatory}
+                            onChange={(e) => updateDoc(index, "isMandatory", e.target.checked)}
+                          />
+                          <span className="flex items-center gap-1 font-medium">
+                            {doc.isMandatory ? (
+                              <ShieldCheck className="h-4 w-4 text-teal-600" aria-hidden />
+                            ) : null}
+                            Mandatory
+                          </span>
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeDoc(index)}
+                        className="absolute right-3 top-3 rounded-lg p-2 text-zinc-400 opacity-70 transition hover:bg-red-50 hover:text-red-600 sm:static sm:ml-auto sm:self-center sm:opacity-100"
+                        aria-label={`Remove document row ${index + 1}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+
+        {/* Work locations */}
+        <section className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-zinc-100 bg-zinc-50/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="flex gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+                <MapPinned className="h-5 w-5 text-zinc-600" aria-hidden />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-zinc-900">Workplaces & branches</h2>
+                <p className="mt-0.5 max-w-xl text-sm text-zinc-500">
+                  Governorates and cities power onboarding workplace pickers; branches are the selectable offices.
+                </p>
+              </div>
             </div>
             <button
-              onClick={addSalaryRule}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+              type="button"
+              onClick={addLocation}
+              className="inline-flex items-center justify-center gap-1.5 self-start rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 sm:self-auto"
             >
-              + Add Rule
+              <Plus className="h-4 w-4" />
+              Add location
             </button>
           </div>
 
-          {!loading && (
-            <div className="space-y-4">
-              {salaryIncreaseRules.length === 0 && (
-                <div className="py-12 text-center border-2 border-dashed border-slate-100 rounded-2xl">
-                  <p className="text-slate-400 italic">No salary rules defined yet. Create a default rule to start.</p>
-                </div>
-              )}
-              {salaryIncreaseRules.map((rule, idx) => (
-                <div key={idx} className="flex flex-wrap items-end gap-6 p-6 rounded-2xl bg-slate-50 border border-slate-200 relative group transition-all hover:bg-white hover:shadow-md">
-                   <button
-                    onClick={() => removeSalaryRule(idx)}
-                    className="absolute -right-2 -top-2 rounded-full border border-red-100 bg-white p-1.5 text-slate-300 shadow-sm transition hover:text-red-500 opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-
-                  <div className="flex-1 min-w-[150px]">
-                    <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Rule Type</label>
-                    <select
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
-                      value={rule.type}
-                      onChange={(e) => updateSalaryRule(idx, "type", e.target.value)}
+          <div className="p-5 sm:p-6">
+            {loading ? (
+              <SkeletonBlock />
+            ) : (
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                {workLocations.map((loc, cityIndex) => {
+                  const filledBranches = (loc.branches || []).filter(Boolean).length;
+                  return (
+                    <div
+                      key={cityIndex}
+                      className="relative rounded-2xl border border-zinc-200/90 bg-zinc-50/40 p-5 ring-1 ring-zinc-100 transition hover:bg-white hover:shadow-md"
                     >
-                      <option value="DEFAULT">Global Default</option>
-                      <option value="DEPARTMENT">Department-Wide</option>
-                      <option value="EMPLOYEE">Specific Employee</option>
-                    </select>
-                  </div>
+                      <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">Area</p>
+                          <p className="text-sm font-semibold text-zinc-900">
+                            {loc.governorate && loc.city
+                              ? `${loc.city}, ${loc.governorate}`
+                              : "New location — select governorate & city"}
+                          </p>
+                          {filledBranches > 0 && (
+                            <p className="mt-1 text-xs text-zinc-500">{filledBranches} branch label(s)</p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeCity(cityIndex)}
+                          className="rounded-lg p-2 text-zinc-400 transition hover:bg-red-50 hover:text-red-600"
+                          aria-label={`Remove location ${cityIndex + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
 
-                  {rule.type !== "DEFAULT" && (
-                    <div className="flex-[2] min-w-[200px]">
-                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                        {rule.type === "DEPARTMENT" ? "Department Name" : "Employee ID / Code"}
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-indigo-700 shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
-                        placeholder={rule.type === "DEPARTMENT" ? "e.g. Sales, Marketing" : "e.g. EMP-001"}
-                        value={rule.target}
-                        onChange={(e) => updateSalaryRule(idx, "target", e.target.value)}
-                      />
-                    </div>
-                  )}
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-zinc-500">Governorate</label>
+                          <select
+                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                            value={loc.governorate}
+                            onChange={(e) => updateLocation(cityIndex, "governorate", e.target.value)}
+                          >
+                            <option value="">Choose…</option>
+                            {EGYPT_GOVERNORATES.map((g) => (
+                              <option key={g.name} value={g.name}>
+                                {g.name} ({g.nameAr})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-zinc-500">City</label>
+                          <select
+                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20 disabled:bg-zinc-50 disabled:text-zinc-400"
+                            value={loc.city}
+                            onChange={(e) => updateLocation(cityIndex, "city", e.target.value)}
+                            disabled={!loc.governorate}
+                          >
+                            <option value="">Choose…</option>
+                            {loc.governorate &&
+                              getCitiesForGovernorate(loc.governorate).map((city) => (
+                                <option key={city} value={city}>
+                                  {city}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      </div>
 
-                  <div className="w-32">
-                    <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Percentage (%)</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
-                        value={rule.percentage}
-                        onChange={(e) => updateSalaryRule(idx, "percentage", Number(e.target.value))}
-                      />
-                      <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                      <div className="mt-5 border-t border-zinc-200/80 pt-4">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-xs font-medium text-zinc-500">Branches</span>
+                          <button
+                            type="button"
+                            onClick={() => addBranch(cityIndex)}
+                            className="text-xs font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900"
+                          >
+                            + Add branch
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {loc.branches.map((branch, branchIndex) => (
+                            <div key={branchIndex} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                                placeholder="Branch or site name"
+                                value={branch}
+                                onChange={(e) => updateBranchName(cityIndex, branchIndex, e.target.value)}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeBranch(cityIndex, branchIndex)}
+                                className="shrink-0 rounded-lg p-2 text-zinc-400 hover:bg-red-50 hover:text-red-600"
+                                aria-label="Remove branch"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        {loc.branches.length === 0 && (
+                          <p className="py-3 text-center text-xs text-zinc-400">No branches — add at least one label.</p>
+                        )}
+                      </div>
                     </div>
+                  );
+                })}
+                {workLocations.length === 0 && (
+                  <div className="col-span-full flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/30 py-14 text-center">
+                    <MapPinned className="h-10 w-10 text-zinc-300" aria-hidden />
+                    <p className="mt-3 text-sm font-medium text-zinc-600">No workplaces configured</p>
+                    <p className="mt-1 max-w-md text-sm text-zinc-500">
+                      Add Cairo HQ, regional hubs, or remote options so new hires can pick where they work.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={addLocation}
+                      className="mt-4 text-sm font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-600"
+                    >
+                      Add first location
+                    </button>
                   </div>
-                </div>
-              ))}
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Salary rules */}
+        <section className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-zinc-100 bg-zinc-50/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="flex gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+                <Percent className="h-5 w-5 text-zinc-600" aria-hidden />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-zinc-900">Annual salary increases</h2>
+                <p className="mt-0.5 max-w-xl text-sm text-zinc-500">
+                  Default and overrides for processing increases. Department and employee rules take precedence over the
+                  global default where applicable.
+                </p>
+              </div>
             </div>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={addSalaryRule}
+              className="inline-flex items-center justify-center gap-1.5 self-start rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 sm:self-auto"
+            >
+              <Plus className="h-4 w-4" />
+              Add rule
+            </button>
+          </div>
+
+          <div className="p-5 sm:p-6">
+            {loading ? (
+              <SkeletonBlock />
+            ) : salaryIncreaseRules.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/30 py-14 text-center">
+                <Percent className="h-10 w-10 text-zinc-300" aria-hidden />
+                <p className="mt-3 text-sm font-medium text-zinc-600">No salary rules</p>
+                <p className="mt-1 max-w-sm text-sm text-zinc-500">Start with one &quot;Global default&quot; percentage, then add department overrides.</p>
+                <button
+                  type="button"
+                  onClick={addSalaryRule}
+                  className="mt-4 text-sm font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-600"
+                >
+                  Add a rule
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-zinc-200/90">
+                <table className="min-w-full divide-y divide-zinc-200 text-sm">
+                  <thead className="bg-zinc-50/90 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    <tr>
+                      <th className="whitespace-nowrap px-4 py-3">Type</th>
+                      <th className="whitespace-nowrap px-4 py-3">Applies to</th>
+                      <th className="whitespace-nowrap px-4 py-3 text-right">Rate</th>
+                      <th className="w-10 px-2 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 bg-white">
+                    {salaryIncreaseRules.map((rule, idx) => (
+                      <tr key={idx} className="align-top transition hover:bg-zinc-50/80">
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {ruleBadge(rule.type)}
+                            <select
+                              className="min-w-[10rem] rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-900"
+                              value={rule.type}
+                              onChange={(e) => updateSalaryRule(idx, "type", e.target.value)}
+                              aria-label="Rule type"
+                            >
+                              <option value="DEFAULT">Global default</option>
+                              <option value="DEPARTMENT">Department</option>
+                              <option value="EMPLOYEE">Employee</option>
+                            </select>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {rule.type === "DEFAULT" ? (
+                            <span className="inline-flex items-center gap-1.5 text-zinc-600">
+                              <Building2 className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden />
+                              All departments (fallback)
+                            </span>
+                          ) : rule.type === "DEPARTMENT" ? (
+                            <div className="flex items-start gap-2">
+                              <Building2 className="mt-1 h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden />
+                              <input
+                                type="text"
+                                className="w-full min-w-[8rem] rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                                placeholder="e.g. Sales, Engineering"
+                                value={rule.target}
+                                onChange={(e) => updateSalaryRule(idx, "target", e.target.value)}
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex items-start gap-2">
+                              <User className="mt-1 h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden />
+                              <input
+                                type="text"
+                                className="w-full min-w-[8rem] rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                                placeholder="Employee code or ID"
+                                value={rule.target}
+                                onChange={(e) => updateSalaryRule(idx, "target", e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="inline-flex items-center justify-end gap-1">
+                            <input
+                              type="number"
+                              className="w-20 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-right text-sm font-semibold tabular-nums text-zinc-900 outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                              value={rule.percentage}
+                              onChange={(e) => updateSalaryRule(idx, "percentage", Number(e.target.value))}
+                              min={0}
+                              aria-label="Percentage"
+                            />
+                            <span className="text-xs font-medium text-zinc-400">%</span>
+                          </div>
+                        </td>
+                        <td className="px-2 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => removeSalaryRule(idx)}
+                            className="rounded-lg p-2 text-zinc-400 transition hover:bg-red-50 hover:text-red-600"
+                            aria-label="Remove rule"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="border-t border-zinc-100 bg-zinc-50/50 px-4 py-2 text-xs text-zinc-500">
+                  Rows without a target (non-default) are excluded when you save.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </Layout>
   );

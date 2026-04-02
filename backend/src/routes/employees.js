@@ -5,10 +5,17 @@
 import { Router } from "express";
 import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
-import { requireAuth } from "../middleware/auth.js";
+import { Team } from "../models/Team.js";
+import { Position } from "../models/Position.js";
 import { UserPermission } from "../models/Permission.js";
+import { Attendance } from "../models/Attendance.js";
+import { Alert } from "../models/Alert.js";
+import { ManagementRequest } from "../models/ManagementRequest.js";
+import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
+import { requireAuth } from "../middleware/auth.js";
 import { hashPassword } from "../middleware/auth.js";
 import { resolveEmployeeAccess } from "../services/accessService.js";
+import { createAuditLog, detectChanges } from "../services/auditService.js";
 
 const router = Router();
 
@@ -28,7 +35,7 @@ function calculateNextAnniversary(hireDate) {
   // Find this year's anniversary
   anniversary.setFullYear(today.getFullYear());
 
-  // If this year's anniversary was more than 30 days ago, 
+  // If this year's anniversary was more than 30 days ago,
   // it means we've passed the window for this year; suggest next year.
   const threshold = new Date(today);
   threshold.setDate(threshold.getDate() - 30);
@@ -38,7 +45,6 @@ function calculateNextAnniversary(hireDate) {
   }
   return anniversary;
 }
-
 
 async function checkScopeDepartment(userEmail, targetDepartment) {
   const employeeRecord = await Employee.findOne({ email: userEmail });
@@ -67,13 +73,23 @@ router.get("/", requireAuth, async (req, res) => {
 
   let query = {};
 
-  const { 
-    salaryIncreaseFrom, salaryIncreaseTo, 
-    idExpiringSoon, idExpired, recentTransfers,
-    hireDateFrom, hireDateTo,
-    department, status,
-    salaryMin, salaryMax,
-    manager, location, search
+  const {
+    salaryIncreaseFrom,
+    salaryIncreaseTo,
+    idExpiringSoon,
+    idExpired,
+    recentTransfers,
+    hireDateFrom,
+    hireDateTo,
+    department,
+    status,
+    salaryMin,
+    salaryMax,
+    manager,
+    location,
+    search,
+    page = 1,
+    limit = 20,
   } = req.query;
 
   if (department) query.department = department;
@@ -95,8 +111,10 @@ router.get("/", requireAuth, async (req, res) => {
 
   if (salaryIncreaseFrom || salaryIncreaseTo) {
     query.yearlySalaryIncreaseDate = {};
-    if (salaryIncreaseFrom) query.yearlySalaryIncreaseDate.$gte = new Date(salaryIncreaseFrom);
-    if (salaryIncreaseTo) query.yearlySalaryIncreaseDate.$lte = new Date(salaryIncreaseTo);
+    if (salaryIncreaseFrom)
+      query.yearlySalaryIncreaseDate.$gte = new Date(salaryIncreaseFrom);
+    if (salaryIncreaseTo)
+      query.yearlySalaryIncreaseDate.$lte = new Date(salaryIncreaseTo);
   }
 
   if (idExpiringSoon === "true") {
@@ -119,35 +137,130 @@ router.get("/", requireAuth, async (req, res) => {
     query.$or = [
       { fullName: { $regex: search, $options: "i" } },
       { fullNameArabic: { $regex: search, $options: "i" } },
-      { employeeCode: { $regex: search, $options: "i" } }
+      { employeeCode: { $regex: search, $options: "i" } },
     ];
   }
 
+  // Check if pagination is explicitly requested
+  const isPaginated =
+    req.query.page !== undefined || req.query.limit !== undefined;
+
+  // Convert pagination parameters
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+  const skip = (pageNum - 1) * limitNum;
+
+  // Get total count for pagination (only if paginated)
+  const totalCount = isPaginated ? await Employee.countDocuments(query) : 0;
+
   if (access.scope === "all") {
-    return res.json(await Employee.find(query).populate("managerId teamLeaderId"));
+    const employees = await Employee.find(query)
+      .populate("managerId teamLeaderId")
+      .sort({ fullName: 1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    return isPaginated
+      ? res.json({
+          employees,
+          pagination: {
+            currentPage: pageNum,
+            totalPages: Math.ceil(totalCount / limitNum),
+            totalCount,
+            limit: limitNum,
+          },
+        })
+      : res.json(employees);
   }
 
   if (access.scope === "department") {
     const employeeRecord = await Employee.findOne({ email: req.user.email });
-    let deptNames = await Department.find({ head: req.user.email }).distinct("name");
+    let deptNames = await Department.find({ head: req.user.email }).distinct(
+      "name",
+    );
     if (employeeRecord) deptNames.push(employeeRecord.department);
-    return res.json(await Employee.find({ ...query, department: { $in: deptNames } }).populate("managerId teamLeaderId"));
+
+    const deptQuery = { ...query, department: { $in: deptNames } };
+    const deptCount = isPaginated
+      ? await Employee.countDocuments(deptQuery)
+      : 0;
+
+    const employees = await Employee.find(deptQuery)
+      .populate("managerId teamLeaderId")
+      .sort({ fullName: 1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    return isPaginated
+      ? res.json({
+          employees,
+          pagination: {
+            currentPage: pageNum,
+            totalPages: Math.ceil(deptCount / limitNum),
+            totalCount: deptCount,
+            limit: limitNum,
+          },
+        })
+      : res.json(employees);
   }
 
   if (access.scope === "team") {
     let finalQuery = { ...query };
-    const teamScopeOr = [{ team: { $in: access.teams } }, { email: req.user.email }];
+    const teamScopeOr = [
+      { team: { $in: access.teams } },
+      { email: req.user.email },
+    ];
     if (finalQuery.$or) {
-      finalQuery.$and = [ { $or: finalQuery.$or }, { $or: teamScopeOr } ];
+      finalQuery.$and = [{ $or: finalQuery.$or }, { $or: teamScopeOr }];
       delete finalQuery.$or;
     } else {
       finalQuery.$or = teamScopeOr;
     }
-    return res.json(await Employee.find(finalQuery).populate("managerId teamLeaderId"));
+
+    const teamCount = isPaginated
+      ? await Employee.countDocuments(finalQuery)
+      : 0;
+    const employees = await Employee.find(finalQuery)
+      .populate("managerId teamLeaderId")
+      .sort({ fullName: 1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    return isPaginated
+      ? res.json({
+          employees,
+          pagination: {
+            currentPage: pageNum,
+            totalPages: Math.ceil(teamCount / limitNum),
+            totalCount: teamCount,
+            limit: limitNum,
+          },
+        })
+      : res.json(employees);
   }
 
   if (access.scope === "self") {
-    return res.json(await Employee.find({ ...query, email: req.user.email }).populate("managerId teamLeaderId"));
+    const selfQuery = { ...query, email: req.user.email };
+    const selfCount = isPaginated
+      ? await Employee.countDocuments(selfQuery)
+      : 0;
+    const employees = await Employee.find(selfQuery)
+      .populate("managerId teamLeaderId")
+      .sort({ fullName: 1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    return isPaginated
+      ? res.json({
+          employees,
+          pagination: {
+            currentPage: pageNum,
+            totalPages: Math.ceil(selfCount / limitNum),
+            totalCount: selfCount,
+            limit: limitNum,
+          },
+        })
+      : res.json(employees);
   }
 
   return res.json([]);
@@ -164,13 +277,19 @@ router.get("/:id", requireAuth, async (req, res) => {
   if (access.scope === "all") return res.json(employee);
 
   if (access.scope === "department") {
-    const isAllowedDept = await checkScopeDepartment(req.user.email, employee.department);
+    const isAllowedDept = await checkScopeDepartment(
+      req.user.email,
+      employee.department,
+    );
     if (isAllowedDept) return res.json(employee);
     return res.status(403).json({ error: "Forbidden: Not in your scope" });
   }
 
   if (access.scope === "team") {
-    if (employee.email === req.user.email || access.teams.includes(employee.team)) {
+    if (
+      employee.email === req.user.email ||
+      access.teams.includes(employee.team)
+    ) {
       return res.json(employee);
     }
     return res.status(403).json({ error: "Forbidden: Not in your team scope" });
@@ -190,13 +309,45 @@ router.post("/", requireAuth, async (req, res) => {
     return res.status(403).json({ error: "Forbidden" });
 
   const {
-    fullName, email, department, team, position, status, employmentType,
-    managerId, teamLeaderId, employeeCode, gender, maritalStatus, age, dateOfBirth,
-    nationality, idNumber, profilePicture, workEmail, phoneNumber, address,
-    additionalContact, dateOfHire, workLocation, onlineStorageLink,
-    education, trainingCourses, skills, languages, financial, insurance,
-    fullNameArabic, nationalIdExpiryDate, governorate, city, emergencyPhone,
-    subLocation, insurances, medicalCondition, socialInsurance,
+    fullName,
+    email,
+    department,
+    team,
+    position,
+    status,
+    employmentType,
+    managerId,
+    teamLeaderId,
+    employeeCode,
+    gender,
+    maritalStatus,
+    age,
+    dateOfBirth,
+    nationality,
+    idNumber,
+    profilePicture,
+    workEmail,
+    phoneNumber,
+    address,
+    additionalContact,
+    dateOfHire,
+    workLocation,
+    onlineStorageLink,
+    education,
+    trainingCourses,
+    skills,
+    languages,
+    financial,
+    insurance,
+    fullNameArabic,
+    nationalIdExpiryDate,
+    governorate,
+    city,
+    emergencyPhone,
+    subLocation,
+    insurances,
+    medicalCondition,
+    socialInsurance,
   } = req.body;
 
   if (!fullName || !email || !department || !position) {
@@ -204,24 +355,35 @@ router.post("/", requireAuth, async (req, res) => {
   }
 
   if (access.scope === "department") {
-    const isAllowedDept = await checkScopeDepartment(req.user.email, department);
+    const isAllowedDept = await checkScopeDepartment(
+      req.user.email,
+      department,
+    );
     if (!isAllowedDept) {
-      return res.status(403).json({ error: "Cannot create employee outside your department scope" });
+      return res.status(403).json({
+        error: "Cannot create employee outside your department scope",
+      });
     }
   } else if (access.scope === "self") {
-    return res.status(403).json({ error: "Scope 'self' cannot create employees" });
+    return res
+      .status(403)
+      .json({ error: "Scope 'self' cannot create employees" });
   }
 
   const existing = await Employee.findOne({ email });
-  if (existing) return res.status(409).json({ error: "Employee already exists" });
+  if (existing)
+    return res.status(409).json({ error: "Employee already exists" });
 
   try {
     const deptDoc = await Department.findOne({ name: department });
-    if (!deptDoc) return res.status(404).json({ error: "Department not found while generating code" });
+    if (!deptDoc)
+      return res
+        .status(404)
+        .json({ error: "Department not found while generating code" });
 
     if (!employeeCode) {
       const deptCount = await Employee.countDocuments({ department });
-      const serial = (deptCount + 1).toString().padStart(3, '0');
+      const serial = (deptCount + 1).toString().padStart(3, "0");
       req.body.employeeCode = `#${deptDoc.code}-${serial}`;
     }
 
@@ -232,7 +394,9 @@ router.post("/", requireAuth, async (req, res) => {
         finalRole = requestedRole;
       } else if (access.scope === "department") {
         const allowed = ["EMPLOYEE", "TEAM_LEADER", "MANAGER"];
-        finalRole = allowed.includes(requestedRole) ? requestedRole : "EMPLOYEE";
+        finalRole = allowed.includes(requestedRole)
+          ? requestedRole
+          : "EMPLOYEE";
       }
     } else {
       finalRole = department === "HR" ? "HR_STAFF" : "EMPLOYEE";
@@ -244,21 +408,52 @@ router.post("/", requireAuth, async (req, res) => {
     const newEmployee = new Employee({
       ...req.body,
       employeeCode: req.body.employeeCode,
+      departmentId: deptDoc._id, // Set normalized reference
+      teamId: team
+        ? (await Team.findOne({ name: team, departmentId: deptDoc._id }))?._id
+        : null, // Set normalized reference if team exists
+      positionId: position
+        ? (
+            await Position.findOne({
+              title: position,
+              departmentId: deptDoc._id,
+            })
+          )?._id
+        : null, // Set normalized reference if position exists
       gender: gender || "MALE",
       maritalStatus: maritalStatus || "SINGLE",
       age: age || null,
       dateOfBirth: optionalDate(dateOfBirth),
-      nationality, idNumber,
+      nationality,
+      idNumber,
       nationalIdExpiryDate: optionalDate(nationalIdExpiryDate),
-      profilePicture, workEmail, phoneNumber, emergencyPhone,
-      address, governorate, city, additionalContact,
+      profilePicture,
+      workEmail,
+      phoneNumber,
+      emergencyPhone,
+      address,
+      governorate,
+      city,
+      additionalContact,
       dateOfHire: optionalDate(dateOfHire),
       annualAnniversaryDate: optionalDate(computedAnniversaryDate),
-      workLocation, subLocation, onlineStorageLink,
-      education, trainingCourses, skills, languages, financial,
-      insurance: insurance && typeof insurance === "object"
-        ? { provider: insurance.provider || undefined, policyNumber: insurance.policyNumber || undefined, coverageType: insurance.coverageType || "HEALTH", validUntil: optionalDate(insurance.validUntil) }
-        : undefined,
+      workLocation,
+      subLocation,
+      onlineStorageLink,
+      education,
+      trainingCourses,
+      skills,
+      languages,
+      financial,
+      insurance:
+        insurance && typeof insurance === "object"
+          ? {
+              provider: insurance.provider || undefined,
+              policyNumber: insurance.policyNumber || undefined,
+              coverageType: insurance.coverageType || "HEALTH",
+              validUntil: optionalDate(insurance.validUntil),
+            }
+          : undefined,
       insurances: insurances || [],
       yearlySalaryIncreaseDate: computedAnniversaryDate,
       fullNameArabic,
@@ -271,6 +466,17 @@ router.post("/", requireAuth, async (req, res) => {
     });
     await newEmployee.save();
 
+    // Create audit log for employee creation
+    await createAuditLog({
+      entityType: "Employee",
+      entityId: newEmployee._id,
+      operation: "CREATE",
+      newValues: newEmployee.toObject(),
+      performedBy: req.user.email,
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent"),
+    });
+
     return res.status(201).json({
       message: "Employee created successfully",
       employee: newEmployee,
@@ -278,10 +484,14 @@ router.post("/", requireAuth, async (req, res) => {
       defaultPassword: "Welcome123!",
     });
   } catch (err) {
-    if (err?.name === "ValidationError") return res.status(400).json({ error: err.message });
-    if (err?.code === 11000) return res.status(409).json({ error: "Employee already exists" });
+    if (err?.name === "ValidationError")
+      return res.status(400).json({ error: err.message });
+    if (err?.code === 11000)
+      return res.status(409).json({ error: "Employee already exists" });
     console.error("POST /employees:", err);
-    return res.status(500).json({ error: err.message || "Failed to create employee" });
+    return res
+      .status(500)
+      .json({ error: err.message || "Failed to create employee" });
   }
 });
 
@@ -291,93 +501,275 @@ router.put("/:id", requireAuth, async (req, res) => {
     return res.status(403).json({ error: "Forbidden" });
 
   const {
-    fullName, email, department, team, position, status, employmentType,
-    managerId, teamLeaderId, employeeCode, gender, maritalStatus, age, dateOfBirth,
-    nationality, idNumber, profilePicture, workEmail, phoneNumber, address,
-    additionalContact, dateOfHire, workLocation, onlineStorageLink,
-    education, trainingCourses, skills, languages, financial, insurance,
+    fullName,
+    email,
+    department,
+    team,
+    position,
+    status,
+    employmentType,
+    managerId,
+    teamLeaderId,
+    employeeCode,
+    gender,
+    maritalStatus,
+    age,
+    dateOfBirth,
+    nationality,
+    idNumber,
+    profilePicture,
+    workEmail,
+    phoneNumber,
+    address,
+    additionalContact,
+    dateOfHire,
+    workLocation,
+    onlineStorageLink,
+    education,
+    trainingCourses,
+    skills,
+    languages,
+    financial,
+    insurance,
     documentChecklist,
-    fullNameArabic, nationalIdExpiryDate, governorate, city, emergencyPhone,
-    subLocation, insurances, medicalCondition, socialInsurance,
-    terminationDate, terminationReason,
+    fullNameArabic,
+    nationalIdExpiryDate,
+    governorate,
+    city,
+    emergencyPhone,
+    subLocation,
+    insurances,
+    medicalCondition,
+    socialInsurance,
+    terminationDate,
+    terminationReason,
   } = req.body;
 
   const employee = await Employee.findById(req.params.id);
   if (!employee) return res.status(404).json({ error: "Employee not found" });
 
   if (access.scope === "department") {
-    const isAllowedDept = await checkScopeDepartment(req.user.email, employee.department);
-    if (!isAllowedDept) return res.status(403).json({ error: "Not authorized to edit this record" });
+    const isAllowedDept = await checkScopeDepartment(
+      req.user.email,
+      employee.department,
+    );
+    if (!isAllowedDept)
+      return res
+        .status(403)
+        .json({ error: "Not authorized to edit this record" });
     if (department && department !== employee.department) {
-      const isTargetAllowedDept = await checkScopeDepartment(req.user.email, department);
-      if (!isTargetAllowedDept) return res.status(403).json({ error: "Cannot move employee to a restricted department" });
+      const isTargetAllowedDept = await checkScopeDepartment(
+        req.user.email,
+        department,
+      );
+      if (!isTargetAllowedDept)
+        return res
+          .status(403)
+          .json({ error: "Cannot move employee to a restricted department" });
     }
   } else if (access.scope === "self") {
-    if (employee.email !== req.user.email) return res.status(403).json({ error: "Forbidden: Can only edit self" });
-    if (department && department !== employee.department) return res.status(403).json({ error: "Cannot change own department" });
+    if (employee.email !== req.user.email)
+      return res.status(403).json({ error: "Forbidden: Can only edit self" });
+    if (department && department !== employee.department)
+      return res.status(403).json({ error: "Cannot change own department" });
   }
 
+  const originalEmployee = employee.toObject();
+
   employee.fullName = fullName ?? employee.fullName;
+  const oldEmail = employee.email;
   employee.email = email ?? employee.email;
-  employee.department = department ?? employee.department;
-  employee.team = team ?? employee.team;
-  employee.position = position ?? employee.position;
+
+  // Handle department changes with dual storage consistency
+  if (department !== undefined) {
+    employee.department = department;
+    if (department !== employee.department) {
+      // Department is changing, update departmentId
+      const newDeptDoc = await Department.findOne({ name: department });
+      if (newDeptDoc) {
+        employee.departmentId = newDeptDoc._id;
+      }
+    }
+  }
+
+  // Handle team changes with dual storage consistency
+  if (team !== undefined) {
+    employee.team = team;
+    if (team !== employee.team) {
+      // Team is changing, update teamId
+      if (team && employee.departmentId) {
+        const newTeamDoc = await Team.findOne({
+          name: team,
+          departmentId: employee.departmentId,
+        });
+        employee.teamId = newTeamDoc?._id || null;
+      } else {
+        employee.teamId = null;
+      }
+    }
+  }
+
+  // Handle position changes with dual storage consistency
+  if (position !== undefined) {
+    employee.position = position;
+    if (position !== employee.position) {
+      // Position is changing, update positionId
+      if (position && employee.departmentId) {
+        const newPosDoc = await Position.findOne({
+          title: position,
+          departmentId: employee.departmentId,
+        });
+        employee.positionId = newPosDoc?._id || null;
+      } else {
+        employee.positionId = null;
+      }
+    }
+  }
 
   if (status !== undefined) employee.status = status;
   if (employmentType !== undefined) employee.employmentType = employmentType;
 
   // Defensive: if frontend sends populated objects, extract the ID
   if (managerId !== undefined) {
-    employee.managerId = (managerId && typeof managerId === 'object') ? (managerId.id || managerId._id) : (managerId || null);
+    employee.managerId =
+      managerId && typeof managerId === "object"
+        ? managerId.id || managerId._id
+        : managerId || null;
   }
   if (teamLeaderId !== undefined) {
-    employee.teamLeaderId = (teamLeaderId && typeof teamLeaderId === 'object') ? (teamLeaderId.id || teamLeaderId._id) : (teamLeaderId || null);
+    employee.teamLeaderId =
+      teamLeaderId && typeof teamLeaderId === "object"
+        ? teamLeaderId.id || teamLeaderId._id
+        : teamLeaderId || null;
   }
   if (employeeCode !== undefined) employee.employeeCode = employeeCode;
   if (gender !== undefined) employee.gender = gender;
   if (maritalStatus !== undefined) employee.maritalStatus = maritalStatus;
   if (age !== undefined) employee.age = age;
-  if (dateOfBirth !== undefined) employee.dateOfBirth = optionalDate(dateOfBirth);
+  if (dateOfBirth !== undefined)
+    employee.dateOfBirth = optionalDate(dateOfBirth);
   if (nationality !== undefined) employee.nationality = nationality;
   if (idNumber !== undefined) employee.idNumber = idNumber;
   if (profilePicture !== undefined) employee.profilePicture = profilePicture;
   if (workEmail !== undefined) employee.workEmail = workEmail;
   if (phoneNumber !== undefined) employee.phoneNumber = phoneNumber;
   if (address !== undefined) employee.address = address;
-  if (additionalContact !== undefined) employee.additionalContact = additionalContact;
+  if (additionalContact !== undefined)
+    employee.additionalContact = additionalContact;
   if (dateOfHire !== undefined) {
     employee.dateOfHire = optionalDate(dateOfHire);
     if (employee.dateOfHire) {
-      const computedAnniversaryDate = calculateNextAnniversary(employee.dateOfHire);
+      const computedAnniversaryDate = calculateNextAnniversary(
+        employee.dateOfHire,
+      );
       employee.annualAnniversaryDate = computedAnniversaryDate;
       employee.yearlySalaryIncreaseDate = computedAnniversaryDate;
     }
   }
   if (workLocation !== undefined) employee.workLocation = workLocation;
-  if (onlineStorageLink !== undefined) employee.onlineStorageLink = onlineStorageLink;
+  if (onlineStorageLink !== undefined)
+    employee.onlineStorageLink = onlineStorageLink;
   if (education !== undefined) employee.education = education;
   if (trainingCourses !== undefined) employee.trainingCourses = trainingCourses;
   if (skills !== undefined) employee.skills = skills;
   if (languages !== undefined) employee.languages = languages;
   if (financial !== undefined) employee.financial = financial;
   if (insurance !== undefined) employee.insurance = insurance;
-  if (documentChecklist !== undefined) employee.documentChecklist = documentChecklist;
+  if (documentChecklist !== undefined)
+    employee.documentChecklist = documentChecklist;
 
   // New fields
   if (fullNameArabic !== undefined) employee.fullNameArabic = fullNameArabic;
-  if (nationalIdExpiryDate !== undefined) employee.nationalIdExpiryDate = optionalDate(nationalIdExpiryDate);
+  if (nationalIdExpiryDate !== undefined)
+    employee.nationalIdExpiryDate = optionalDate(nationalIdExpiryDate);
   if (governorate !== undefined) employee.governorate = governorate;
   if (city !== undefined) employee.city = city;
   if (emergencyPhone !== undefined) employee.emergencyPhone = emergencyPhone;
   if (subLocation !== undefined) employee.subLocation = subLocation;
   if (insurances !== undefined) employee.insurances = insurances;
-  if (medicalCondition !== undefined) employee.medicalCondition = medicalCondition;
+  if (medicalCondition !== undefined)
+    employee.medicalCondition = medicalCondition;
   if (socialInsurance !== undefined) employee.socialInsurance = socialInsurance;
   if (terminationDate !== undefined) {
-    employee.terminationDate = terminationDate === null ? null : optionalDate(terminationDate);
+    employee.terminationDate =
+      terminationDate === null ? null : optionalDate(terminationDate);
   }
   if (terminationReason !== undefined) {
-    employee.terminationReason = terminationReason === null ? null : terminationReason;
+    employee.terminationReason =
+      terminationReason === null ? null : terminationReason;
+  }
+
+  if (status !== undefined) employee.status = status;
+  if (employmentType !== undefined) employee.employmentType = employmentType;
+
+  // Defensive: if frontend sends populated objects, extract the ID
+  if (managerId !== undefined) {
+    employee.managerId =
+      managerId && typeof managerId === "object"
+        ? managerId.id || managerId._id
+        : managerId || null;
+  }
+  if (teamLeaderId !== undefined) {
+    employee.teamLeaderId =
+      teamLeaderId && typeof teamLeaderId === "object"
+        ? teamLeaderId.id || teamLeaderId._id
+        : teamLeaderId || null;
+  }
+  if (employeeCode !== undefined) employee.employeeCode = employeeCode;
+  if (gender !== undefined) employee.gender = gender;
+  if (maritalStatus !== undefined) employee.maritalStatus = maritalStatus;
+  if (age !== undefined) employee.age = age;
+  if (dateOfBirth !== undefined)
+    employee.dateOfBirth = optionalDate(dateOfBirth);
+  if (nationality !== undefined) employee.nationality = nationality;
+  if (idNumber !== undefined) employee.idNumber = idNumber;
+  if (profilePicture !== undefined) employee.profilePicture = profilePicture;
+  if (workEmail !== undefined) employee.workEmail = workEmail;
+  if (phoneNumber !== undefined) employee.phoneNumber = phoneNumber;
+  if (address !== undefined) employee.address = address;
+  if (additionalContact !== undefined)
+    employee.additionalContact = additionalContact;
+  if (dateOfHire !== undefined) {
+    employee.dateOfHire = optionalDate(dateOfHire);
+    if (employee.dateOfHire) {
+      const computedAnniversaryDate = calculateNextAnniversary(
+        employee.dateOfHire,
+      );
+      employee.annualAnniversaryDate = computedAnniversaryDate;
+      employee.yearlySalaryIncreaseDate = computedAnniversaryDate;
+    }
+  }
+  if (workLocation !== undefined) employee.workLocation = workLocation;
+  if (onlineStorageLink !== undefined)
+    employee.onlineStorageLink = onlineStorageLink;
+  if (education !== undefined) employee.education = education;
+  if (trainingCourses !== undefined) employee.trainingCourses = trainingCourses;
+  if (skills !== undefined) employee.skills = skills;
+  if (languages !== undefined) employee.languages = languages;
+  if (financial !== undefined) employee.financial = financial;
+  if (insurance !== undefined) employee.insurance = insurance;
+  if (documentChecklist !== undefined)
+    employee.documentChecklist = documentChecklist;
+
+  // New fields
+  if (fullNameArabic !== undefined) employee.fullNameArabic = fullNameArabic;
+  if (nationalIdExpiryDate !== undefined)
+    employee.nationalIdExpiryDate = optionalDate(nationalIdExpiryDate);
+  if (governorate !== undefined) employee.governorate = governorate;
+  if (city !== undefined) employee.city = city;
+  if (emergencyPhone !== undefined) employee.emergencyPhone = emergencyPhone;
+  if (subLocation !== undefined) employee.subLocation = subLocation;
+  if (insurances !== undefined) employee.insurances = insurances;
+  if (medicalCondition !== undefined)
+    employee.medicalCondition = medicalCondition;
+  if (socialInsurance !== undefined) employee.socialInsurance = socialInsurance;
+  if (terminationDate !== undefined) {
+    employee.terminationDate =
+      terminationDate === null ? null : optionalDate(terminationDate);
+  }
+  if (terminationReason !== undefined) {
+    employee.terminationReason =
+      terminationReason === null ? null : terminationReason;
   }
 
   if (employee.status === "TERMINATED" || employee.status === "RESIGNED") {
@@ -387,18 +779,26 @@ router.put("/:id", requireAuth, async (req, res) => {
     const email = employee.email;
     if (email) {
       // 1. Clear from Department head
-      await Department.updateMany({ head: email }, { $set: { head: "", headTitle: "Vacant" } });
-      
+      await Department.updateMany(
+        { head: email },
+        { $set: { head: "", headTitle: "Vacant" } },
+      );
+
       // 2. Clear from Team leaders (nested array update)
       await Department.updateMany(
         { "teams.leaderEmail": email },
-        { 
-          $set: { 
+        {
+          $set: {
             "teams.$[elem].leaderEmail": "",
-            "teams.$[elem].leaderTitle": "Vacant"
-          } 
+            "teams.$[elem].leaderTitle": "Vacant",
+          },
         },
-        { arrayFilters: [{ "elem.leaderEmail": email }] }
+        { arrayFilters: [{ "elem.leaderEmail": email }] },
+      );
+
+      await Team.updateMany(
+        { leaderEmail: email },
+        { $set: { leaderEmail: null } },
       );
     }
   } else if (employee.status === "ACTIVE") {
@@ -406,6 +806,70 @@ router.put("/:id", requireAuth, async (req, res) => {
   }
 
   await employee.save();
+
+  if (oldEmail && employee.email && oldEmail !== employee.email) {
+    try {
+      // Cascade email change to all org structure references
+      await Department.updateMany(
+        { head: oldEmail },
+        { $set: { head: employee.email } },
+      );
+      await Department.updateMany(
+        { "teams.leaderEmail": oldEmail },
+        {
+          $set: { "teams.$[t].leaderEmail": employee.email },
+        },
+        { arrayFilters: [{ "t.leaderEmail": oldEmail }] },
+      );
+      await Department.updateMany(
+        { "teams.members": oldEmail },
+        {
+          $set: { "teams.$[t].members.$[m]": employee.email },
+        },
+        {
+          arrayFilters: [{ "t.members": oldEmail }, { m: oldEmail }],
+        },
+      );
+      await Team.updateMany(
+        { leaderEmail: oldEmail },
+        { $set: { leaderEmail: employee.email } },
+      );
+      const teamIdsWithOldMember = await Team.find({
+        members: oldEmail,
+      }).distinct("_id");
+      if (teamIdsWithOldMember.length > 0) {
+        await Team.updateMany(
+          { _id: { $in: teamIdsWithOldMember } },
+          { $pull: { members: oldEmail } },
+        );
+        await Team.updateMany(
+          { _id: { $in: teamIdsWithOldMember } },
+          { $addToSet: { members: employee.email } },
+        );
+      }
+    } catch (err) {
+      console.error("Employee email cascade to org structure:", err);
+    }
+  }
+
+  // Create audit log
+  const { changes, previousValues, newValues } = detectChanges(
+    originalEmployee,
+    employee.toObject(),
+  );
+  if (Object.keys(changes).length > 0) {
+    await createAuditLog({
+      entityType: "Employee",
+      entityId: employee._id,
+      operation: "UPDATE",
+      changes,
+      previousValues,
+      newValues,
+      performedBy: req.user.email,
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent"),
+    });
+  }
 
   return res.json(employee);
 });
@@ -423,11 +887,20 @@ router.post("/:id/transfer", requireAuth, async (req, res) => {
   const employee = await Employee.findById(req.params.id);
   if (!employee) return res.status(404).json({ error: "Employee not found" });
 
-  const { toDepartment, newPosition, newSalary, newEmployeeCode, resetYearlyIncreaseDate, notes } = req.body;
-  if (!toDepartment) return res.status(400).json({ error: "Target department is required" });
+  const {
+    toDepartment,
+    newPosition,
+    newSalary,
+    newEmployeeCode,
+    resetYearlyIncreaseDate,
+    notes,
+  } = req.body;
+  if (!toDepartment)
+    return res.status(400).json({ error: "Target department is required" });
 
   const toDeptDoc = await Department.findOne({ name: toDepartment });
-  if (!toDeptDoc) return res.status(404).json({ error: "Target department not found" });
+  if (!toDeptDoc)
+    return res.status(404).json({ error: "Target department not found" });
 
   const fromDeptDoc = await Department.findOne({ name: employee.department });
   const transferDate = new Date();
@@ -447,7 +920,9 @@ router.post("/:id/transfer", requireAuth, async (req, res) => {
     newPosition: newPosition || employee.position,
     newSalary: newSalary || employee.financial?.baseSalary,
     yearlyIncreaseDateChanged: !!resetYearlyIncreaseDate,
-    newYearlyIncreaseDate: resetYearlyIncreaseDate ? newYearlyIncreaseDate : undefined,
+    newYearlyIncreaseDate: resetYearlyIncreaseDate
+      ? newYearlyIncreaseDate
+      : undefined,
     notes,
     previousEmployeeCode: newEmployeeCode ? employee.employeeCode : undefined,
     newEmployeeCode: newEmployeeCode || undefined,
@@ -463,14 +938,21 @@ router.post("/:id/transfer", requireAuth, async (req, res) => {
   if (newSalary !== undefined && newSalary !== employee.financial?.baseSalary) {
     const previousSalary = employee.financial?.baseSalary || 0;
     const isIncrease = newSalary > previousSalary;
-    
+
     // Log into salary history
     if (!employee.salaryHistory) employee.salaryHistory = [];
     employee.salaryHistory.push({
       previousSalary,
       newSalary,
       increaseAmount: newSalary - previousSalary,
-      increasePercentage: previousSalary > 0 ? Number((((newSalary - previousSalary) / previousSalary) * 100).toFixed(2)) : 100,
+      increasePercentage:
+        previousSalary > 0
+          ? Number(
+              (((newSalary - previousSalary) / previousSalary) * 100).toFixed(
+                2,
+              ),
+            )
+          : 100,
       effectiveDate: transferDate,
       reason: `Salary adjusted during transfer to ${toDepartment}`,
       processedBy: req.user.email,
@@ -480,7 +962,10 @@ router.post("/:id/transfer", requireAuth, async (req, res) => {
     employee.financial.baseSalary = newSalary;
   }
   if (resetYearlyIncreaseDate) {
-    employee.yearlySalaryIncreaseDate = newYearlyIncreaseDate;
+    const nextYear = new Date(transferDate);
+    nextYear.setFullYear(nextYear.getFullYear() + 1);
+    employee.yearlySalaryIncreaseDate = nextYear;
+    employee.annualAnniversaryDate = nextYear;
   }
   if (newEmployeeCode) {
     employee.employeeCode = newEmployeeCode;
@@ -488,7 +973,38 @@ router.post("/:id/transfer", requireAuth, async (req, res) => {
 
   await employee.save();
 
-  return res.json({ message: "Employee transferred successfully", employee, transferRecord });
+  // Create audit log for employee transfer
+  await createAuditLog({
+    entityType: "Employee",
+    entityId: employee._id,
+    operation: "TRANSFER",
+    changes: {
+      department: {
+        from: fromDeptDoc?.name || employee.department,
+        to: toDepartment,
+      },
+      position: newPosition
+        ? { from: employee.position, to: newPosition }
+        : undefined,
+      salary:
+        newSalary !== undefined
+          ? { from: previousSalary, to: newSalary }
+          : undefined,
+      employeeCode: newEmployeeCode
+        ? { from: transferRecord.previousEmployeeCode, to: newEmployeeCode }
+        : undefined,
+    },
+    reason: notes || "Employee transfer",
+    performedBy: req.user.email,
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent"),
+  });
+
+  return res.json({
+    message: "Employee transferred successfully",
+    employee,
+    transferRecord,
+  });
 });
 
 router.delete("/:id", requireAuth, async (req, res) => {
@@ -497,24 +1013,104 @@ router.delete("/:id", requireAuth, async (req, res) => {
     return res.status(403).json({ error: "Forbidden" });
 
   if (req.user.role === "EMPLOYEE" || req.user.role === 1) {
-    return res.status(403).json({ error: "Policy Restriction: Only Managers and Admins can delete data." });
+    return res.status(403).json({
+      error: "Policy Restriction: Only Managers and Admins can delete data.",
+    });
   }
 
   const employee = await Employee.findById(req.params.id);
   if (!employee) return res.status(404).json({ error: "Employee not found" });
 
   if (access.scope === "department") {
-    const deptNames = await Department.find({ head: req.user.email }).distinct("name");
+    const deptNames = await Department.find({ head: req.user.email }).distinct(
+      "name",
+    );
     if (!deptNames.includes(employee.department)) {
-      return res.status(403).json({ error: "Managers can only delete employees from departments they explicitly manage." });
+      return res.status(403).json({
+        error:
+          "Managers can only delete employees from departments they explicitly manage.",
+      });
     }
   } else if (access.scope === "self") {
-    return res.status(403).json({ error: "Scope 'self' cannot delete records." });
+    return res
+      .status(403)
+      .json({ error: "Scope 'self' cannot delete records." });
   }
 
   const employee_id = employee._id.toString();
+
+  // Check for dependencies before deletion
+  const openManagementRequests = await ManagementRequest.countDocuments({
+    senderId: employee_id,
+    $or: [{ status: "PENDING" }, { status: "APPROVED_MANAGER" }],
+  });
+
+  if (openManagementRequests > 0) {
+    return res.status(409).json({
+      error: `Cannot delete employee: ${openManagementRequests} open management request(s) exist`,
+      suggestion: "Close or reassign management requests first",
+    });
+  }
+
+  // Clear embedded metadata if employee is a department head or team leader
+  if (employee.email) {
+    // Clear from Department head
+    await Department.updateMany(
+      { head: employee.email },
+      { $set: { head: "", headTitle: "Vacant" } },
+    );
+
+    // Clear from Team leaders (nested array update)
+    await Department.updateMany(
+      { "teams.leaderEmail": employee.email },
+      {
+        $set: {
+          "teams.$[elem].leaderEmail": "",
+          "teams.$[elem].leaderTitle": "Vacant",
+        },
+      },
+      { arrayFilters: [{ "elem.leaderEmail": employee.email }] },
+    );
+
+    // Clear from standalone Team collection
+    await Team.updateMany(
+      { leaderEmail: employee.email },
+      { $set: { leaderEmail: "", leaderTitle: "Vacant" } },
+    );
+  }
+
+  // Store employee data for audit log before deletion
+  const deletedEmployeeData = employee.toObject();
+
+  // Delete all dependent records
   await Employee.findByIdAndDelete(req.params.id);
   await UserPermission.deleteMany({ userId: employee_id });
+  await Attendance.deleteMany({ employeeId: employee_id });
+  await Alert.deleteMany({ employeeId: employee_id });
+  await ManagementRequest.deleteMany({ senderId: employee_id });
+
+  // Clear manager references from other employees
+  await Employee.updateMany(
+    { managerId: employee_id },
+    { $set: { managerId: null } },
+  );
+
+  // Clear team leader references from other employees
+  await Employee.updateMany(
+    { teamLeaderId: employee_id },
+    { $set: { teamLeaderId: null } },
+  );
+
+  // Create audit log for employee deletion
+  await createAuditLog({
+    entityType: "Employee",
+    entityId: employee_id,
+    operation: "DELETE",
+    previousValues: deletedEmployeeData,
+    performedBy: req.user.email,
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent"),
+  });
 
   return res.json({ success: true });
 });
@@ -526,10 +1122,16 @@ router.delete("/:id", requireAuth, async (req, res) => {
 router.post("/:id/process-increase", requireAuth, async (req, res) => {
   const { role, email } = req.user;
   if (!["ADMIN", "HR_MANAGER", "HR_STAFF"].includes(role)) {
-    return res.status(403).json({ error: "Unauthorized to process salary increases" });
+    return res
+      .status(403)
+      .json({ error: "Unauthorized to process salary increases" });
   }
 
-  const { increasePercentage, increaseAmount, reason, effectiveDate } = req.body;
+  // Use org policy as default increase %, allow manual override per request
+  const policy = await OrganizationPolicy.findOne({ name: "default" });
+
+  let { increasePercentage, increaseAmount, reason, effectiveDate } =
+    req.body;
   const employee = await Employee.findById(req.params.id);
 
   if (!employee) {
@@ -537,24 +1139,73 @@ router.post("/:id/process-increase", requireAuth, async (req, res) => {
   }
 
   if (employee.status === "TERMINATED" || employee.status === "RESIGNED") {
-    return res.status(400).json({ error: "Cannot process salary increase for a terminated or resigned employee" });
+    return res.status(400).json({
+      error:
+        "Cannot process salary increase for a terminated or resigned employee",
+    });
   }
+
+  const hasManualPercent =
+    increasePercentage !== undefined &&
+    increasePercentage !== null &&
+    increasePercentage !== "";
+  const hasManualAmount =
+    increaseAmount !== undefined &&
+    increaseAmount !== null &&
+    increaseAmount !== "";
+
+  if (!hasManualPercent && !hasManualAmount) {
+    const rules = policy?.salaryIncreaseRules;
+    if (Array.isArray(rules) && rules.length > 0) {
+      const idStr = employee._id?.toString();
+      const code = employee.employeeCode;
+      const dept = employee.department;
+      const byEmployee = rules.find(
+        (r) =>
+          r.type === "EMPLOYEE" &&
+          (r.target === idStr || r.target === code),
+      );
+      const byDepartment = rules.find(
+        (r) => r.type === "DEPARTMENT" && r.target === dept,
+      );
+      const defaultRule = rules.find((r) => r.type === "DEFAULT");
+      const resolved =
+        byEmployee?.percentage ??
+        byDepartment?.percentage ??
+        defaultRule?.percentage;
+      if (resolved !== undefined && resolved !== null) {
+        increasePercentage = resolved;
+      }
+    }
+  }
+
+  const usePercent =
+    increasePercentage !== undefined &&
+    increasePercentage !== null &&
+    increasePercentage !== "";
+  const useAmount =
+    increaseAmount !== undefined &&
+    increaseAmount !== null &&
+    increaseAmount !== "";
 
   const currentSalary = employee.financial?.baseSalary || 0;
   let computedNewSalary = currentSalary;
   let computedAmount = 0;
   let computedPercent = 0;
 
-  if (increasePercentage) {
+  if (usePercent) {
     computedPercent = Number(increasePercentage);
     computedAmount = (currentSalary * computedPercent) / 100;
     computedNewSalary = currentSalary + computedAmount;
-  } else if (increaseAmount) {
+  } else if (useAmount) {
     computedAmount = Number(increaseAmount);
     computedNewSalary = currentSalary + computedAmount;
-    computedPercent = currentSalary > 0 ? (computedAmount / currentSalary) * 100 : 0;
+    computedPercent =
+      currentSalary > 0 ? (computedAmount / currentSalary) * 100 : 0;
   } else {
-    return res.status(400).json({ error: "Must provide increasePercentage or increaseAmount" });
+    return res
+      .status(400)
+      .json({ error: "Must provide increasePercentage or increaseAmount" });
   }
 
   // Record Transaction

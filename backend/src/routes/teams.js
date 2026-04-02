@@ -113,14 +113,21 @@ router.post(
 
       // Strict Departmental Validation
       const deptName = department.name;
-      
+
       if (leaderEmail) {
         const leaderEmp = await Employee.findOne({ email: leaderEmail });
         if (!leaderEmp) {
-          return res.status(400).json({ error: `Leader with email ${leaderEmail} not found.` });
+          return res
+            .status(400)
+            .json({ error: `Leader with email ${leaderEmail} not found.` });
         }
-        if (leaderEmp.department !== deptName && leaderEmp.departmentId?.toString() !== departmentId) {
-          return res.status(400).json({ error: `Leader ${leaderEmail} does not belong to the ${deptName} department.` });
+        if (
+          leaderEmp.department !== deptName &&
+          leaderEmp.departmentId?.toString() !== departmentId
+        ) {
+          return res.status(400).json({
+            error: `Leader ${leaderEmail} does not belong to the ${deptName} department.`,
+          });
         }
       }
 
@@ -128,10 +135,17 @@ router.post(
         for (const email of members) {
           const memberEmp = await Employee.findOne({ email });
           if (!memberEmp) {
-            return res.status(400).json({ error: `Member with email ${email} not found.` });
+            return res
+              .status(400)
+              .json({ error: `Member with email ${email} not found.` });
           }
-          if (memberEmp.department !== deptName && memberEmp.departmentId?.toString() !== departmentId) {
-            return res.status(400).json({ error: `Member ${email} does not belong to the ${deptName} department.` });
+          if (
+            memberEmp.department !== deptName &&
+            memberEmp.departmentId?.toString() !== departmentId
+          ) {
+            return res.status(400).json({
+              error: `Member ${email} does not belong to the ${deptName} department.`,
+            });
           }
         }
       }
@@ -160,6 +174,26 @@ router.post(
       });
 
       await newTeam.save();
+
+      // Also update the nested team in Department.teams for dual-location consistency
+      await Department.updateOne(
+        { _id: departmentId },
+        {
+          $push: {
+            teams: {
+              name: newTeam.name,
+              leaderEmail: leaderEmail || "",
+              leaderTitle: leaderTitle || "Team Leader",
+              leaderResponsibility: leaderResponsibility || "",
+              description: description || "",
+              positions: positions || [],
+              members: members || [],
+              status: status || "ACTIVE",
+            },
+          },
+        },
+      );
+
       await Team.populate(newTeam, { path: "departmentId", select: "name" });
 
       res.status(201).json({
@@ -190,7 +224,16 @@ router.put(
         return res.status(404).json({ error: "Team not found" });
       }
 
-      const { name, leaderEmail, leaderTitle, leaderResponsibility, members, description, positions, status } = req.body;
+      const {
+        name,
+        leaderEmail,
+        leaderTitle,
+        leaderResponsibility,
+        members,
+        description,
+        positions,
+        status,
+      } = req.body;
 
       // Validation for Leader/Members if they are being updated
       const department = await Department.findById(team.departmentId);
@@ -199,10 +242,17 @@ router.put(
       if (leaderEmail !== undefined && leaderEmail !== "") {
         const leaderEmp = await Employee.findOne({ email: leaderEmail });
         if (!leaderEmp) {
-          return res.status(400).json({ error: `Leader with email ${leaderEmail} not found.` });
+          return res
+            .status(400)
+            .json({ error: `Leader with email ${leaderEmail} not found.` });
         }
-        if (leaderEmp.department !== deptName && leaderEmp.departmentId?.toString() !== team.departmentId.toString()) {
-          return res.status(400).json({ error: `Leader ${leaderEmail} does not belong to the ${deptName} department.` });
+        if (
+          leaderEmp.department !== deptName &&
+          leaderEmp.departmentId?.toString() !== team.departmentId.toString()
+        ) {
+          return res.status(400).json({
+            error: `Leader ${leaderEmail} does not belong to the ${deptName} department.`,
+          });
         }
       }
 
@@ -210,10 +260,17 @@ router.put(
         for (const email of members) {
           const memberEmp = await Employee.findOne({ email });
           if (!memberEmp) {
-            return res.status(400).json({ error: `Member with email ${email} not found.` });
+            return res
+              .status(400)
+              .json({ error: `Member with email ${email} not found.` });
           }
-          if (memberEmp.department !== deptName && memberEmp.departmentId?.toString() !== team.departmentId.toString()) {
-            return res.status(400).json({ error: `Member ${email} does not belong to the ${deptName} department.` });
+          if (
+            memberEmp.department !== deptName &&
+            memberEmp.departmentId?.toString() !== team.departmentId.toString()
+          ) {
+            return res.status(400).json({
+              error: `Member ${email} does not belong to the ${deptName} department.`,
+            });
           }
         }
       }
@@ -241,11 +298,14 @@ router.put(
 
       if (leaderEmail !== undefined) team.leaderEmail = leaderEmail;
       if (leaderTitle !== undefined) team.leaderTitle = leaderTitle;
-      if (leaderResponsibility !== undefined) team.leaderResponsibility = leaderResponsibility;
-      if (members !== undefined) team.members = Array.isArray(members) ? members : [];
+      if (leaderResponsibility !== undefined)
+        team.leaderResponsibility = leaderResponsibility;
+      if (members !== undefined)
+        team.members = Array.isArray(members) ? members : [];
       if (description !== undefined) team.description = description;
-      if (positions !== undefined) team.positions = Array.isArray(positions) ? positions : team.positions;
-      
+      if (positions !== undefined)
+        team.positions = Array.isArray(positions) ? positions : team.positions;
+
       if (status !== undefined) {
         if (!["ACTIVE", "ARCHIVED"].includes(status)) {
           return res.status(400).json({ error: "Invalid status value" });
@@ -254,6 +314,24 @@ router.put(
       }
 
       await team.save();
+
+      // Also update the nested team in Department.teams for dual-location consistency
+      await Department.updateOne(
+        { _id: team.departmentId, "teams.name": team.name },
+        {
+          $set: {
+            "teams.$.name": team.name,
+            "teams.$.leaderEmail": team.leaderEmail || "",
+            "teams.$.leaderTitle": team.leaderTitle || "Team Leader",
+            "teams.$.leaderResponsibility": team.leaderResponsibility || "",
+            "teams.$.description": team.description || "",
+            "teams.$.positions": team.positions || [],
+            "teams.$.members": team.members || [],
+            "teams.$.status": team.status || "ACTIVE",
+          },
+        },
+      );
+
       await Team.populate(team, { path: "departmentId", select: "name" });
 
       res.json({
@@ -311,6 +389,12 @@ router.delete(
       }
 
       await Team.findByIdAndDelete(team._id);
+
+      // Also remove the nested team from Department.teams for dual-location consistency
+      await Department.updateOne(
+        { _id: team.departmentId },
+        { $pull: { teams: { name: team.name } } },
+      );
 
       res.json({
         message: "Team deleted successfully",

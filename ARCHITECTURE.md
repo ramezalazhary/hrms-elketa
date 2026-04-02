@@ -1,13 +1,13 @@
 # Project Architecture
 
-Last updated: 2026-03-30
+Last updated: 2026-04-02
 
 This document reflects the current code in the repository, not the older documentation snapshots. It focuses on the real structure under the root, `frontend`, and `backend` folders and excludes generated directories such as `node_modules`, `dist`, `.git`, and `tmp`.
 
 ## 1. Repository Shape
 
 ```text
-my-react-app/
+hrms-elketa/
 |-- backend/                  Express + MongoDB API
 |-- frontend/                 React + Vite SPA
 |-- API_EXAMPLES.md
@@ -17,6 +17,7 @@ my-react-app/
 |-- EXCEL_IMPORT_GUIDE.md
 |-- GETTING_STARTED.md
 |-- QUICK_REFERENCE.md
+|-- implementation_plan.md
 |-- connectionTest.mjs
 |-- docker-compose.yml
 |-- package.json
@@ -64,6 +65,7 @@ The root package is mainly an orchestration layer. It exposes:
 - `API_EXAMPLES.md`: request/response usage examples
 - `EXCEL_IMPORT_GUIDE.md`: attendance import workflow
 - `CONNECTION_DIAGNOSTIC.md`: troubleshooting reference
+- `implementation_plan.md`: development roadmap and milestones
 - `connectionTest.mjs`: script to test backend reachability, MongoDB connectivity, and login flow
 - `docker-compose.yml`: local MongoDB container setup
 
@@ -483,7 +485,7 @@ backend/
 |   |-- middleware/
 |   |-- models/
 |   |-- routes/
-|   |-- services/           currently empty
+|   |-- services/           business logic services (accessService, employeeService)
 |   |-- seedUsers.js
 |   |-- seedAttendanceDemo.js
 |   |-- clearDatabase.js
@@ -497,8 +499,8 @@ backend/
 
 Important architectural note:
 
-- `backend/src/services` exists but is currently empty.
-- Most business logic is still implemented directly inside route files.
+- `backend/src/services` contains extracted business logic for access control and employee operations.
+- Most business logic is being migrated from route files to services.
 
 ## 5.3 Backend Startup Flow
 
@@ -536,6 +538,10 @@ Mounted API roots:
 - `/api/attendance`
 - `/api/management-requests`
 - `/api/policy`
+- `/api/alerts`
+- `/api/bulk`
+- `/api/dashboard`
+- `/api/onboarding`
 
 ## 5.4 Middleware Layers
 
@@ -726,13 +732,43 @@ Special workflow:
 
 - `HR_MODULES` requests use dual approval: manager + HR
 
+### `routes/alerts.js`
+
+Responsibilities:
+
+- dashboard alerts for ID expiry and salary increase
+- role-based alert visibility (admin vs self-only)
+- threshold-based alert generation (60 days for ID, 30 days for salary)
+
+### `routes/bulk.js`
+
+Responsibilities:
+
+- Excel template download for bulk imports
+- bulk data import processing
+- file upload handling with multer
+
+### `routes/dashboard.js`
+
+Responsibilities:
+
+- aggregated dashboard data
+- alert counts and statistics
+- integration with alert generation engine
+
+### `routes/onboarding.js`
+
+Responsibilities:
+
+- employee onboarding workflow
+- onboarding request management
+- document submission tracking
+
 ### `routes/organizationPolicy.js`
 
 Responsibilities:
 
 - get and update organization-wide document requirements
-
-## 5.6 Backend Domain Model
 
 The system uses Mongoose models under `backend/src/models`.
 
@@ -813,6 +849,31 @@ Stores approval workflows initiated by users, including:
 - manager approval state
 - HR approval state
 
+### `Alert`
+
+Stores dashboard alerts:
+
+- alert type (ID_EXPIRY, SALARY_INCREASE, TRANSFER, CONTRACT_EXPIRY)
+- employee reference
+- message and severity levels
+- resolved status tracking
+
+### `OnboardingRequest`
+
+Stores employee onboarding requests:
+
+- request metadata
+- employee information
+- approval workflow states
+
+### `OnboardingSubmission`
+
+Stores onboarding document submissions:
+
+- document attachments
+- submission metadata
+- processing status
+
 ### `OrganizationPolicy`
 
 Stores global company document requirements.
@@ -828,6 +889,23 @@ Stores revoked access tokens with TTL cleanup.
 ### `User`
 
 `backend/src/models/User.js` still exists in the repository, but the active authentication flow uses `Employee` instead.
+
+### `accessService.js`
+
+Provides:
+
+- `resolveEmployeeAccess()` function for dynamic scope resolution
+- role-based access control logic
+- department and team permission calculations
+
+### `employeeService.js`
+
+Provides:
+
+- `createEmployee()` function for employee creation
+- employee code generation logic
+- password hashing and default role assignment
+- data validation and normalization
 
 ## 5.7 Current Data-Model Transition Areas
 
@@ -852,6 +930,33 @@ Teams currently exist in two shapes:
 Many department responses merge both representations.
 
 This is a key architectural nuance and should be preserved carefully when refactoring.
+
+## 5.8 Backend Services Layer
+
+The services layer is being developed to extract business logic from route files:
+
+### `backend/src/services/accessService.js`
+
+- Centralized access control logic
+- Dynamic scope resolution for employee data access
+- Role and permission calculations
+
+### `backend/src/services/employeeService.js`
+
+- Employee creation business logic
+- Code generation and validation
+- Default role and password assignment
+
+## 5.9 Backend Modules
+
+New modular organization for specific business domains:
+
+### `backend/src/modules/alerts/`
+
+- `index.js`: Alert generation engine
+- Threshold-based alert creation
+- Automated alert resolution
+- Integration with employee data for proactive notifications
 
 ## 6. Access-Control Model
 
@@ -946,11 +1051,15 @@ Current test files observed:
 These points are important for future updates:
 
 1. The real auth/account source of truth is `Employee`, not `User`.
-2. Business logic is still concentrated in route files; the `services` layer has not been extracted yet.
+2. Business logic is being extracted from route files to the `services` layer.
 3. The org structure is partially normalized and partially legacy-compatible.
 4. The frontend is feature-module-based, but some strategic pages still live outside modules.
 5. The contracts area is still closer to a placeholder than a fully integrated backend feature.
 6. Existing older docs in the repo do not fully match the current codebase and should be treated carefully.
+7. New alert system provides proactive notifications for ID expiry and salary increases.
+8. Bulk import functionality supports Excel-based data ingestion.
+9. Onboarding workflow manages new employee intake and document collection.
+10. Services layer is growing to centralize business logic and improve code organization.
 
 ## 10. Practical Entry Points for Future Work
 
@@ -977,6 +1086,11 @@ If you need to change behavior quickly, these are the best starting points:
   - `backend/src/routes/positions.js`
   - `backend/src/routes/employments.js`
   - `backend/src/routes/attendance.js`
+- Backend services:
+  - `backend/src/services/accessService.js`
+  - `backend/src/services/employeeService.js`
+- Backend modules:
+  - `backend/src/modules/alerts/`
 
 ## 11. Summary
 
@@ -988,5 +1102,9 @@ This repository is a modular HR platform with:
 - layered role/scope/permission access control
 - a hybrid org-structure model that mixes legacy and normalized data
 - operational support for attendance import, reporting, password administration, and smoke testing
+- proactive alert system for employee milestones
+- bulk data import capabilities
+- employee onboarding workflow
+- growing services layer for business logic centralization
 
 The most important architectural constraint today is compatibility: several modules are already normalized, but the codebase still preserves older data shapes and flows to keep the system working end to end.

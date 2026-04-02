@@ -8,6 +8,7 @@ import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
 import { requireAuth } from "../middleware/auth.js";
 import mongoose from "mongoose";
+import { createAuditLog } from "../services/auditService.js";
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -18,7 +19,7 @@ const upload = multer({ storage: multer.memoryStorage() });
  */
 const parseTime = (timeStr) => {
   if (timeStr === undefined || timeStr === null || timeStr === "") return null;
-  
+
   if (timeStr instanceof Date)
     return {
       h: timeStr.getHours(),
@@ -58,7 +59,11 @@ const parseTime = (timeStr) => {
  * @param {string} checkOut - "HH:mm" or "HH:mm:ss"
  * @param {Object} policy - { standardStartTime: "HH:mm", gracePeriod: Number }
  */
-const calculateStatus = (checkIn, checkOut, policy = { standardStartTime: "09:00", gracePeriod: 15 }) => {
+const calculateStatus = (
+  checkIn,
+  checkOut,
+  policy = { standardStartTime: "09:00", gracePeriod: 15 },
+) => {
   const t1 = parseTime(checkIn);
   const t2 = parseTime(checkOut);
   const shiftStart = parseTime(policy.standardStartTime || "09:00");
@@ -108,7 +113,7 @@ async function resolveAttendanceAccess(user) {
       actions: ["view", "create", "edit", "delete", "import"],
     };
   }
-  
+
   // HR Head check
   const hrDept = await Department.findOne({ name: "HR" });
   if (hrDept && hrDept.head === user.email) {
@@ -140,30 +145,47 @@ async function resolveAttendanceAccess(user) {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
-
-
     const access = await resolveAttendanceAccess(req.user);
-    console.log(req.query , " bacend")
-    const { startDate, endDate, employeeId, employeeCode, todayOnly } = req.query;
+    const {
+      startDate,
+      endDate,
+      employeeId,
+      employeeCode,
+      todayOnly,
+      page = 1,
+      limit = 50,
+    } = req.query;
     let filter = {};
 
     if (access.scope === "subordinates") {
       // Direct Reports for Managers
-      const subordinateIds = await Employee.find({ managerId: req.user.id }).distinct("_id");
+      const subordinateIds = await Employee.find({
+        managerId: req.user.id,
+      }).distinct("_id");
       filter.employeeId = { $in: subordinateIds };
     } else if (access.scope === "team") {
       // Team Members for Team Leaders
-      const departments = await Department.find({ "teams.leaderEmail": req.user.email });
-      const memberEmails = [];
-      departments.forEach(d => {
-        d.teams.filter(t => t.leaderEmail === req.user.email).forEach(t => memberEmails.push(...t.members));
+      const departments = await Department.find({
+        "teams.leaderEmail": req.user.email,
       });
-      const memberIds = await Employee.find({ email: { $in: memberEmails } }).distinct("_id");
+      const memberEmails = [];
+      departments.forEach((d) => {
+        d.teams
+          .filter((t) => t.leaderEmail === req.user.email)
+          .forEach((t) => memberEmails.push(...t.members));
+      });
+      const memberIds = await Employee.find({
+        email: { $in: memberEmails },
+      }).distinct("_id");
       filter.employeeId = { $in: memberIds };
     } else if (access.scope === "department") {
       // All in Headed Department
-      const managedDeptNames = await Department.find({ head: req.user.email }).distinct("name");
-      const deptEmployees = await Employee.find({ department: { $in: managedDeptNames } }).distinct("_id");
+      const managedDeptNames = await Department.find({
+        head: req.user.email,
+      }).distinct("name");
+      const deptEmployees = await Employee.find({
+        department: { $in: managedDeptNames },
+      }).distinct("_id");
       filter.employeeId = { $in: deptEmployees };
     } else if (access.scope === "self") {
       filter.employeeId = req.user.id;
@@ -171,12 +193,12 @@ router.get("/", requireAuth, async (req, res) => {
 
     // Special Filter: Today/Most Recent for Leaders
     if (todayOnly === "true") {
-       const latest = await Attendance.findOne(filter).sort({ date: -1 });
-       if (latest) {
-          const latestDate = new Date(latest.date);
-          latestDate.setUTCHours(0, 0, 0, 0);
-          filter.date = latestDate;
-       }
+      const latest = await Attendance.findOne(filter).sort({ date: -1 });
+      if (latest) {
+        const latestDate = new Date(latest.date);
+        latestDate.setUTCHours(0, 0, 0, 0);
+        filter.date = latestDate;
+      }
     }
     if (employeeId) filter.employeeId = employeeId;
     if (employeeCode) {
@@ -191,10 +213,39 @@ router.get("/", requireAuth, async (req, res) => {
         filter.date.$lte = end;
       }
     }
+    // Check if pagination is explicitly requested
+    const isPaginated =
+      req.query.page !== undefined || req.query.limit !== undefined;
+
+    // Convert pagination parameters
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Get total count for pagination (only if paginated)
+    const totalCount = isPaginated
+      ? await Attendance.countDocuments(filter)
+      : 0;
+
     const attendance = await Attendance.find(filter)
       .populate("employeeId", "fullName email employeeCode department")
-      .sort({ date: -1 });
-    res.json(attendance);
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    res.json(
+      isPaginated
+        ? {
+            attendance,
+            pagination: {
+              currentPage: pageNum,
+              totalPages: Math.ceil(totalCount / limitNum),
+              totalCount,
+              limit: limitNum,
+            },
+          }
+        : attendance,
+    );
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch attendance data" });
   }
@@ -208,7 +259,9 @@ router.get("/employee/:id", requireAuth, async (req, res) => {
   try {
     const access = await resolveAttendanceAccess(req.user);
     if (access.scope === "self" && req.user.id !== req.params.id) {
-      return res.status(403).json({ error: "Forbidden: Can only view self attendance" });
+      return res
+        .status(403)
+        .json({ error: "Forbidden: Can only view self attendance" });
     }
     // TODO: Add more granular scope checks if needed (e.g., manager check)
 
@@ -250,14 +303,15 @@ router.post("/", requireAuth, async (req, res) => {
         .status(409)
         .json({ error: "Attendance already exists for this date." });
 
-    const employee = await Employee.findById(employeeId).populate('departmentId');
+    const employee =
+      await Employee.findById(employeeId).populate("departmentId");
     if (!employee) return res.status(404).json({ error: "Employee not found" });
 
     // Policy lookup
     const dept = employee.departmentId;
-    const policy = { 
-       standardStartTime: dept?.standardStartTime || "09:00", 
-       gracePeriod: dept?.gracePeriod ?? 15 
+    const policy = {
+      standardStartTime: dept?.standardStartTime || "09:00",
+      gracePeriod: dept?.gracePeriod ?? 15,
     };
 
     const calc = calculateStatus(checkIn, checkOut, policy);
@@ -302,8 +356,27 @@ router.put("/:id", requireAuth, async (req, res) => {
 
     const { checkIn, checkOut, status: manualStatus, remarks, date } = req.body;
 
-    // Recalculate based on potentially new times
-    const calc = calculateStatus(checkIn, checkOut);
+    const existing = await Attendance.findById(req.params.id);
+    if (!existing)
+      return res.status(404).json({ error: "Record not found" });
+
+    let policy = { standardStartTime: "09:00", gracePeriod: 15 };
+    try {
+      const emp = await Employee.findById(existing.employeeId).populate(
+        "departmentId",
+      );
+      const dept = emp?.departmentId;
+      if (dept) {
+        policy = {
+          standardStartTime: dept.standardStartTime || "09:00",
+          gracePeriod: dept.gracePeriod ?? 15,
+        };
+      }
+    } catch (_) {
+      /* keep defaults */
+    }
+
+    const calc = calculateStatus(checkIn, checkOut, policy);
 
     const updateData = {
       checkIn: calc.checkInStr,
@@ -321,7 +394,7 @@ router.put("/:id", requireAuth, async (req, res) => {
     }
 
     const updated = await Attendance.findByIdAndUpdate(
-      req.params.id,
+      existing._id,
       { $set: updateData },
       { new: true },
     );
@@ -342,23 +415,55 @@ router.delete("/bulk", requireAuth, async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: "No IDs provided for bulk deletion" });
+      return res
+        .status(400)
+        .json({ error: "No IDs provided for bulk deletion" });
     }
 
     // Role check (Admin/HR only)
     if (!["ADMIN", "HR_STAFF", 3].includes(req.user.role)) {
-       return res.status(403).json({ error: "Forbidden: Only Admin/HR can bulk delete." });
+      return res
+        .status(403)
+        .json({ error: "Forbidden: Only Admin/HR can bulk delete." });
     }
 
-    console.log(`[BULK DELETE] Auth User: ${req.user.email}, Role: ${req.user.role}`);
+    console.log(
+      `[BULK DELETE] Auth User: ${req.user.email}, Role: ${req.user.role}`,
+    );
     console.log(`[BULK DELETE] Received IDs:`, ids);
 
     // Cast strings to ObjectIds for the $in filter
-    const objectIds = ids.map(id => new mongoose.Types.ObjectId(id));
+    const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
+
+    // Get records before deletion for audit
+    const recordsToDelete = await Attendance.find({
+      _id: { $in: objectIds },
+    }).select("_id employeeId date");
+
     const result = await Attendance.deleteMany({ _id: { $in: objectIds } });
-    
+
+    // Create audit log for bulk deletion
+    await createAuditLog({
+      entityType: "Attendance",
+      entityId: "BULK_DELETE",
+      operation: "BULK_DELETE",
+      changes: { deletedCount: result.deletedCount, ids: ids },
+      previousValues: {
+        records: recordsToDelete.map((r) => ({
+          id: r._id,
+          employeeId: r.employeeId,
+          date: r.date,
+        })),
+      },
+      performedBy: req.user.email,
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent"),
+    });
+
     console.log(`[BULK DELETE] Result:`, result);
-    res.json({ message: `Successfully deleted ${result.deletedCount} records.` });
+    res.json({
+      message: `Successfully deleted ${result.deletedCount} records.`,
+    });
   } catch (error) {
     console.error("Bulk Delete Error:", error);
     res.status(500).json({ error: "Failed to perform bulk delete" });
@@ -370,7 +475,29 @@ router.delete("/:id", requireAuth, async (req, res) => {
     const access = await resolveAttendanceAccess(req.user);
     if (!access.actions.includes("delete"))
       return res.status(403).json({ error: "Forbidden" });
+
+    // Get the attendance record before deletion for audit
+    const attendanceRecord = await Attendance.findById(req.params.id).populate(
+      "employeeId",
+      "fullName employeeCode",
+    );
+    if (!attendanceRecord) {
+      return res.status(404).json({ error: "Record not found" });
+    }
+
     await Attendance.findByIdAndDelete(req.params.id);
+
+    // Create audit log
+    await createAuditLog({
+      entityType: "Attendance",
+      entityId: req.params.id,
+      operation: "DELETE",
+      previousValues: attendanceRecord.toObject(),
+      performedBy: req.user.email,
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent"),
+    });
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete record" });
@@ -411,11 +538,13 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
     // Dynamic header mapping: check both the key and the value of the first row
     const findHeader = (possibleNames) => {
       // 1. Check if any key matches
-      let found = headers.find(h => possibleNames.includes(h.toLowerCase().trim()));
+      let found = headers.find((h) =>
+        possibleNames.includes(h.toLowerCase().trim()),
+      );
       if (found) return found;
 
       // 2. Check if the value in the first row matches (common in some exports)
-      found = headers.find(h => {
+      found = headers.find((h) => {
         const val = firstRow[h]?.toString().toLowerCase().trim();
         return val && possibleNames.includes(val);
       });
@@ -423,17 +552,38 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
     };
 
     const codeHeader = findHeader([
-      "employee code", "employee", "code", "emp code", "employee_code", 
-      "name", "__empty"
+      "employee code",
+      "employee",
+      "code",
+      "emp code",
+      "employee_code",
+      "name",
+      "__empty",
     ]);
     const dateHeader = findHeader([
-      "date", "attendance date", "attendance_date", "max of date", "data"
+      "date",
+      "attendance date",
+      "attendance_date",
+      "max of date",
+      "data",
     ]);
     const checkInHeader = findHeader([
-      "check in", "check-in", "checkin", "clock in", "clock_in", "start time", "min of time"
+      "check in",
+      "check-in",
+      "checkin",
+      "clock in",
+      "clock_in",
+      "start time",
+      "min of time",
     ]);
     const checkOutHeader = findHeader([
-      "check out", "check-out", "checkout", "clock out", "clock_out", "end time", "max of time2"
+      "check out",
+      "check-out",
+      "checkout",
+      "clock out",
+      "clock_out",
+      "end time",
+      "max of time2",
     ]);
 
     const missingHeaders = [];
@@ -452,11 +602,11 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
     }
 
     // If the first row was actually the header row (contains "Name", "Date", etc.), skip it
-    const isHeaderRow = 
-      firstRow[codeHeader]?.toString().toLowerCase().includes("name") || 
+    const isHeaderRow =
+      firstRow[codeHeader]?.toString().toLowerCase().includes("name") ||
       firstRow[codeHeader]?.toString().toLowerCase().includes("code") ||
       firstRow[dateHeader]?.toString().toLowerCase().includes("date");
-    
+
     if (isHeaderRow) {
       data.shift();
     }
@@ -476,11 +626,11 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
       const checkOutStr = row[checkOutHeader];
 
       // Real Data parsing: If code contains a hyphen (e.g. #CODE-Name), extract only the code
-      if (code && code.includes('-')) {
-         const match = code.match(/^(#[A-Z0-9]+)/i);
-         if (match) code = match[1];
-      } else if (code && code.startsWith('#')) {
-         code = code.split(' ')[0]; // Handle "#CODE Name"
+      if (code && code.includes("-")) {
+        const match = code.match(/^(#[A-Z0-9]+)/i);
+        if (match) code = match[1];
+      } else if (code && code.startsWith("#")) {
+        code = code.split(" ")[0]; // Handle "#CODE Name"
       }
 
       // Validate required fields
@@ -528,7 +678,7 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
       // Find employee with department
       const employee = await Employee.findOne({
         $or: [{ employeeCode: code }, { email: code }],
-      }).populate('departmentId');
+      }).populate("departmentId");
 
       if (!employee) {
         errors.push(
@@ -555,9 +705,9 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
 
       // Policy lookup
       const dept = employee.departmentId;
-      const policy = { 
-         standardStartTime: dept?.standardStartTime || "09:00", 
-         gracePeriod: dept?.gracePeriod ?? 15 
+      const policy = {
+        standardStartTime: dept?.standardStartTime || "09:00",
+        gracePeriod: dept?.gracePeriod ?? 15,
       };
 
       // Calculate status
