@@ -95,6 +95,7 @@ export function CreateDepartmentPage() {
                 teams: [],
               }),
             ).unwrap();
+            await dispatch(fetchEmployeesThunk());
             showToast("Department created successfully", "success");
             navigate("/departments");
           } catch (error) {

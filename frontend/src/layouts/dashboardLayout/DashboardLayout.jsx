@@ -23,6 +23,7 @@ import {
   CalendarRange,
   Settings,
   UserPlus,
+  CalendarCheck,
 } from "lucide-react";
 
 /** Minimal dashboard chrome: neutral sidebar, hairline borders, no heavy shadows. */
@@ -88,6 +89,31 @@ export function DashboardLayout() {
   };
 
   const navStructure = [{ type: "link", to: "/", label: "Home", icon: Home }];
+
+  navStructure.push({
+    type: "link",
+    to: "/employees/time-off",
+    label: "Time off",
+    icon: CalendarCheck,
+  });
+
+  const canApproveLeave =
+    currentRole === "TEAM_LEADER" ||
+    currentRole === "MANAGER" ||
+    currentRole === "HR_STAFF" ||
+    currentRole === "HR_MANAGER" ||
+    currentRole === "ADMIN" ||
+    currentRole === 2 ||
+    currentRole === 3;
+
+  if (canApproveLeave) {
+    navStructure.push({
+      type: "link",
+      to: "/employees/time-off/approvals",
+      label: "Leave approvals",
+      icon: CalendarRange,
+    });
+  }
 
   if (currentRole === "TEAM_LEADER") {
     navStructure.push({

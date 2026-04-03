@@ -23,6 +23,7 @@ import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
 import { API_URL } from "@/shared/api/apiBase";
 import { formatTotalHours } from "@/modules/attendance/utils";
 import { DashboardAlerts } from "./DashboardAlerts";
+import { employeeBelongsToDepartment } from "@/shared/utils/departmentMembership";
 
 const STATUS_PIE_COLORS = {
   Active: "#10b981",
@@ -44,7 +45,7 @@ function WelcomeBanner({ employee, attendanceHistory }) {
   
   const todayRecord = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
-    return attendanceHistory.find(h => h.date.startsWith(today));
+    return attendanceHistory.find(h => h.date?.startsWith(today));
   }, [attendanceHistory]);
 
   return (
@@ -108,10 +109,11 @@ function EmployeeDashboard({ currentUser, employees }) {
   );
 
   useEffect(() => {
-    if (!employee?._id) return;
+    const empId = employee?._id || employee?.id;
+    if (!empId) return;
     const fetchHistory = async () => {
       try {
-        const res = await fetchWithAuth(`${API_URL}/attendance/employee/${employee._id}`);
+        const res = await fetchWithAuth(`${API_URL}/attendance/employee/${empId}`);
         if (res.ok) setAttendanceHistory(await res.json());
       } catch (e) {
         console.error("Failed to fetch personal attendance", e);
@@ -220,11 +222,11 @@ function EmployeeDashboard({ currentUser, employees }) {
                   <p className="text-[9px] font-bold text-zinc-400 uppercase mb-2">Direct Manager</p>
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-500 shadow-inner">
-                      {employee.managerId?.fullName?.[0] || '?'}
+                      {(employee.effectiveManager?.fullName || employee.managerId?.fullName)?.[0] || '?'}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-zinc-900">{employee.managerId?.fullName || "Not Assigned"}</p>
-                      <p className="text-[10px] text-zinc-400">{employee.managerId?.email || "No contact info"}</p>
+                      <p className="text-sm font-bold text-zinc-900">{employee.effectiveManager?.fullName || employee.managerId?.fullName || "Not Assigned"}</p>
+                      <p className="text-[10px] text-zinc-400">{employee.effectiveManager?.email || employee.managerId?.email || "No contact info"}</p>
                     </div>
                   </div>
                 </div>
@@ -233,11 +235,11 @@ function EmployeeDashboard({ currentUser, employees }) {
                   <p className="text-[9px] font-bold text-zinc-400 uppercase mb-2">Team Leader</p>
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-sm font-bold text-emerald-500 shadow-inner">
-                      {employee.teamLeaderId?.fullName?.[0] || '?'}
+                      {(employee.effectiveTeamLeader?.fullName || employee.teamLeaderId?.fullName)?.[0] || '?'}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-zinc-900">{employee.teamLeaderId?.fullName || "Not Assigned"}</p>
-                      <p className="text-[10px] text-zinc-400">{employee.teamLeaderId?.email || "Unit support"}</p>
+                      <p className="text-sm font-bold text-zinc-900">{employee.effectiveTeamLeader?.fullName || employee.teamLeaderId?.fullName || "Not Assigned"}</p>
+                      <p className="text-[10px] text-zinc-400">{employee.effectiveTeamLeader?.email || employee.teamLeaderId?.email || "Unit support"}</p>
                     </div>
                   </div>
                 </div>
@@ -501,7 +503,9 @@ function DepartmentManagerDashboard({ department, employees, requests, onHandleR
     fetchDaily();
   }, []);
 
-  const deptEmployees = employees.filter(emp => emp.department === department.name || emp.departmentId === department.id);
+  const deptEmployees = employees.filter((emp) =>
+    employeeBelongsToDepartment(emp, department),
+  );
   const activeCount = deptEmployees.filter(e => e.status === 'ACTIVE').length;
   const pendingRequests = requests.filter(r => r.status === 'PENDING');
 
@@ -806,9 +810,9 @@ function AdminDashboard({ employees, departments, employeesPerDepartment, reques
         <article className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Monthly Payroll</p>
           <p className="mt-2 text-2xl font-bold text-zinc-900 tabular-nums">
-            {new Intl.NumberFormat("en-US", {
+            {new Intl.NumberFormat("en-EG", {
               style: "currency",
-              currency: "USD",
+              currency: "EGP",
               maximumFractionDigits: 0,
             }).format(metricsSummary?.totalPayroll || totalPayroll)}
           </p>
@@ -820,7 +824,7 @@ function AdminDashboard({ employees, departments, employeesPerDepartment, reques
         <article className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Average Salary</p>
           <p className="mt-2 text-2xl font-bold text-emerald-600 tabular-nums">
-            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(metricsSummary?.avgSalary || 0)}
+            {new Intl.NumberFormat("en-EG", { style: "currency", currency: "EGP", maximumFractionDigits: 0 }).format(metricsSummary?.avgSalary || 0)}
           </p>
         </article>
       </div>
@@ -1020,7 +1024,7 @@ export function DashboardPage() {
     employees.find(e => e.email === currentUser?.email),
     [employees, currentUser]);
 
-  if (currentUser?.role === "ADMIN" || currentUser?.role === 3) {
+  if (currentUser?.role === "ADMIN") {
     return (
       <AdminDashboard
         employees={employees}

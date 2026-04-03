@@ -8,7 +8,7 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
   const [newEmployeeCode, setNewEmployeeCode] = useState("");
   const [newPosition, setNewPosition] = useState("");
   const [newSalary, setNewSalary] = useState(currentSalary.toString());
-  const [resetYearlyIncreaseDate, setResetYearlyIncreaseDate] = useState(false);
+  const [resetNextReviewDate, setResetNextReviewDate] = useState(false);
   const [notes, setNotes] = useState("");
 
   const handleSubmit = (e) => {
@@ -20,7 +20,7 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
       newEmployeeCode: newEmployeeCode || undefined,
       newPosition: newPosition || undefined,
       newSalary: newSalary ? parseFloat(newSalary) : undefined,
-      resetYearlyIncreaseDate,
+      resetNextReviewDate,
       notes,
     });
   };
@@ -176,16 +176,16 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
                   <input 
                     type="checkbox" 
                     id="resetBtn"
-                    checked={resetYearlyIncreaseDate}
-                    onChange={(e) => setResetYearlyIncreaseDate(e.target.checked)}
+                    checked={resetNextReviewDate}
+                    onChange={(e) => setResetNextReviewDate(e.target.checked)}
                     className="mt-0.5 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
                   />
                   <div className="flex-1">
                     <label htmlFor="resetBtn" className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-900 cursor-pointer uppercase tracking-wide">
-                      Reset Yearly Increase <Calendar className="h-3 w-3" />
+                      Reset next review date <Calendar className="h-3 w-3" />
                     </label>
                     <p className="text-[10px] text-indigo-700/70 mt-0.5 font-medium leading-tight">
-                      Adjusting this resets their scheduled increase to exactly 1 year from today.
+                      Sets the next salary review to exactly one year from the transfer date.
                     </p>
                   </div>
                 </div>

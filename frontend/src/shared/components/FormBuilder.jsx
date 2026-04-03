@@ -15,7 +15,7 @@ export function FormBuilder({
   devDemoFill,
 }) {
   const computedInitialValues = fields.reduce((acc, field) => {
-    acc[field.name] = "";
+    if (field.name) acc[field.name] = "";
     return acc;
   }, {});
   const [values, setValues] = useState({

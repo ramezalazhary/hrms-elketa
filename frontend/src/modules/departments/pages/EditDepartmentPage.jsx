@@ -7,6 +7,7 @@ import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
+import { employeeBelongsToDepartment } from "@/shared/utils/departmentMembership";
 import { fetchDepartmentsThunk, updateDepartmentThunk } from "../store";
 
 function mapPositionsFromDepartment(dept) {
@@ -61,9 +62,9 @@ function EditDepartmentForm({ department, departmentEmployees }) {
   };
 
   const updateTeam = (index, field, value) => {
-    const newTeams = [...teams];
-    newTeams[index][field] = value;
-    setTeams(newTeams);
+    setTeams((prev) =>
+      prev.map((t, i) => (i === index ? { ...t, [field]: value } : t)),
+    );
   };
 
   const removeTeam = (index) => {
@@ -78,9 +79,9 @@ function EditDepartmentForm({ department, departmentEmployees }) {
   };
 
   const updatePosition = (index, field, value) => {
-    const newPositions = [...positions];
-    newPositions[index][field] = value;
-    setPositions(newPositions);
+    setPositions((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)),
+    );
   };
 
   const removePosition = (index) => {
@@ -200,6 +201,7 @@ function EditDepartmentForm({ department, departmentEmployees }) {
                   })),
               }),
             ).unwrap();
+            await dispatch(fetchEmployeesThunk());
             showToast("Department updated successfully", "success");
             navigate("/departments");
           } catch (error) {
@@ -433,12 +435,7 @@ export function EditDepartmentPage() {
 
   const departmentEmployees = useMemo(() => {
     if (!department) return [];
-    return employees.filter(
-      (emp) =>
-        emp.department === department.name ||
-        emp.departmentId === department.id ||
-        emp.departmentId === department._id,
-    );
+    return employees.filter((emp) => employeeBelongsToDepartment(emp, department));
   }, [employees, department]);
 
   if (!department) {

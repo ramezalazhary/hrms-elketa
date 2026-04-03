@@ -15,7 +15,7 @@ export function DepartmentsListPage() {
   const { showToast } = useToast();
   const departments = useAppSelector((state) => state.departments.items);
   const role = useAppSelector((state) => state.identity.currentUser?.role);
-  const isAdmin = role === 3 || role === "ADMIN";
+  const isAdmin = role === "ADMIN" || role === "HR_MANAGER";
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 5;

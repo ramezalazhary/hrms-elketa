@@ -1,6 +1,7 @@
 /** @file Mongoose model: HR employee profile and org fields (department, team, etc.). */
 import { Schema, model } from "mongoose";
 
+
 const EmployeeSchema = new Schema(
   {
     // Authentication / Account (merged from `User` model)
@@ -13,7 +14,7 @@ const EmployeeSchema = new Schema(
     requirePasswordChange: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
 
-    // Personal Information
+    // ******************************************************* Personal Information *******************************************************
     fullName: { type: String, required: true },
     fullNameArabic: { type: String },
     dateOfBirth: { type: Date },
@@ -32,7 +33,7 @@ const EmployeeSchema = new Schema(
     nationalIdExpiryDate: { type: Date },
     profilePicture: { type: String }, // URL or Base64
 
-    // Contact Information
+    // ******************************************************* Contact Information *******************************************************
     email: { type: String, required: true, unique: true }, // Personal Email
     workEmail: { type: String },
     phoneNumber: { type: String },
@@ -45,17 +46,18 @@ const EmployeeSchema = new Schema(
       skype: { type: String },
     },
 
-    // Job & Administrative
+    // ******************************************************* Job & Administrative *******************************************************
     employeeCode: { type: String, unique: true },
     position: { type: String, required: true },
     department: { type: String, required: true },
-    departmentId: { type: Schema.Types.ObjectId, ref: "Department" },
     team: { type: String }, // Sub-unit within department
-    teamId: { type: Schema.Types.ObjectId, ref: "Team" },
-    managerId: { type: Schema.Types.ObjectId, ref: "Employee" }, // Direct Manager
-    teamLeaderId: { type: Schema.Types.ObjectId, ref: "Employee" }, // Team Leader
+    managerId: { type: Schema.Types.ObjectId, ref: "Employee" }, // Direct Manager (used when useDefaultReporting is false)
+    teamLeaderId: { type: Schema.Types.ObjectId, ref: "Employee" }, // Team Leader (used when useDefaultReporting is false)
+    /** When true (default), use Department.head / team leader from org structure for reporting. */
+    useDefaultReporting: { type: Boolean, default: true },
     dateOfHire: { type: Date },
-    annualAnniversaryDate: { type: Date }, // Auto-calculated: dateOfHire + 1 year, HR can override
+    /** Next salary/review cycle date: hire+1y on create; +1y on processed increase; transfer+reset → transfer+1y. */
+    nextReviewDate: { type: Date },
     employmentType: {
       type: String,
       enum: ["FULL_TIME", "PART_TIME", "CONTRACTOR", "TEMPORARY"],
@@ -73,7 +75,7 @@ const EmployeeSchema = new Schema(
     terminationReason: { type: String },
     onlineStorageLink: { type: String }, // Link to digital archives (Drive, Dropbox, etc.)
 
-    // Education & Skills
+    // ******************************************************* Education & Skills *******************************************************
     education: [
       {
         degree: { type: String },
@@ -96,7 +98,7 @@ const EmployeeSchema = new Schema(
       },
     ],
 
-    // Insurance Information (multiple records)
+    // ******************************************************* Insurance Information (multiple records) *******************************************************
     insurance: {
       provider: { type: String },
       policyNumber: { type: String },
@@ -117,7 +119,7 @@ const EmployeeSchema = new Schema(
       },
     ],
 
-    // Financial Information
+    // ******************************************************* Financial Information *******************************************************
     financial: {
       bankAccount: { type: String }, // رقم الحساب
       baseSalary: { type: Number }, // الراتب الاساسي
@@ -131,9 +133,8 @@ const EmployeeSchema = new Schema(
       socialSecurity: { type: String },
       lastSalaryIncrease: { type: Date },
     },
-    yearlySalaryIncreaseDate: { type: Date },
 
-    // Social Insurance (Egyptian Social Security) - التأمينات
+    // ******************************************************* Social Insurance (Egyptian Social Security) - التأمينات *******************************************************
     socialInsurance: {
       status: { type: String, enum: ["INSURED", "NOT_INSURED"], default: "NOT_INSURED" }, // حالة التامين
       insuranceDate: { type: Date }, // تاريخ التامين
@@ -147,7 +148,7 @@ const EmployeeSchema = new Schema(
 
     medicalCondition: { type: String }, // نوع المرض
 
-    // Transfer History
+    // ******************************************************* Transfer History *******************************************************
     transferHistory: [
       {
         fromDepartment: { type: Schema.Types.ObjectId, ref: "Department" },
@@ -157,12 +158,39 @@ const EmployeeSchema = new Schema(
         transferDate: { type: Date, required: true },
         newPosition: { type: String },
         newSalary: { type: Number },
-        yearlyIncreaseDateChanged: { type: Boolean, default: false },
-        newYearlyIncreaseDate: { type: Date },
+        nextReviewDateReset: { type: Boolean, default: false },
+        /** Set when nextReviewDateReset — value applied to employee.nextReviewDate (transfer + 1 year). */
+        nextReviewDateAfterTransfer: { type: Date },
         notes: { type: String },
         previousEmployeeCode: { type: String },
         newEmployeeCode: { type: String },
         processedBy: { type: String }, // Admin email
+      },
+    ],
+
+    // ******************************************************* Vacation / leave records (HR-managed from employee profile) *******************************************************
+    vacationRecords: [
+      {
+        startDate: { type: Date, required: true },
+        endDate: { type: Date, required: true },
+        type: {
+          type: String,
+          enum: ["ANNUAL", "SICK", "UNPAID", "MATERNITY", "PATERNITY", "OTHER"],
+          default: "ANNUAL",
+        },
+        notes: { type: String },
+        recordedBy: { type: String },
+        source: { type: String, enum: ["LEGACY", "MANUAL"], default: "LEGACY" },
+      },
+    ],
+
+    /** HR-only credits added to policy annual vacation entitlement (see leave balance snapshot). */
+    annualLeaveCredits: [
+      {
+        days: { type: Number, required: true, min: 1 },
+        reason: { type: String, required: true },
+        recordedBy: { type: String },
+        recordedAt: { type: Date, default: Date.now },
       },
     ],
 
@@ -174,22 +202,19 @@ const EmployeeSchema = new Schema(
     departmentId: {
       type: Schema.Types.ObjectId,
       ref: "Department",
-      optional: true,
       index: true,
     },
     teamId: {
       type: Schema.Types.ObjectId,
       ref: "Team",
-      optional: true,
       index: true,
     },
     positionId: {
       type: Schema.Types.ObjectId,
       ref: "Position",
-      optional: true,
       index: true,
     },
-    // Salary History
+    // ******************************************************* Salary History *******************************************************
     salaryHistory: [
       {
         previousSalary: { type: Number },
@@ -201,7 +226,7 @@ const EmployeeSchema = new Schema(
         processedBy: { type: String }, // User email
       }
     ],
-    // Documents Checklist
+    // ******************************************************* Documents Checklist *******************************************************
     documentChecklist: [
       {
         documentName: { type: String, required: true },
@@ -212,19 +237,18 @@ const EmployeeSchema = new Schema(
       }
     ],
 
-    // Multi-assignment support
+    // ******************************************************* Multi-assignment support *******************************************************
     additionalAssignments: [
       {
         departmentId: { type: Schema.Types.ObjectId, ref: "Department" },
-        teamId: { type: Schema.Types.ObjectId, ref: "Team", optional: true },
+        teamId: { type: Schema.Types.ObjectId, ref: "Team" },
         positionId: {
           type: Schema.Types.ObjectId,
           ref: "Position",
-          optional: true,
         },
         isPrimary: { type: Boolean, default: false },
         startDate: { type: Date },
-        endDate: { type: Date, optional: true },
+        endDate: { type: Date },
       },
     ],
   },

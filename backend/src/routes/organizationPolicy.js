@@ -10,8 +10,13 @@ router.get("/documents", requireAuth, async (req, res) => {
   try {
     let policy = await OrganizationPolicy.findOne({ name: "default" });
     if (!policy) {
-      // Return empty list if no policy created yet
-      return res.json({ documentRequirements: [] });
+      return res.json({
+        documentRequirements: [],
+        workLocations: [],
+        salaryIncreaseRules: [],
+        companyTimezone: "Africa/Cairo",
+        leavePolicies: [],
+      });
     }
     res.json(policy);
   } catch (error) {
@@ -23,20 +28,30 @@ router.get("/documents", requireAuth, async (req, res) => {
 // PUT /policy/documents (Admin only)
 router.put("/documents", requireAuth, requireRole(3), strictLimiter, async (req, res) => {
   try {
-    const { documentRequirements, workLocations, salaryIncreaseRules } = req.body;
+    const {
+      documentRequirements,
+      workLocations,
+      salaryIncreaseRules,
+      companyTimezone,
+      leavePolicies,
+    } = req.body;
     let policy = await OrganizationPolicy.findOne({ name: "default" });
     
     if (policy) {
       if (documentRequirements !== undefined) policy.documentRequirements = documentRequirements;
       if (workLocations !== undefined) policy.workLocations = workLocations;
       if (salaryIncreaseRules !== undefined) policy.salaryIncreaseRules = salaryIncreaseRules;
+      if (companyTimezone !== undefined) policy.companyTimezone = companyTimezone;
+      if (leavePolicies !== undefined) policy.leavePolicies = leavePolicies;
       await policy.save();
     } else {
       policy = new OrganizationPolicy({
         name: "default",
         documentRequirements: documentRequirements || [],
         workLocations: workLocations || [],
-        salaryIncreaseRules: salaryIncreaseRules || []
+        salaryIncreaseRules: salaryIncreaseRules || [],
+        companyTimezone: companyTimezone || "Africa/Cairo",
+        leavePolicies: leavePolicies || [],
       });
       await policy.save();
     }

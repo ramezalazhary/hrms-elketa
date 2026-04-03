@@ -2,7 +2,7 @@
  * @file `/api/alerts` — Returns upcoming alerts for dashboard banners.
  * Alert Types:
  *   - ID Expiry: 60 days before nationalIdExpiryDate
- *   - Salary Increase: 30 days before yearlySalaryIncreaseDate
+ *   - Salary Increase: 30 days before nextReviewDate
  */
 import { Router } from "express";
 import { Employee } from "../models/Employee.js";
@@ -82,12 +82,12 @@ router.get("/", requireAuth, async (req, res) => {
     // 2. Salary Increase Alerts (within 30 days)
     const salaryIncreaseEmployees = await Employee.find({
       isActive: true,
-      yearlySalaryIncreaseDate: { $gte: now, $lte: thirtyDaysFromNow },
-    }).select("fullName email yearlySalaryIncreaseDate department employeeCode financial");
+      nextReviewDate: { $gte: now, $lte: thirtyDaysFromNow },
+    }).select("fullName email nextReviewDate department employeeCode financial");
 
     for (const emp of salaryIncreaseEmployees) {
       const daysUntilIncrease = Math.ceil(
-        (new Date(emp.yearlySalaryIncreaseDate) - now) / (1000 * 60 * 60 * 24)
+        (new Date(emp.nextReviewDate) - now) / (1000 * 60 * 60 * 24)
       );
       alerts.push({
         type: "SALARY_INCREASE",
@@ -97,7 +97,7 @@ router.get("/", requireAuth, async (req, res) => {
         employeeName: emp.fullName,
         employeeCode: emp.employeeCode,
         department: emp.department,
-        date: emp.yearlySalaryIncreaseDate,
+        date: emp.nextReviewDate,
         daysRemaining: daysUntilIncrease,
         currentSalary: emp.financial?.baseSalary,
       });
@@ -132,15 +132,15 @@ router.get("/salary-increase-summary", requireAuth, async (req, res) => {
 
     const count = await Employee.countDocuments({
       isActive: true,
-      yearlySalaryIncreaseDate: { $gte: now, $lte: thirtyDaysFromNow },
+      nextReviewDate: { $gte: now, $lte: thirtyDaysFromNow },
     });
 
     const employees = await Employee.find({
       isActive: true,
-      yearlySalaryIncreaseDate: { $gte: now, $lte: thirtyDaysFromNow },
+      nextReviewDate: { $gte: now, $lte: thirtyDaysFromNow },
     })
-      .select("fullName email department employeeCode yearlySalaryIncreaseDate financial")
-      .sort({ yearlySalaryIncreaseDate: 1 });
+      .select("fullName email department employeeCode nextReviewDate financial")
+      .sort({ nextReviewDate: 1 });
 
     return res.json({ count, employees });
   } catch (error) {

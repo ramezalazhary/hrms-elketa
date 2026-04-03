@@ -366,8 +366,7 @@ async function main() {
     department: "Head Office",
     departmentId: null,
     dateOfHire: twoYearsAgo,
-    annualAnniversaryDate: addYears(twoYearsAgo, 1),
-    yearlySalaryIncreaseDate: addYears(twoYearsAgo, 1),
+    nextReviewDate: addYears(twoYearsAgo, 1),
     nationality: "Egyptian",
     financial: { baseSalary: 50000, currency: "EGP" },
   };
@@ -449,8 +448,7 @@ async function main() {
         position,
         department: spec.name,
         dateOfHire: hire,
-        annualAnniversaryDate: addYears(hire, 1),
-        yearlySalaryIncreaseDate: addYears(hire, 1),
+        nextReviewDate: addYears(hire, 1),
         nationality: "Egyptian",
         idNumber: `${randInt(10000000000000, 29999999999999)}`,
         phoneNumber: `01${randInt(100000000, 199999999)}`,
@@ -466,7 +464,7 @@ async function main() {
       }
 
       if (spec.name === "Engineering" && i === 2) {
-        emp.yearlySalaryIncreaseDate = new Date(threeMonthsAgo);
+        emp.nextReviewDate = new Date(threeMonthsAgo);
         caseTags.A = { name: emp.fullName, email: emp.email };
       }
 
@@ -488,6 +486,8 @@ async function main() {
   if (salesDeptSpec) {
     const salesEmp = salesDeptSpec.employees[2];
     if (salesEmp) {
+      const nextY = new Date(oneMonthAgo);
+      nextY.setFullYear(nextY.getFullYear() + 1);
       salesEmp.transferHistory = [
         {
           fromDepartmentName: "HR",
@@ -495,15 +495,13 @@ async function main() {
           transferDate: new Date(oneMonthAgo),
           newPosition: salesEmp.position,
           newSalary: salesEmp.financial.baseSalary,
-          yearlyIncreaseDateChanged: true,
+          nextReviewDateReset: true,
+          nextReviewDateAfterTransfer: nextY,
           notes: "Seeded transfer (CASE C)",
           processedBy: "admin@company.com",
         },
       ];
-      const nextY = new Date(oneMonthAgo);
-      nextY.setFullYear(nextY.getFullYear() + 1);
-      salesEmp.yearlySalaryIncreaseDate = nextY;
-      salesEmp.annualAnniversaryDate = nextY;
+      salesEmp.nextReviewDate = nextY;
       caseTags.C = { name: salesEmp.fullName, email: salesEmp.email };
     }
   }

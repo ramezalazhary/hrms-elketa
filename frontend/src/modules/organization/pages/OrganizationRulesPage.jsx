@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Building2,
   User,
+  Plane,
 } from "lucide-react";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
@@ -50,6 +51,8 @@ export function OrganizationRulesPage() {
   const [requiredDocs, setRequiredDocs] = useState([]);
   const [workLocations, setWorkLocations] = useState([]);
   const [salaryIncreaseRules, setSalaryIncreaseRules] = useState([]);
+  const [companyTimezone, setCompanyTimezone] = useState("Africa/Cairo");
+  const [leavePolicies, setLeavePolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
@@ -61,6 +64,8 @@ export function OrganizationRulesPage() {
         setRequiredDocs(data.documentRequirements || []);
         setWorkLocations(data.workLocations || []);
         setSalaryIncreaseRules(data.salaryIncreaseRules || []);
+        setCompanyTimezone(data.companyTimezone || "Africa/Cairo");
+        setLeavePolicies(Array.isArray(data.leavePolicies) ? data.leavePolicies : []);
       } catch (error) {
         showToast(error.message, "error");
       } finally {
@@ -135,6 +140,48 @@ export function OrganizationRulesPage() {
     setSalaryIncreaseRules(salaryIncreaseRules.filter((_, i) => i !== index));
   };
 
+  const addLeavePolicy = () => {
+    const nextV =
+      (leavePolicies.reduce((m, x) => Math.max(m, Number(x.version) || 0), 0) || 0) + 1;
+    setLeavePolicies([
+      ...leavePolicies,
+      {
+        version: nextV,
+        vacationRules: {
+          annualDays: 21,
+          maxConsecutiveDays: 365,
+          minDaysAfterHire: 0,
+        },
+        excuseRules: {
+          maxHoursPerExcuse: 8,
+          maxExcusesPerPeriod: 0,
+          excuseLimitPeriod: "MONTH",
+          roundingMinutes: 15,
+          minDaysAfterHire: 0,
+        },
+      },
+    ]);
+  };
+
+  const updateLeavePolicy = (index, patch) => {
+    const next = [...leavePolicies];
+    next[index] = { ...next[index], ...patch };
+    setLeavePolicies(next);
+  };
+
+  const updateLeavePolicyNested = (index, key, field, value) => {
+    const next = [...leavePolicies];
+    next[index] = {
+      ...next[index],
+      [key]: { ...(next[index][key] || {}), [field]: value },
+    };
+    setLeavePolicies(next);
+  };
+
+  const removeLeavePolicy = (index) => {
+    setLeavePolicies(leavePolicies.filter((_, i) => i !== index));
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -144,6 +191,12 @@ export function OrganizationRulesPage() {
         salaryIncreaseRules: salaryIncreaseRules.filter((r) =>
           r.type === "DEFAULT" ? true : r.target,
         ),
+        companyTimezone: companyTimezone.trim() || "Africa/Cairo",
+        leavePolicies: leavePolicies.map((p) => ({
+          version: Number(p.version) || 1,
+          vacationRules: p.vacationRules || {},
+          excuseRules: p.excuseRules || {},
+        })),
       });
       showToast("Organization settings updated successfully", "success");
     } catch (error) {
@@ -164,7 +217,7 @@ export function OrganizationRulesPage() {
   return (
     <Layout
       title="Organization rules"
-      description="Company-wide document requirements, workplaces, and salary increase defaults used by HR and onboarding."
+      description="Company-wide documents, workplaces, salary defaults, leave/excuse policy versions, and timezone for time-off logic."
       actions={
         <button
           type="button"
@@ -463,6 +516,220 @@ export function OrganizationRulesPage() {
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Leave & excuse policy */}
+        <section className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-zinc-100 bg-zinc-50/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="flex gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+                <Plane className="h-5 w-5 text-teal-600" aria-hidden />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-zinc-900">Leave &amp; excuse policies</h2>
+                <p className="mt-0.5 max-w-xl text-sm text-zinc-500">
+                  Rules by version number — the highest version applies to new requests. Company timezone is used for time-off logic.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={addLeavePolicy}
+              className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+            >
+              <Plus className="h-4 w-4" />
+              Add policy version
+            </button>
+          </div>
+          <div className="p-5 sm:p-6 space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 mb-1">Company timezone (IANA)</label>
+              <input
+                type="text"
+                value={companyTimezone}
+                onChange={(e) => setCompanyTimezone(e.target.value)}
+                className="w-full max-w-md rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                placeholder="Africa/Cairo"
+              />
+            </div>
+            {leavePolicies.length === 0 ? (
+              <p className="text-sm text-zinc-500 py-4">
+                No versions yet — defaults apply until you add one (annual 21 days, excuse limits from server defaults).
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {leavePolicies.map((p, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-xl border border-zinc-200 bg-zinc-50/40 p-4 space-y-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-zinc-800">Version {p.version}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeLeavePolicy(idx)}
+                        className="text-xs text-red-600 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="max-w-xs">
+                      <label className="text-xs text-zinc-500">Version # (highest wins)</label>
+                      <input
+                        type="number"
+                        className="mt-0.5 w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
+                        value={p.version}
+                        onChange={(e) =>
+                          updateLeavePolicy(idx, { version: Number(e.target.value) })
+                        }
+                      />
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="rounded-lg border border-zinc-200 bg-white p-3 space-y-2">
+                        <p className="text-xs font-semibold text-zinc-700">Vacation</p>
+                        <label className="text-xs text-zinc-500">Annual days</label>
+                        <input
+                          type="number"
+                          className="w-full rounded border border-zinc-200 px-2 py-1 text-sm"
+                          value={p.vacationRules?.annualDays ?? 21}
+                          onChange={(e) =>
+                            updateLeavePolicyNested(
+                              idx,
+                              "vacationRules",
+                              "annualDays",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                        <label className="text-xs text-zinc-500">Max consecutive days</label>
+                        <input
+                          type="number"
+                          className="w-full rounded border border-zinc-200 px-2 py-1 text-sm"
+                          value={p.vacationRules?.maxConsecutiveDays ?? 365}
+                          onChange={(e) =>
+                            updateLeavePolicyNested(
+                              idx,
+                              "vacationRules",
+                              "maxConsecutiveDays",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                        <label className="text-xs text-zinc-500">
+                          Min. calendar days after hire (vacation)
+                        </label>
+                        <p className="text-[11px] text-zinc-400 -mt-1">
+                          0 = eligible from hire day. Each employee uses their own date of hire.
+                        </p>
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-full rounded border border-zinc-200 px-2 py-1 text-sm"
+                          value={p.vacationRules?.minDaysAfterHire ?? 0}
+                          onChange={(e) =>
+                            updateLeavePolicyNested(
+                              idx,
+                              "vacationRules",
+                              "minDaysAfterHire",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="rounded-lg border border-zinc-200 bg-white p-3 space-y-2">
+                        <p className="text-xs font-semibold text-zinc-700">Excuse</p>
+                        <label className="text-xs text-zinc-500">Max hours per excuse (one time)</label>
+                        <input
+                          type="number"
+                          min={0.25}
+                          step={0.25}
+                          className="w-full rounded border border-zinc-200 px-2 py-1 text-sm"
+                          value={p.excuseRules?.maxHoursPerExcuse ?? 8}
+                          onChange={(e) =>
+                            updateLeavePolicyNested(
+                              idx,
+                              "excuseRules",
+                              "maxHoursPerExcuse",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                        <label className="text-xs text-zinc-500">Max excuses per period</label>
+                        <p className="text-[11px] text-zinc-400 -mt-1">
+                          0 = unlimited. Counts pending + approved in the same week, month, or year (UTC).
+                        </p>
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-full rounded border border-zinc-200 px-2 py-1 text-sm"
+                          value={p.excuseRules?.maxExcusesPerPeriod ?? 0}
+                          onChange={(e) =>
+                            updateLeavePolicyNested(
+                              idx,
+                              "excuseRules",
+                              "maxExcusesPerPeriod",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                        <label className="text-xs text-zinc-500">Period for limit</label>
+                        <select
+                          className="w-full rounded border border-zinc-200 px-2 py-1.5 text-sm"
+                          value={p.excuseRules?.excuseLimitPeriod ?? "MONTH"}
+                          onChange={(e) =>
+                            updateLeavePolicyNested(
+                              idx,
+                              "excuseRules",
+                              "excuseLimitPeriod",
+                              e.target.value,
+                            )
+                          }
+                        >
+                          <option value="WEEK">Week (starts Monday, UTC)</option>
+                          <option value="MONTH">Month</option>
+                          <option value="YEAR">Year</option>
+                        </select>
+                        <label className="text-xs text-zinc-500">Rounding (minutes)</label>
+                        <input
+                          type="number"
+                          className="w-full rounded border border-zinc-200 px-2 py-1 text-sm"
+                          value={p.excuseRules?.roundingMinutes ?? 15}
+                          onChange={(e) =>
+                            updateLeavePolicyNested(
+                              idx,
+                              "excuseRules",
+                              "roundingMinutes",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                        <label className="text-xs text-zinc-500">
+                          Min. calendar days after hire (excuse)
+                        </label>
+                        <p className="text-[11px] text-zinc-400 -mt-1">
+                          Can differ from vacation. 0 = from hire day.
+                        </p>
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-full rounded border border-zinc-200 px-2 py-1 text-sm"
+                          value={p.excuseRules?.minDaysAfterHire ?? 0}
+                          onChange={(e) =>
+                            updateLeavePolicyNested(
+                              idx,
+                              "excuseRules",
+                              "minDaysAfterHire",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

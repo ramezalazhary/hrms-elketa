@@ -15,6 +15,7 @@ import {
 import { FormBuilder } from "@/shared/components/FormBuilder";
 import { getDocumentRequirementsApi } from "../../organization/api";
 import { SalaryIncreaseModal } from "../components/SalaryIncreaseModal";
+import { TerminateEmployeeModal } from "../components/TerminateEmployeeModal";
 
 /* ─── tiny helpers ─── */
 const AVATAR_COLORS = [
@@ -78,6 +79,7 @@ export function EmployeesListPage() {
     [employees],
   );
 
+  console.log(employees[0]?.annualAnniversaryDate,'employees data') 
   const activeEmployees = useMemo(() => employees.filter(e => e.status !== "TERMINATED" && e.status !== "RESIGNED"), [employees]);
   const terminatedEmployees = useMemo(() => employees.filter(e => e.status === "TERMINATED" || e.status === "RESIGNED"), [employees]);
   const currentList = viewTab === "active" ? activeEmployees : terminatedEmployees;
@@ -85,11 +87,13 @@ export function EmployeesListPage() {
   const filtered = useMemo(() => {
     const r = [...currentList];
     r.sort((a, b) => {
-      if (sortBy === "name-asc") return a.fullName.localeCompare(b.fullName);
-      if (sortBy === "name-desc") return b.fullName.localeCompare(a.fullName);
+      if (sortBy === "name-asc") return (a.fullName || "").localeCompare(b.fullName || "");
+      if (sortBy === "name-desc") return (b.fullName || "").localeCompare(a.fullName || "");
       if (sortBy === "salary-increase-asc") {
-        const va = a.yearlySalaryIncreaseDate ? new Date(a.yearlySalaryIncreaseDate).getTime() : Infinity;
-        const vb = b.yearlySalaryIncreaseDate ? new Date(b.yearlySalaryIncreaseDate).getTime() : Infinity;
+        const ra = a.nextReviewDate ?? a.yearlySalaryIncreaseDate;
+        const rb = b.nextReviewDate ?? b.yearlySalaryIncreaseDate;
+        const va = ra ? new Date(ra).getTime() : Infinity;
+        const vb = rb ? new Date(rb).getTime() : Infinity;
         return va - vb;
       }
       if (sortBy === "id-expiry-asc") {
@@ -166,7 +170,7 @@ export function EmployeesListPage() {
       title="Employees"
       description="Directory, filters, and quick actions for your workforce."
       actions={
-        ["ADMIN", "HR_STAFF", 3, "HR_MANAGER"].includes(role) ? (
+        ["ADMIN", "HR_STAFF", "HR_MANAGER"].includes(role) ? (
           <div className="flex gap-2">
             <Link className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50" to="/employees/onboarding">
               <Users className="h-4 w-4 opacity-70" /> Onboarding
@@ -373,7 +377,10 @@ export function EmployeesListPage() {
           {/* Rows */}
           {paged.map((emp, idx) => {
             const isLast = idx === paged.length - 1;
-            const increaseDateObj = emp.yearlySalaryIncreaseDate ? new Date(emp.yearlySalaryIncreaseDate) : null;
+            const increaseDateObj =
+              emp.nextReviewDate ?? emp.yearlySalaryIncreaseDate
+                ? new Date(emp.nextReviewDate ?? emp.yearlySalaryIncreaseDate)
+                : null;
             const isIncreaseDue = viewTab === "active" && increaseDateObj && increaseDateObj.getTime() < Date.now() + 15 * 86400000;
             const idExpiryDate = emp.nationalIdExpiryDate ? new Date(emp.nationalIdExpiryDate) : null;
             const isIdExpired = idExpiryDate && idExpiryDate.getTime() < Date.now();
@@ -417,7 +424,11 @@ export function EmployeesListPage() {
                       {increaseDateObj && (
                         <div className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isIncreaseDue ? "text-amber-700" : "text-slate-400"}`}>
                           <CreditCard className="h-3 w-3" />
-                          <span>{formatDate(emp.yearlySalaryIncreaseDate)}</span>
+                          <span>
+                            {formatDate(
+                              emp?.nextReviewDate ,
+                            )}
+                          </span>
                           {isIncreaseDue && <AlertCircle className="h-3 w-3 text-amber-500" />}
                         </div>
                       )}
@@ -516,30 +527,11 @@ export function EmployeesListPage() {
 
       {/* ═══ TERMINATE MODAL ═══ */}
       {terminateModalTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl relative overflow-hidden border border-rose-200">
-            <div className="absolute right-0 top-0 -mr-8 -mt-8 h-32 w-32 rounded-full bg-rose-500/10 blur-2xl" />
-            <div className="relative">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-600">
-                <UserX className="h-6 w-6" />
-              </div>
-              <h2 className="text-lg font-bold text-slate-900">Terminate Employee</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                End employment for <strong>{terminateModalTarget.fullName}</strong>.
-              </p>
-              <div className="mt-5">
-                <FormBuilder fields={[
-                  { name: "status", label: "Exit Type", type: "select", required: true, options: [{ label: "Terminated", value: "TERMINATED" }, { label: "Resigned", value: "RESIGNED" }] },
-                  { name: "terminationDate", label: "Exit Date", type: "date", required: true },
-                  { name: "terminationReason", label: "Reason", type: "textarea", required: true, placeholder: "e.g. End of contract, voluntary resignation..." },
-                ]}
-                  initialValues={{ status: "TERMINATED", terminationDate: new Date().toISOString().split('T')[0], terminationReason: "" }}
-                  submitLabel="Confirm Termination" onCancel={() => setTerminateModalTarget(null)} onSubmit={handleTerminate}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        <TerminateEmployeeModal
+          employee={terminateModalTarget}
+          onClose={() => setTerminateModalTarget(null)}
+          onSubmit={handleTerminate}
+        />
       )}
     </Layout>
   );

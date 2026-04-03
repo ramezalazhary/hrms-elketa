@@ -19,6 +19,7 @@ import positionsRouter from "./routes/positions.js";
 import employmentsRouter from "./routes/employments.js";
 import reportsRouter from "./routes/reports.js";
 import organizationPolicyRouter from "./routes/organizationPolicy.js";
+import leaveRequestsRouter from "./routes/leaveRequests.js";
 import attendanceRouter from "./routes/attendance.js";
 import managementRequestsRouter from "./routes/managementRequests.js";
 import onboardingRouter from "./routes/onboarding.js";
@@ -70,6 +71,7 @@ app.use("/api/onboarding", onboardingRouter);
 app.use("/api/alerts", alertsRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/policy", organizationPolicyRouter);
+app.use("/api/leave-requests", leaveRequestsRouter);
 app.use("/api/bulk", bulkRouter);
 
 /** Unmatched `/api/*` paths return JSON 404 (does not catch non-API routes if added later). */

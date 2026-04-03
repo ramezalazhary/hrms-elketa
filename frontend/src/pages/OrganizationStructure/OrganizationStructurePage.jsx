@@ -13,6 +13,7 @@ import {
   Building2,
   UserCircle,
 } from "lucide-react";
+import { employeeBelongsToDepartment } from "@/shared/utils/departmentMembership";
 
 /**
  * Organization overview: departments, team counts, and headcount in a readable grid.
@@ -39,13 +40,10 @@ function OrganizationStructurePage() {
   const hierarchy = useMemo(() => {
     return departments.map((dept) => ({
       ...dept,
-      headCount: employees.filter(
-        (e) => e.departmentId === dept.id || e.department === dept.name,
-      ).length,
+      headCount: employees.filter((e) => employeeBelongsToDepartment(e, dept))
+        .length,
       activeCount: employees.filter(
-        (e) =>
-          (e.departmentId === dept.id || e.department === dept.name) &&
-          e.status === "ACTIVE",
+        (e) => employeeBelongsToDepartment(e, dept) && e.status === "ACTIVE",
       ).length,
     }));
   }, [departments, employees]);

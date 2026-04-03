@@ -11,6 +11,11 @@ import {
   validateDepartmentUpdate,
 } from "../middleware/validation.js";
 import { strictLimiter } from "../middleware/security.js";
+import {
+  syncDepartmentHeadRoles,
+  syncTeamLeaderRolesFromDepartmentTeams,
+} from "../services/employeeOrgSync.js";
+import { syncEmployeesWithDepartment } from "../services/orgResolutionService.js";
 
 const router = Router();
 
@@ -130,6 +135,29 @@ router.post(
       const headEmail =
         head && typeof head === "string" && head.trim() ? head.trim() : undefined;
 
+      const teamsList = teams || [];
+      for (const t of teamsList) {
+        const leaderEmail = t.leaderEmail || t.manager || t.managerEmail;
+        if (leaderEmail) {
+          const leader = await Employee.findOne({ email: leaderEmail });
+          if (!leader || (leader.department !== name && leader.departmentId)) {
+            return res.status(400).json({
+              error: `Team leader ${leaderEmail} must belong to department ${name}`,
+            });
+          }
+        }
+        if (Array.isArray(t.members)) {
+          for (const memberEmail of t.members) {
+            const member = await Employee.findOne({ email: memberEmail });
+            if (!member || (member.department !== name && member.departmentId)) {
+              return res.status(400).json({
+                error: `Team member ${memberEmail} must belong to department ${name}`,
+              });
+            }
+          }
+        }
+      }
+
       const newDepartment = new Department({
         name,
         code,
@@ -150,6 +178,22 @@ router.post(
       });
 
       await newDepartment.save();
+
+      const teamsForRoleSync = Array.isArray(teams) ? teams : [];
+      await syncDepartmentHeadRoles(undefined, newDepartment.head);
+      if (teamsForRoleSync.length > 0) {
+        await syncTeamLeaderRolesFromDepartmentTeams(
+          newDepartment._id,
+          teamsForRoleSync,
+          [],
+        );
+      }
+      try {
+        await syncEmployeesWithDepartment(newDepartment._id);
+      } catch (syncErr) {
+        console.error("syncEmployeesWithDepartment (create):", syncErr);
+      }
+
       res.status(201).json(newDepartment);
     } catch (error) {
       console.error("Error creating department:", error);
@@ -173,6 +217,15 @@ router.put(
       if (!department) {
         return res.status(404).json({ error: "Department not found" });
       }
+
+      const previousHeadForSync = department.head;
+      const teamsBeforeSync = Array.isArray(department.teams)
+        ? department.teams.map((t) => ({
+            leaderEmail: t.leaderEmail,
+            manager: t.manager,
+            managerEmail: t.managerEmail,
+          }))
+        : [];
 
       const currentName = name ?? department.name;
 
@@ -242,17 +295,56 @@ router.put(
           }
         }
 
-        department.teams = teams.map(t => ({
-          ...t,
-          leaderEmail: t.leaderEmail || t.manager || t.managerEmail || "",
-          leaderTitle: t.leaderTitle || "Team Leader",
-          leaderResponsibility: t.leaderResponsibility || "",
-          members: Array.isArray(t.members) ? t.members : []
-        }));
+        // Synchronization logic for standalone Teams collection
+        const incomingIds = teams.map(t => t.id || t._id).filter(Boolean);
+        
+        // 1. Remove standalone teams that are no longer in the incoming list
+        await Team.deleteMany({ 
+          departmentId: department._id, 
+          _id: { $nin: incomingIds } 
+        });
+
+        // 2. Update standalone teams that are still present
+        for (const t of teams) {
+          if (t.id || t._id) {
+            await Team.findByIdAndUpdate(t.id || t._id, {
+              name: t.name,
+              leaderEmail: t.leaderEmail || t.manager || t.managerEmail || "",
+              leaderTitle: t.leaderTitle || "Team Leader",
+              leaderResponsibility: t.leaderResponsibility || "",
+              members: Array.isArray(t.members) ? t.members : []
+            });
+          }
+        }
+
+        // 3. Update embedded teams
+        // We filter out teams that exist as standalone to avoid duplicates on GET
+        const standaloneIds = (await Team.find({ departmentId: department._id })).map(st => st._id.toString());
+
+        department.teams = teams
+          .filter(t => !t.id || !standaloneIds.includes(t.id))
+          .map(t => ({
+            ...t,
+            leaderEmail: t.leaderEmail || t.manager || t.managerEmail || "",
+            leaderTitle: t.leaderTitle || "Team Leader",
+            leaderResponsibility: t.leaderResponsibility || "",
+            members: Array.isArray(t.members) ? t.members : []
+          }));
       }
 
       const isRenaming = name && name !== oldName;
       await department.save();
+
+      if (head !== undefined) {
+        await syncDepartmentHeadRoles(previousHeadForSync, department.head);
+      }
+      if (Array.isArray(teams)) {
+        await syncTeamLeaderRolesFromDepartmentTeams(
+          department._id,
+          teams,
+          teamsBeforeSync,
+        );
+      }
 
       // If renaming, synchronize the department name for all assigned employees
       if (isRenaming) {
@@ -265,6 +357,12 @@ router.put(
           },
           { $set: { department: name } },
         );
+      }
+
+      try {
+        await syncEmployeesWithDepartment(department._id);
+      } catch (syncErr) {
+        console.error("syncEmployeesWithDepartment (update):", syncErr);
       }
 
       res.json(department);

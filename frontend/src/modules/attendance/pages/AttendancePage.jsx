@@ -83,7 +83,6 @@ export function AttendancePage() {
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-console.log(file , "the attendacne file")
     setIsImporting(true);
     try {
       const result = await dispatch(importAttendanceThunk({ file, overwrite: isOverwriteEnabled })).unwrap();

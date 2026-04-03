@@ -4,12 +4,13 @@ import { FormBuilder } from "@/shared/components/FormBuilder";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
-import { updateEmployeeThunk, processSalaryIncreaseThunk } from "../store";
+import { updateEmployeeThunk, processSalaryIncreaseThunk, fetchEmployeesThunk } from "../store";
+import { resolveBranchesFromPolicy } from "@/shared/utils/workLocations";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { getDocumentRequirementsApi } from "@/modules/organization/api";
 import { API_URL } from "@/shared/api/apiBase";
 import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
-import { ArrowLeft, Clock, Save, ArrowRightLeft, KeyRound, Settings, Briefcase, TrendingUp } from "lucide-react";
+import { ArrowLeft, Clock, Save, ArrowRightLeft, KeyRound, Settings, Briefcase, TrendingUp, CloudCog } from "lucide-react";
 import { TransferModal } from "../components/TransferModal";
 import { SalaryIncreaseModal } from "../components/SalaryIncreaseModal";
 
@@ -18,10 +19,11 @@ export function EditEmployeePage() {
   const navigate = useNavigate();
   const { employeeId } = useParams();
   const employees = useAppSelector((state) => state.employees.items);
+  const employeesLength = employees.length;
   const departments = useAppSelector((state) => state.departments.items);
   const currentUser = useAppSelector((state) => state.identity.currentUser);
   const accessToken = useAppSelector((state) => state.identity.accessToken);
-  const status = useAppSelector((state) => state.employees.status);
+  const isStoreLoading = useAppSelector((state) => state.employees.isLoading);
   const { showToast } = useToast();
 
   const [showResetModal, setShowResetModal] = useState(false);
@@ -37,13 +39,16 @@ export function EditEmployeePage() {
   const [orgPolicy, setOrgPolicy] = useState(null);
 
   const employee = useMemo(
-    () => employees.find((item) => item.id === employeeId),
+    () => {
+      return employees.find((item) => item.id === employeeId);
+    },
     [employeeId, employees],
   );
 
   useEffect(() => {
-    if (!departments.length) dispatch(fetchDepartmentsThunk());
-  }, [dispatch, departments.length]);
+    if (!employeesLength) void dispatch(fetchEmployeesThunk());
+    void dispatch(fetchDepartmentsThunk());
+  }, [dispatch, employeesLength]);
 
   useEffect(() => {
     if (employee) {
@@ -55,47 +60,66 @@ export function EditEmployeePage() {
   }, [employee]);
 
   useEffect(() => {
-    async function syncChecklist() {
-      if (employee) {
-        try {
-          const data = await getDocumentRequirementsApi();
-          setOrgPolicy(data);
-          const required = data.documentRequirements || [];
-          const existing = employee.documentChecklist || [];
-          const merged = required.map(req => {
-            const found = existing.find(e => e.documentName === req.name);
-            return {
-               documentName: req.name,
-               status: found?.status || "MISSING",
-               fileUrl: found?.fileUrl || "",
-               submissionDate: found?.submissionDate || null,
-               description: req.description
-            };
-          });
-          setDocumentChecklist(merged);
-        } catch (err) {
-          console.error("Failed to load global policy:", err);
-        }
-      }
-    }
-    syncChecklist();
-
-    const loadPolicy = async () => {
+    let cancelled = false;
+    (async () => {
       try {
         const data = await getDocumentRequirementsApi();
-        if (data.workLocations) setPolicyLocations(data.workLocations);
-      } catch (err) {}
+        if (cancelled) return;
+        setOrgPolicy(data);
+        setPolicyLocations(Array.isArray(data.workLocations) ? data.workLocations : []);
+      } catch (err) {
+        console.error("Failed to load organization policy:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
-    loadPolicy();
-  }, [employee]);
+  }, []);
 
+  useEffect(() => {
+    if (!employee || !orgPolicy) return;
+    const required = orgPolicy.documentRequirements || [];
+    const existing = employee.documentChecklist || [];
+    const merged = required.map((req) => {
+      const found = existing.find((e) => e.documentName === req.name);
+      return {
+        documentName: req.name,
+        status: found?.status || "MISSING",
+        fileUrl: found?.fileUrl || "",
+        submissionDate: found?.submissionDate || null,
+        description: req.description,
+      };
+    });
+    setDocumentChecklist(merged);
+  }, [employee, orgPolicy]);
+ 
+ 
+   
   const cityOptions = useMemo(() => {
     return getCitiesForGovernorate(selectedGovernorate).map((c) => ({ label: c, value: c }));
   }, [selectedGovernorate]);
 
   const selectedBranches = useMemo(() => {
-    return policyLocations.find((l) => l.city === selectedCity)?.branches || [];
-  }, [policyLocations, selectedCity]);
+    return resolveBranchesFromPolicy(policyLocations, selectedGovernorate, selectedCity);
+  }, [policyLocations, selectedGovernorate, selectedCity]);
+
+  const roleFieldOptions = useMemo(() => {
+    const cr = currentUser?.role;
+    const extended = cr === "ADMIN" || cr === "HR_STAFF" || cr === "HR_MANAGER";
+    if (extended) {
+      return [
+        { label: "Employee", value: "EMPLOYEE" },
+        { label: "Team Leader", value: "TEAM_LEADER" },
+        { label: "Manager (Department head)", value: "MANAGER" },
+        { label: "HR Staff", value: "HR_STAFF" },
+      ];
+    }
+    return [
+      { label: "Employee", value: "EMPLOYEE" },
+      { label: "Team Leader", value: "TEAM_LEADER" },
+      { label: "Manager (Department head)", value: "MANAGER" },
+    ];
+  }, [currentUser?.role]);
 
   const branchOptions = selectedBranches.length > 0 
       ? selectedBranches.map((b) => ({ label: b, value: b }))
@@ -126,7 +150,9 @@ export function EditEmployeePage() {
           toDepartment: values.toDepartment,
           newPosition: values.newPosition || undefined,
           newSalary: values.newSalary ? Number(values.newSalary) : undefined,
-          resetYearlyIncreaseDate: Boolean(values.resetYearlyIncreaseDate),
+          resetNextReviewDate: Boolean(
+            values.resetNextReviewDate ?? values.resetYearlyIncreaseDate,
+          ),
           newEmployeeCode: values.newEmployeeCode ?? undefined,
           notes: values.notes,
         })
@@ -157,21 +183,84 @@ export function EditEmployeePage() {
   };
 
   const canAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "HR_MANAGER";
+  const canEditReporting =
+    canAdmin || currentUser?.role === "HR_STAFF";
 
-  if (status === "loading" || !employee) {
+  const [reportingMode, setReportingMode] = useState("default");
+
+  useEffect(() => {
+    if (employee) {
+      setReportingMode(employee.useDefaultReporting !== false ? "default" : "custom");
+    }
+  }, [employee?.id, employee?.useDefaultReporting]);
+
+  const colleagueOptions = useMemo(() => {
+    if (!employee) return [];
+    return employees
+      .filter(
+        (e) =>
+          e.id !== employee.id &&
+          e.department === employee.department,
+      )
+      .map((e) => ({
+        label: e.fullName,
+        value: e.id,
+        sublabel: e.email,
+      }));
+  }, [employees, employee]);
+
+  const reportingFields = useMemo(() => {
+    if (!canEditReporting || !employee) return [];
+    return [
+      { type: "section", label: "Reporting (optional overrides)" },
+      {
+        name: "reportingMode",
+        label: "Manager and team leader",
+        type: "select",
+        options: [
+          {
+            label: "Use department defaults (head + team leader from org chart)",
+            value: "default",
+          },
+          { label: "Custom (pick people below)", value: "custom" },
+        ],
+      },
+      ...(reportingMode === "custom"
+        ? [
+            {
+              name: "managerId",
+              label: "Direct manager",
+              type: "searchableSelect",
+              options: colleagueOptions,
+              placeholder: "Search employee…",
+            },
+            {
+              name: "teamLeaderId",
+              label: "Team leader",
+              type: "searchableSelect",
+              options: colleagueOptions,
+              placeholder: "Search employee…",
+            },
+          ]
+        : []),
+    ];
+  }, [canEditReporting, employee, reportingMode, colleagueOptions]);
+
+  if (isStoreLoading || !employee) {
     return (
       <Layout title="Edit Employee">
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
-          {status === "loading" ? "Loading..." : "Employee not found."}
+          {isStoreLoading ? "Loading..." : "Employee not found."}
         </p>
       </Layout>
     );
   }
 
-  const transferHistory = employee.transferHistory || [];
 
+  const transferHistory = employee.transferHistory || [];
   return (
-    <Layout
+
+   <Layout
       title="Edit Employee"
       description="Update employee information and organizational assignment."
       actions={
@@ -289,6 +378,7 @@ export function EditEmployeePage() {
               if (name === "city") setSelectedCity(value);
               if (name === "socialInsuranceStatus") setSocialInsuranceStatus(value);
               if (name === "hasMedicalInsurance") setHasMedicalInsurance(value);
+              if (name === "reportingMode") setReportingMode(value);
             }}
             fields={[
               { type: "section", label: "1. Personal Information" },
@@ -345,6 +435,17 @@ export function EditEmployeePage() {
               },
 
               { type: "section", label: "3. Job & Administrative (Use 'Manage' for Structural Changes)" },
+              ...(canAdmin
+                ? [
+                    {
+                      name: "role",
+                      label: "Organization role",
+                      type: "select",
+                      required: true,
+                      options: roleFieldOptions,
+                    },
+                  ]
+                : []),
               { name: "employeeCode", label: "Employee Code", type: "text", disabled: true },
               { name: "position", label: "Job Title", type: "text", disabled: true },
               {
@@ -363,13 +464,14 @@ export function EditEmployeePage() {
               },
               {
                 name: "workLocation",
-                label: "Work Location / Branch",
+                label: "Work Location / Branch (from Organization Policy)",
                 type: "select",
-                options: branchOptions
+                options: branchOptions,
               },
               { name: "subLocation", label: "Sub-Location (Floor / Wing)", type: "text" },
               { name: "onlineStorageLink", label: "Online Storage Link", type: "text" },
               { name: "dateOfHire", label: "Date of Hire", type: "date" },
+              { name: "nextReviewDate", label: "Annually date of review", type: "date" , disabled: true},
               {
                 name: "employmentType",
                 label: "Contract Type",
@@ -394,6 +496,8 @@ export function EditEmployeePage() {
                   { label: "Terminated", value: "TERMINATED" },
                 ]
               },
+
+              ...reportingFields,
 
               { type: "section", label: "4. Benefits & Compensation (Use 'Manage' -> 'Increase Salary' to change Base Salary)" },
               { name: "baseSalary", label: "Base Salary", type: "number", disabled: true },
@@ -460,10 +564,10 @@ export function EditEmployeePage() {
             ]}
             initialValues={{
               ...employee,
+              role: employee.role || "EMPLOYEE",
               dateOfBirth: employee.dateOfBirth ? new Date(employee.dateOfBirth).toISOString().split('T')[0] : '',
               dateOfHire: employee.dateOfHire ? new Date(employee.dateOfHire).toISOString().split('T')[0] : '',
               nationalIdExpiryDate: employee.nationalIdExpiryDate ? new Date(employee.nationalIdExpiryDate).toISOString().split('T')[0] : '',
-              annualAnniversaryDate: employee.annualAnniversaryDate ? new Date(employee.annualAnniversaryDate).toISOString().split('T')[0] : '',
               governorate: employee.governorate || '',
               city: employee.city || '',
               emergencyPhone: employee.emergencyPhone || '',
@@ -486,6 +590,10 @@ export function EditEmployeePage() {
               form6Date: employee.socialInsurance?.form6Date ? new Date(employee.socialInsurance.form6Date).toISOString().split('T')[0] : '',
               insuranceNumber: employee.socialInsurance?.insuranceNumber || '',
               medicalCondition: employee.medicalCondition || '',
+              nextReviewDate: employee.nextReviewDate ? new Date(employee.nextReviewDate).toISOString().split('T')[0] : '',
+              reportingMode: employee.useDefaultReporting !== false ? "default" : "custom",
+              managerId: employee.managerId?.id ?? employee.managerId ?? "",
+              teamLeaderId: employee.teamLeaderId?.id ?? employee.teamLeaderId ?? "",
             }}
             submitLabel="Save Changes"
             onSubmit={async (values) => {
@@ -520,8 +628,19 @@ export function EditEmployeePage() {
                   insuranceNumber: values.insuranceNumber || undefined,
                 };
                 payload.documentChecklist = documentChecklist;
-                
-                // Cleanup pseudo-fields from values
+                if (canAdmin && values.role) payload.role = values.role;
+                if (!canAdmin) delete payload.role;
+
+                if (canEditReporting) {
+                  payload.useDefaultReporting = values.reportingMode === "default";
+                  if (values.reportingMode === "custom") {
+                    payload.managerId = values.managerId || null;
+                    payload.teamLeaderId = values.teamLeaderId || null;
+                  }
+                }
+                delete payload.reportingMode;
+
+                // Cleanup pseudo-fields from values ده جزء بينضف قبل ما نبعت بيانات لي الباك اند
                 delete payload.dateOfHireDummy;
                 delete payload.hasMedicalInsurance;
                 delete payload.insuranceProvider;
@@ -540,6 +659,22 @@ export function EditEmployeePage() {
                 delete payload.form6Date;
                 delete payload.insuranceNumber;
 
+                const newHireDate = new Date(payload.dateOfHire);
+                const oldHireDate = new Date(employee.dateOfHire);
+
+                if (newHireDate.getTime() !== oldHireDate.getTime()) {
+                  if (!isNaN(newHireDate)) {
+                    newHireDate.setFullYear(newHireDate.getFullYear() + 1);
+
+                    const year = newHireDate.getFullYear();
+                    const month = String(newHireDate.getMonth() + 1).padStart(2, '0');
+                    const day = String(newHireDate.getDate()).padStart(2, '0');
+
+                    payload.nextReviewDate = `${year}-${month}-${day}`;
+                  }
+                } else {
+                  payload.nextReviewDate = employee.nextReviewDate;
+                }
                 await dispatch(updateEmployeeThunk({ id: employee.id, ...payload })).unwrap();
                 showToast("Employee updated successfully", "success");
                 navigate("/employees");
@@ -654,10 +789,15 @@ export function EditEmployeePage() {
                             <p className="font-medium text-slate-700">{new Intl.NumberFormat("en-EG", { style: "currency", currency: "EGP", maximumFractionDigits: 0 }).format(record.newSalary)}</p>
                           </div>
                         )}
-                        {record.yearlyIncreaseDateChanged && record.newYearlyIncreaseDate && (
+                        {((record.nextReviewDateReset && record.nextReviewDateAfterTransfer) ||
+                          (record.yearlyIncreaseDateChanged && record.newYearlyIncreaseDate)) && (
                           <div>
-                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">New Increase Date</p>
-                            <p className="font-medium text-indigo-600">{new Date(record.newYearlyIncreaseDate).toLocaleDateString()}</p>
+                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">Next review after transfer</p>
+                            <p className="font-medium text-indigo-600">
+                              {new Date(
+                                record.nextReviewDateAfterTransfer || record.newYearlyIncreaseDate,
+                              ).toLocaleDateString()}
+                            </p>
                           </div>
                         )}
                         {record.processedBy && (

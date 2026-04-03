@@ -5,8 +5,21 @@ import { EmployeeProfilePage } from './pages/EmployeeProfilePage'
 import { EmployeesListPage } from './pages/EmployeesListPage'
 
 import { OnboardingApprovalsPage } from './pages/OnboardingApprovalsPage'
+import { TimeOffPage } from './pages/TimeOffPage'
+import { LeaveApprovalsPage } from './pages/LeaveApprovalsPage'
+import { BulkLeaveBalanceCreditPage } from './pages/BulkLeaveBalanceCreditPage'
 
 export const employeesRoutes = [
+  { path: '/employees/time-off', element: <TimeOffPage /> },
+  { path: '/employees/time-off/approvals', element: <LeaveApprovalsPage /> },
+  {
+    path: '/employees/time-off/bulk-credit',
+    element: (
+      <RequireRole roles={[3, 'HR_STAFF', 'HR_MANAGER', 'ADMIN']}>
+        <BulkLeaveBalanceCreditPage />
+      </RequireRole>
+    ),
+  },
   { 
     path: '/employees', 
     element: (

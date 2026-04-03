@@ -29,7 +29,10 @@ export async function resolveEmployeeAccess(user) {
 
   const isDeptHead = await Department.findOne({ head: user.email });
   if (isDeptHead || user.role === "MANAGER" || user.role === 2) {
-    return { scope: "department", actions: ["view"] };
+    return {
+      scope: "department",
+      actions: ["view", "create", "edit", "delete", "export"],
+    };
   }
 
   const deptsWithTeams = await Department.find({ "teams.leaderEmail": user.email });
@@ -41,7 +44,11 @@ export async function resolveEmployeeAccess(user) {
   });
 
   if (user.role === "TEAM_LEADER" || managedTeamNames.length > 0) {
-    return { scope: "team", actions: ["view"], teams: managedTeamNames };
+    return {
+      scope: "team",
+      actions: ["view", "edit"],
+      teams: managedTeamNames,
+    };
   }
 
   return { scope: "self", actions: ["view"] };

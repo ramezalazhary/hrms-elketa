@@ -6,6 +6,7 @@ import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
 import { Team } from "../models/Team.js";
 import { Position } from "../models/Position.js";
+import { enrichEmployeesForResponse } from "../services/orgResolutionService.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { strictLimiter } from "../middleware/security.js";
 
@@ -64,6 +65,8 @@ router.post("/assign", requireAuth, strictLimiter, async (req, res) => {
     if (!employee) {
       return res.status(404).json({ error: "Employee not found" });
     }
+
+    const previousTeamId = employee.teamId?.toString?.() || null;
 
     // Verify department exists and is ACTIVE
     const department = await Department.findById(departmentId);
@@ -144,16 +147,32 @@ router.post("/assign", requireAuth, strictLimiter, async (req, res) => {
 
     await employee.save();
 
+    const email = employee.email?.trim();
+    if (email && teamId) {
+      await Team.updateOne(
+        { _id: teamId },
+        { $addToSet: { members: email } },
+      );
+    }
+    if (email && previousTeamId && previousTeamId !== (teamId || "").toString()) {
+      await Team.updateOne(
+        { _id: previousTeamId },
+        { $pull: { members: email } },
+      );
+    }
+
     // Populate for response
     await employee.populate([
       { path: "departmentId", select: "name", strictPopulate: false },
       { path: "teamId", select: "name", strictPopulate: false },
       { path: "positionId", select: "title level", strictPopulate: false },
+      { path: "managerId teamLeaderId", strictPopulate: false },
     ]);
 
+    const [enriched] = await enrichEmployeesForResponse([employee]);
     res.json({
       message: "Employee assigned successfully",
-      employee: employee.toJSON(),
+      employee: enriched,
     });
   } catch (error) {
     console.error("Employment assignment error:", error);
@@ -197,6 +216,8 @@ router.delete("/unassign", requireAuth, strictLimiter, async (req, res) => {
     }
 
     let unassignedCount = 0;
+    const previousTeamIdForRoster = employee.teamId?.toString?.() || null;
+    const email = employee.email?.trim();
 
     // If this is the primary assignment
     if (employee.departmentId?.toString() === departmentId) {
@@ -224,15 +245,25 @@ router.delete("/unassign", requireAuth, strictLimiter, async (req, res) => {
     }
 
     await employee.save();
+
+    if (email && previousTeamIdForRoster) {
+      await Team.updateOne(
+        { _id: previousTeamIdForRoster },
+        { $pull: { members: email } },
+      );
+    }
+
     await employee.populate([
       { path: "departmentId", select: "name", strictPopulate: false },
       { path: "teamId", select: "name", strictPopulate: false },
       { path: "positionId", select: "title level", strictPopulate: false },
+      { path: "managerId teamLeaderId", strictPopulate: false },
     ]);
 
+    const [unassignEnriched] = await enrichEmployeesForResponse([employee]);
     res.json({
       message: "Employee unassigned successfully",
-      employee: employee.toJSON(),
+      employee: unassignEnriched,
       unassignedCount,
     });
   } catch (error) {

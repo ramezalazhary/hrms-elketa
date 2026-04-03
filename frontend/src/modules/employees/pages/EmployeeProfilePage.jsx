@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Layout } from '@/shared/components/Layout'
 import { useAppDispatch, useAppSelector } from '@/shared/hooks/reduxHooks'
@@ -8,10 +8,16 @@ import { DepartmentBadge } from '@/shared/components/EntityBadges'
 import { fetchDepartmentsThunk } from '@/modules/departments/store'
 import { getDocumentRequirementsApi } from '@/modules/organization/api'
 import { API_URL } from '@/shared/api/apiBase'
-import { Clock, MapPin, Phone, TrendingUp, Settings, ArrowRightLeft, Briefcase, Mail, Shield, AlertTriangle, AlertCircle, ArrowLeft, User } from 'lucide-react'
+import { Clock, MapPin, Phone, TrendingUp, Settings, ArrowRightLeft, Briefcase, Mail, Shield, AlertTriangle, AlertCircle, ArrowLeft, User, UserX, Plane, Gift } from 'lucide-react'
 import { formatTotalHours } from '@/modules/attendance/utils'
 import { SalaryIncreaseModal } from '../components/SalaryIncreaseModal'
 import { TransferModal } from '../components/TransferModal'
+import { ManualVacationRecordsModal } from '../components/ManualVacationRecordsModal'
+import { LeaveBalanceCreditModal } from '../components/LeaveBalanceCreditModal'
+import { LeaveBalanceCreditHistory } from '../components/LeaveBalanceCreditHistory'
+import { TerminateEmployeeModal } from '../components/TerminateEmployeeModal'
+import { updateEmployeeThunk, fetchEmployeesThunk } from '../store'
+import { fetchWithAuth } from '@/shared/api/fetchWithAuth'
 
 /** Days until a date from now (negative = past) */
 
@@ -22,25 +28,86 @@ function daysUntil(dateStr) {
   return Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
+const VACATION_TYPE_OPTIONS = [
+  { value: "ANNUAL", label: "Annual leave" },
+  { value: "SICK", label: "Sick leave" },
+  { value: "UNPAID", label: "Unpaid" },
+  { value: "MATERNITY", label: "Maternity" },
+  { value: "PATERNITY", label: "Paternity" },
+  { value: "OTHER", label: "Other" },
+];
+
+function toDateInputValue(d) {
+  if (!d) return "";
+  const x = new Date(d);
+  if (Number.isNaN(x.getTime())) return "";
+  return x.toISOString().slice(0, 10);
+}
+
+function fmtLeaveRequestDate(d) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function leaveStatusBadgeClass(status) {
+  switch (status) {
+    case "APPROVED":
+      return "bg-emerald-100 text-emerald-800";
+    case "PENDING":
+      return "bg-amber-100 text-amber-900";
+    case "REJECTED":
+      return "bg-rose-100 text-rose-800";
+    case "CANCELLED":
+      return "bg-slate-200 text-slate-700";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
+/** Build API payload for vacationRecords (dates as YYYY-MM-DD). */
+function serializeVacationRecords(list, fallbackRecorder) {
+  return (list || []).map((r) => ({
+    startDate: toDateInputValue(r.startDate),
+    endDate: toDateInputValue(r.endDate),
+    type: r.type || "ANNUAL",
+    notes: r.notes?.trim() || undefined,
+    recordedBy: r.recordedBy || fallbackRecorder || undefined,
+  }));
+}
+
 export function EmployeeProfilePage() {
   const { employeeId } = useParams()
   const { showToast } = useToast()
   const employees = useAppSelector((state) => state.employees.items)
   const departments = useAppSelector((state) => state.departments.items)
   const currentUser = useAppSelector((state) => state.identity.currentUser)
-  const accessToken = useAppSelector((state) => state.identity.accessToken)
   const [showResetModal, setShowResetModal] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [showSalaryModal, setShowSalaryModal] = useState(false)
   const [attendanceHistory, setAttendanceHistory] = useState([])
   const [isAttendanceLoading, setIsAttendanceLoading] = useState(false)
+  const [showTerminateModal, setShowTerminateModal] = useState(false)
+  const [showManualVacationModal, setShowManualVacationModal] = useState(false)
+  const [showLeaveBalanceCreditModal, setShowLeaveBalanceCreditModal] = useState(false)
+  const [vacationSaving, setVacationSaving] = useState(false)
+  const [leaveRequests, setLeaveRequests] = useState([])
+  const [leaveRequestsLoading, setLeaveRequestsLoading] = useState(false)
+  const [leaveRequestsForbidden, setLeaveRequestsForbidden] = useState(false)
+  const [leaveBalanceSnapshot, setLeaveBalanceSnapshot] = useState(null)
+  const [leaveBalanceLoading, setLeaveBalanceLoading] = useState(false)
+  const [leaveBalanceForbidden, setLeaveBalanceForbidden] = useState(false)
 
   const dispatch = useAppDispatch();
   const [globalPolicy, setGlobalPolicy] = useState(null);
 
   useEffect(() => {
-    if (!departments.length) void dispatch(fetchDepartmentsThunk());
+    if (!employees.length) void dispatch(fetchEmployeesThunk());
+    void dispatch(fetchDepartmentsThunk());
     const loadPolicy = async () => {
       try {
         const data = await getDocumentRequirementsApi();
@@ -50,16 +117,14 @@ export function EmployeeProfilePage() {
       }
     };
     loadPolicy();
-  }, [dispatch, departments.length]);
+  }, [dispatch, employees.length]);
 
   useEffect(() => {
     if (activeTab === "attendance" && employeeId) {
        const fetchAttendance = async () => {
          setIsAttendanceLoading(true);
          try {
-           const res = await fetch(`${API_URL}/attendance/employee/${employeeId}`, {
-             headers: { 'Authorization': `Bearer ${accessToken}` }
-           });
+           const res = await fetchWithAuth(`${API_URL}/attendance/employee/${employeeId}`);
            const data = await res.json();
            if (res.ok) setAttendanceHistory(data);
          } catch (err) {
@@ -70,7 +135,96 @@ export function EmployeeProfilePage() {
        };
        fetchAttendance();
     }
-  }, [activeTab, employeeId, accessToken]);
+  }, [activeTab, employeeId]);
+
+  useEffect(() => {
+    if (activeTab !== "vacations" || !employeeId) return;
+    let cancelled = false;
+    const loadLeaveRequests = async () => {
+      setLeaveRequestsLoading(true);
+      setLeaveRequestsForbidden(false);
+      try {
+        const q = new URLSearchParams({
+          employeeId,
+          limit: "100",
+        });
+        const res = await fetchWithAuth(`${API_URL}/leave-requests?${q.toString()}`);
+        const data = await res.json();
+        if (!res.ok) {
+          if (res.status === 403) {
+            if (!cancelled) {
+              setLeaveRequests([]);
+              setLeaveRequestsForbidden(true);
+            }
+            return;
+          }
+          throw new Error(data.error || "Failed to load leave requests");
+        }
+        if (!cancelled) {
+          setLeaveRequests(data.requests || []);
+          setLeaveRequestsForbidden(false);
+        }
+      } catch (err) {
+        console.error("Failed to fetch leave requests", err);
+        if (!cancelled) {
+          setLeaveRequests([]);
+          showToast(
+            typeof err?.message === "string" ? err.message : "Failed to load leave requests",
+            "error",
+          );
+        }
+      } finally {
+        if (!cancelled) setLeaveRequestsLoading(false);
+      }
+    };
+    void loadLeaveRequests();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, employeeId, showToast]);
+
+  useEffect(() => {
+    if (activeTab !== "vacations" || !employeeId) return;
+    let cancelled = false;
+    const loadBalance = async () => {
+      setLeaveBalanceLoading(true);
+      setLeaveBalanceForbidden(false);
+      try {
+        const q = new URLSearchParams({ employeeId });
+        const res = await fetchWithAuth(`${API_URL}/leave-requests/balance?${q}`);
+        const data = await res.json();
+        if (!res.ok) {
+          if (res.status === 403) {
+            if (!cancelled) {
+              setLeaveBalanceSnapshot(null);
+              setLeaveBalanceForbidden(true);
+            }
+            return;
+          }
+          throw new Error(data.error || "Failed to load leave balance");
+        }
+        if (!cancelled) {
+          setLeaveBalanceSnapshot(data);
+          setLeaveBalanceForbidden(false);
+        }
+      } catch (err) {
+        console.error("Failed to fetch leave balance", err);
+        if (!cancelled) {
+          setLeaveBalanceSnapshot(null);
+          showToast(
+            typeof err?.message === "string" ? err.message : "Failed to load leave balance",
+            "error",
+          );
+        }
+      } finally {
+        if (!cancelled) setLeaveBalanceLoading(false);
+      }
+    };
+    void loadBalance();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, employeeId, showToast]);
 
   const employee = useMemo(
     () => employees.find((item) => item.id === employeeId),
@@ -90,6 +244,14 @@ export function EmployeeProfilePage() {
     return found;
   }, [employee, departments])
 
+  const teamChips = useMemo(() => {
+    if (!employee) return [];
+    const names = new Set();
+    if (employee.team) names.add(employee.team);
+    assignedTeams.forEach((t) => names.add(t.name));
+    return [...names].filter(Boolean);
+  }, [employee?.team, assignedTeams]);
+
   const mergedChecklist = useMemo(() => {
     if (!employee || !globalPolicy) return employee?.documentChecklist || [];
     const required = globalPolicy.documentRequirements || [];
@@ -107,9 +269,9 @@ export function EmployeeProfilePage() {
 
   const handleResetPassword = async (values) => {
     try {
-      const res = await fetch(`${API_URL}/auth/reset-password`, {
+      const res = await fetchWithAuth(`${API_URL}/auth/reset-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetEmail: employee.email, newPassword: values.newPassword })
       });
       const data = await res.json();
@@ -132,24 +294,62 @@ export function EmployeeProfilePage() {
   }
 
   const idExpiryDays = daysUntil(employee.nationalIdExpiryDate);
-  const salaryIncreaseDays = daysUntil(employee.yearlySalaryIncreaseDate);
+  const nextReviewAt =
+    employee.nextReviewDate ?? employee.yearlySalaryIncreaseDate;
+  const salaryIncreaseDays = daysUntil(nextReviewAt);
   const canAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "HR_MANAGER";
+  const canEditVacations =
+    currentUser?.role === "ADMIN" ||
+    currentUser?.role === "HR_MANAGER" ||
+    currentUser?.role === "HR_STAFF";
   const isSelf = currentUser?.id === employee.id || currentUser?.email === employee.email;
   const isSelfOrAdmin = canAdmin || isSelf;
   const transferHistory = employee.transferHistory || [];
-  
+
+  const persistVacationRecords = useCallback(
+    async (nextList) => {
+      setVacationSaving(true);
+      try {
+        await dispatch(
+          updateEmployeeThunk({
+            id: employeeId,
+            vacationRecords: serializeVacationRecords(
+              nextList,
+              currentUser?.email,
+            ),
+          }),
+        ).unwrap();
+        showToast("Vacation records saved", "success");
+        return true;
+      } catch (e) {
+        const msg =
+          typeof e === "string"
+            ? e
+            : e?.error || e?.message || "Failed to save vacations";
+        showToast(msg, "error");
+        return false;
+      } finally {
+        setVacationSaving(false);
+      }
+    },
+    [dispatch, employeeId, currentUser?.email, showToast],
+  );
+
+  const vacationTabBadgeCount =
+    (employee.vacationRecords?.length || 0) + leaveRequests.length;
+
   const handleTransfer = async (values) => {
     try {
-      const res = await fetch(`${API_URL}/employees/${employeeId}/transfer`, {
+      const res = await fetchWithAuth(`${API_URL}/employees/${employeeId}/transfer`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Transfer failed");
       showToast("Employee transferred successfully", "success");
       setShowTransferModal(false);
-      window.location.reload(); // Refresh to update store & history
+      void dispatch(fetchEmployeesThunk());
     } catch (err) {
       showToast(err.message, "error");
     }
@@ -163,18 +363,33 @@ export function EmployeeProfilePage() {
         increaseAmount: values.method === "FIXED" ? values.value : undefined,
       };
 
-      const res = await fetch(`${API_URL}/employees/${employeeId}/process-increase`, {
+      const res = await fetchWithAuth(`${API_URL}/employees/${employeeId}/process-increase`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Increase failed");
       showToast("Salary increase processed successfully", "success");
       setShowSalaryModal(false);
-      window.location.reload();
+      void dispatch(fetchEmployeesThunk());
     } catch (err) {
       showToast(err.message, "error");
+    }
+  }
+
+  const handleTerminate = async (values) => {
+    try {
+      await dispatch(updateEmployeeThunk({
+        id: employeeId,
+        status: values.status || "TERMINATED",
+        terminationDate: values.terminationDate,
+        terminationReason: values.terminationReason,
+      })).unwrap();
+      showToast(`${employee.fullName} marked as ${values.status || "TERMINATED"}`, "success");
+      setShowTerminateModal(false);
+    } catch (err) {
+      showToast(err.message || "Termination failed", "error");
     }
   }
   const isTerminated = employee.status === "TERMINATED" || employee.status === "RESIGNED";
@@ -186,29 +401,61 @@ export function EmployeeProfilePage() {
       description="Identity, role, documents, and contact in one place."
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {canAdmin && (
+          {(canAdmin || canEditVacations) && (
             <div className="relative group">
               <button className="inline-flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-700 shadow-sm transition hover:bg-teal-100">
                 <Settings className="h-4 w-4" />
                 Manage
               </button>
-              <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                {!isTerminated && (
-                  <button 
+              <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                {!isTerminated && canAdmin && (
+                  <button
+                    type="button"
                     onClick={() => setShowTransferModal(true)}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left"
                   >
-                    <ArrowRightLeft className="h-3.5 w-3.5 text-indigo-500" />
+                    <ArrowRightLeft className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
                     Transfer Department
                   </button>
                 )}
-                {!isTerminated && (
-                  <button 
+                {!isTerminated && canEditVacations && (
+                  <button
+                    type="button"
+                    onClick={() => setShowManualVacationModal(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left"
+                  >
+                    <Plane className="h-3.5 w-3.5 text-sky-500 shrink-0" />
+                    Manual vacation records
+                  </button>
+                )}
+                {!isTerminated && canEditVacations && (
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaveBalanceCreditModal(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left"
+                  >
+                    <Gift className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                    Add vacation balance credit
+                  </button>
+                )}
+                {!isTerminated && canAdmin && (
+                  <button
+                    type="button"
                     onClick={() => setShowSalaryModal(true)}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left"
                   >
-                    <TrendingUp className="h-3.5 w-3.5 text-teal-500" />
+                    <TrendingUp className="h-3.5 w-3.5 text-teal-500 shrink-0" />
                     Salary Increase
+                  </button>
+                )}
+                {!isTerminated && canAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setShowTerminateModal(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg text-left"
+                  >
+                    <UserX className="h-3.5 w-3.5 shrink-0" />
+                    Terminate employment
                   </button>
                 )}
               </div>
@@ -359,7 +606,7 @@ export function EmployeeProfilePage() {
               <span className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 leading-none mb-1">Upcoming Cycle</span>
               <p className="text-sm font-bold text-zinc-900 leading-tight">
                 Salary increase due in <strong className="text-indigo-600">{salaryIncreaseDays} day{salaryIncreaseDays !== 1 ? "s" : ""}</strong>
-                {" "}({new Date(employee.yearlySalaryIncreaseDate).toLocaleDateString()}).
+                {" "}({new Date(nextReviewAt).toLocaleDateString()}).
               </p>
             </div>
           </div>
@@ -367,7 +614,7 @@ export function EmployeeProfilePage() {
 
         {/* Tab nav */}
         <div className="flex gap-1 border-b border-slate-200 overflow-x-auto no-scrollbar">
-          {["overview", "documents", "transfer_history", "salary_history", "attendance"].map((tab) => (
+          {["overview", "documents", "transfer_history", "salary_history", "vacations", "attendance"].map((tab) => (
             <button
               key={tab}
               type="button"
@@ -389,9 +636,18 @@ export function EmployeeProfilePage() {
               
               {tab === "salary_history" && <TrendingUp className="h-3.5 w-3.5" />}
               {tab === "salary_history" && "Salary History"}
+
+              {tab === "vacations" && <Plane className="h-3.5 w-3.5" />}
+              {tab === "vacations" && "Vacations"}
               
               {tab === "attendance" && <Clock className="h-3.5 w-3.5" />}
               {tab === "attendance" && "Attendance"}
+
+              {tab === "vacations" && vacationTabBadgeCount > 0 && (
+                <span className="rounded-full bg-sky-100 text-sky-800 text-[10px] font-bold px-1.5 py-0.5">
+                  {vacationTabBadgeCount}
+                </span>
+              )}
 
               {tab === "salary_history" && (employee.salaryHistory || []).length > 0 && (
                 <span className="rounded-full bg-teal-100 text-teal-700 text-[10px] font-bold px-1.5 py-0.5">
@@ -413,15 +669,15 @@ export function EmployeeProfilePage() {
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Employee Code</span> <span className="text-slate-900 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{employee.employeeCode || "N/A"}</span></p>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Status</span> <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${employee.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>{employee.status}</span></p>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Hire Date</span> <span className="text-slate-900">{employee.dateOfHire ? new Date(employee.dateOfHire).toLocaleDateString() : "N/A"}</span></p>
-              <p><span className="block text-xs font-semibold text-slate-500 uppercase">Annual Anniversary</span> <span className="text-slate-900">{employee.annualAnniversaryDate ? new Date(employee.annualAnniversaryDate).toLocaleDateString() : "N/A"}</span></p>
+              <p><span className="block text-xs font-semibold text-slate-500 uppercase">Next review</span> <span className="text-slate-900">{nextReviewAt ? new Date(nextReviewAt).toLocaleDateString() : "N/A"}</span></p>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Job Title</span> <span className="text-slate-900">{employee.position}</span></p>
               <p className="flex flex-col gap-1"><span className="block text-xs font-semibold text-slate-500 uppercase">Department</span> <DepartmentBadge name={employee.department || "—"} /></p>
               <p className="flex flex-col gap-1">
                 <span className="block text-xs font-semibold text-slate-500 uppercase">Team / Unit</span>
                 <div className="flex flex-wrap gap-1">
-                  {assignedTeams.length > 0 ? (
-                    assignedTeams.map(t => (
-                      <span key={t.id ?? t.name} className="rounded-lg border border-violet-200/80 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-800">{t.name}</span>
+                  {teamChips.length > 0 ? (
+                    teamChips.map((name, idx) => (
+                      <span key={`${name}-${idx}`} className="rounded-lg border border-violet-200/80 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-800">{name}</span>
                     ))
                   ) : (
                     <span className="text-slate-400 italic text-sm">No team assigned</span>
@@ -510,11 +766,11 @@ export function EmployeeProfilePage() {
                     <span className="block text-xs font-semibold text-slate-500 uppercase">Direct Manager</span>
                     <div className="mt-1 flex items-center gap-3">
                       <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 shadow-inner">
-                        {employee.managerId?.fullName?.[0] || "?"}
+                        {(employee.effectiveManager?.fullName || employee.managerId?.fullName)?.[0] || "?"}
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-slate-900">{employee.managerId?.fullName || "Not Assigned"}</p>
-                        <p className="text-[10px] text-slate-500 font-medium">{employee.managerId?.email || "No contact info"}</p>
+                        <p className="text-sm font-bold text-slate-900">{employee.effectiveManager?.fullName || employee.managerId?.fullName || "Not Assigned"}</p>
+                        <p className="text-[10px] text-slate-500 font-medium">{employee.effectiveManager?.email || employee.managerId?.email || "No contact info"}</p>
                       </div>
                     </div>
                   </div>
@@ -523,11 +779,11 @@ export function EmployeeProfilePage() {
                     <span className="block text-xs font-semibold text-slate-500 uppercase">Team Leader</span>
                     <div className="mt-1 flex items-center gap-3">
                       <div className="h-8 w-8 rounded-full bg-indigo-50 flex items-center justify-center text-xs font-bold text-indigo-500 shadow-inner">
-                        {employee.teamLeaderId?.fullName?.[0] || "?"}
+                        {(employee.effectiveTeamLeader?.fullName || employee.teamLeaderId?.fullName)?.[0] || "?"}
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-slate-900">{employee.teamLeaderId?.fullName || "Not Assigned"}</p>
-                        <p className="text-[10px] text-indigo-500/70 font-medium">{employee.teamLeaderId?.email || "Direct field support"}</p>
+                        <p className="text-sm font-bold text-slate-900">{employee.effectiveTeamLeader?.fullName || employee.teamLeaderId?.fullName || "Not Assigned"}</p>
+                        <p className="text-[10px] text-indigo-500/70 font-medium">{employee.effectiveTeamLeader?.email || employee.teamLeaderId?.email || "Direct field support"}</p>
                       </div>
                     </div>
                   </div>
@@ -579,15 +835,6 @@ export function EmployeeProfilePage() {
                       {employee.financial?.baseSalary
                         ? new Intl.NumberFormat('en-EG', { style: 'currency', currency: employee.financial?.currency || 'EGP' }).format(employee.financial.baseSalary)
                         : "N/A"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-xs font-semibold text-slate-500 uppercase">Yearly Increase Date</span>
-                    <span className={`text-sm font-medium ${salaryIncreaseDays !== null && salaryIncreaseDays <= 30 ? "text-indigo-600" : "text-slate-900"}`}>
-                      {employee.yearlySalaryIncreaseDate
-                        ? new Date(employee.yearlySalaryIncreaseDate).toLocaleDateString()
-                        : "N/A"}
-                      {salaryIncreaseDays !== null && salaryIncreaseDays > 0 && salaryIncreaseDays <= 30 && ` (${salaryIncreaseDays}d)`}
                     </span>
                   </div>
                   <div>
@@ -796,10 +1043,15 @@ export function EmployeeProfilePage() {
                               <p className="font-medium text-slate-700">{new Intl.NumberFormat("en-EG", { style: "currency", currency: "EGP", maximumFractionDigits: 0 }).format(record.newSalary)}</p>
                             </div>
                           )}
-                          {record.newYearlyIncreaseDate && (
+                          {((record.nextReviewDateReset && record.nextReviewDateAfterTransfer) ||
+                            (record.yearlyIncreaseDateChanged && record.newYearlyIncreaseDate)) && (
                             <div>
-                              <p className="text-slate-400 uppercase tracking-wide mb-0.5">New Increase Date</p>
-                              <p className="font-medium text-indigo-600">{new Date(record.newYearlyIncreaseDate).toLocaleDateString()}</p>
+                              <p className="text-slate-400 uppercase tracking-wide mb-0.5">Next review after transfer</p>
+                              <p className="font-medium text-indigo-600">
+                                {new Date(
+                                  record.nextReviewDateAfterTransfer || record.newYearlyIncreaseDate,
+                                ).toLocaleDateString()}
+                              </p>
                             </div>
                           )}
                           {record.newEmployeeCode && (
@@ -896,6 +1148,118 @@ export function EmployeeProfilePage() {
                     </li>
                   ))}
                 </ol>
+              </div>
+            )}
+          </div>
+        )}
+        {activeTab === "vacations" && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-sky-500/5">
+            <div className="mb-6 flex flex-col gap-2 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Vacations & leave</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Leave requests from Time off for {employee.fullName}.{" "}
+                  {canEditVacations
+                    ? "To add or edit legacy rows on the employee file, use Manage → Manual vacation records."
+                    : "HR can maintain manual file records from Manage → Manual vacation records."}
+                </p>
+              </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-lg shadow-sky-500/20">
+                <Plane className="h-5 w-5" />
+              </div>
+            </div>
+
+            {!leaveRequestsForbidden && (
+              <div className="rounded-xl border border-teal-100 bg-teal-50/30 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-teal-900 mb-1">
+                  Leave requests (app)
+                </p>
+                <p className="text-xs text-slate-600 mb-3">
+                  Submitted through Time off — vacation and excuse, with approval status.
+                </p>
+                {leaveRequestsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="h-8 w-8 rounded-full border-2 border-teal-500 border-t-transparent animate-spin" />
+                  </div>
+                ) : leaveRequests.length === 0 ? (
+                  <p className="text-sm text-slate-500 italic py-4 text-center border border-dashed border-teal-100 rounded-lg bg-white/50">
+                    No leave requests on file for this employee.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {leaveRequests.map((r) => {
+                      const typeLabel =
+                        r.kind === "VACATION"
+                          ? VACATION_TYPE_OPTIONS.find((o) => o.value === r.leaveType)?.label ||
+                            r.leaveType ||
+                            "Vacation"
+                          : "Excuse";
+                      return (
+                        <li
+                          key={r._id}
+                          className="rounded-lg border border-teal-100/80 bg-white/90 px-3 py-2.5 sm:flex sm:items-start sm:justify-between sm:gap-3"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${leaveStatusBadgeClass(r.status)}`}
+                              >
+                                {r.status}
+                              </span>
+                              <span className="text-[11px] font-semibold text-slate-600">{typeLabel}</span>
+                              {r.kind === "VACATION" && r.computed?.days != null && (
+                                <span className="text-[11px] text-slate-500">{r.computed.days} day(s)</span>
+                              )}
+                              {r.kind === "EXCUSE" && r.computed?.minutes != null && (
+                                <span className="text-[11px] text-slate-500">{r.computed.minutes} min</span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-sm font-medium text-slate-800">
+                              {r.kind === "VACATION"
+                                ? `${fmtLeaveRequestDate(r.startDate)} → ${fmtLeaveRequestDate(r.endDate)}`
+                                : `${fmtLeaveRequestDate(r.excuseDate)} · ${r.startTime || "—"}–${r.endTime || "—"}`}
+                            </p>
+                            {(r.submittedAt || r.createdAt) && (
+                              <p className="mt-0.5 text-[10px] text-slate-400">
+                                Submitted {fmtLeaveRequestDate(r.submittedAt || r.createdAt)}
+                              </p>
+                            )}
+                            {r.approvals?.length > 0 && (
+                              <p className="mt-1 text-[10px] text-slate-400">
+                                {r.approvals.map((a) => `${a.role}: ${a.status}`).join(" · ")}
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {!leaveBalanceForbidden && (
+              <div className="mt-6 rounded-xl border border-violet-100 bg-violet-50/20 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-violet-900 mb-1">
+                  Vacation entitlement credits
+                </p>
+                <p className="text-xs text-slate-600 mb-3">
+                  HR manual increases to annual leave balance (same policy year view as Time off).
+                </p>
+                {leaveBalanceLoading ? (
+                  <div className="flex justify-center py-6">
+                    <div className="h-7 w-7 rounded-full border-2 border-violet-400 border-t-transparent animate-spin" />
+                  </div>
+                ) : leaveBalanceSnapshot?.vacation?.credits?.length ? (
+                  <LeaveBalanceCreditHistory
+                    credits={leaveBalanceSnapshot.vacation.credits}
+                    compact
+                  />
+                ) : (
+                  <p className="text-sm text-slate-500 italic py-3 text-center border border-dashed border-violet-100 rounded-lg bg-white/60">
+                    No manual balance credits recorded for this employee.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -999,12 +1363,49 @@ export function EmployeeProfilePage() {
         />
       )}
 
+      {showManualVacationModal && (
+        <ManualVacationRecordsModal
+          employee={employee}
+          onClose={() => setShowManualVacationModal(false)}
+          onPersist={persistVacationRecords}
+          saving={vacationSaving}
+          recorderEmail={currentUser?.email}
+        />
+      )}
+
+      {showLeaveBalanceCreditModal && (
+        <LeaveBalanceCreditModal
+          employeeId={employeeId}
+          employeeName={employee.fullName}
+          onClose={() => setShowLeaveBalanceCreditModal(false)}
+          onSuccess={async (snapshot) => {
+            await dispatch(fetchEmployeesThunk());
+            if (snapshot) setLeaveBalanceSnapshot(snapshot);
+            const rem = snapshot?.vacation?.remainingDays;
+            showToast(
+              typeof rem === "number"
+                ? `Credit added. Vacation balance: ${rem} day(s) remaining.`
+                : "Vacation balance credit added.",
+              "success",
+            );
+          }}
+        />
+      )}
+
       {showSalaryModal && (
         <SalaryIncreaseModal
           employee={employee}
           orgPolicy={globalPolicy}
           onClose={() => setShowSalaryModal(false)}
           onSubmit={handleSalaryIncrease}
+        />
+      )}
+
+      {showTerminateModal && (
+        <TerminateEmployeeModal
+          employee={employee}
+          onClose={() => setShowTerminateModal(false)}
+          onSubmit={handleTerminate}
         />
       )}
     </div>

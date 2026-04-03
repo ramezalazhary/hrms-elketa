@@ -33,8 +33,8 @@ export async function generateAlerts() {
       }
 
       // 2. Salary Increase Rule (<30 days)
-      if (emp.yearlySalaryIncreaseDate) {
-         const increaseDate = new Date(emp.yearlySalaryIncreaseDate);
+      if (emp.nextReviewDate) {
+         const increaseDate = new Date(emp.nextReviewDate);
          if (increaseDate <= salaryThreshold) { // We catch even if slightly past due
             await createAlertIfNotExists(
                'SALARY_INCREASE',

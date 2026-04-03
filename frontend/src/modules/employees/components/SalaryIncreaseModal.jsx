@@ -20,7 +20,7 @@ export function SalaryIncreaseModal({ employee, orgPolicy, onClose, onSubmit }) 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [reason, setReason] = useState(`Annual Salary Increase - ${new Date().getFullYear()}`);
 
-  const activePercent = method === "PERCENT" ? parseFloat(percentValue || 0) : ((parseFloat(fixedValue || 0) / currentSalary) * 100);
+  const activePercent = method === "PERCENT" ? parseFloat(percentValue || 0) : (currentSalary > 0 ? ((parseFloat(fixedValue || 0) / currentSalary) * 100) : 0);
   const activeAmount = method === "FIXED" ? parseFloat(fixedValue || 0) : (currentSalary * (parseFloat(percentValue || 0) / 100));
   const newSalary = currentSalary + activeAmount;
 

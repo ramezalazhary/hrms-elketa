@@ -99,31 +99,77 @@ async function main() {
     }
   }
 
-  /* --- ISSUE B: date divergence (> 30 days) — yearly is authoritative --- */
-  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-  const candidates = await Employee.find({
-    annualAnniversaryDate: { $exists: true, $ne: null },
-    yearlySalaryIncreaseDate: { $exists: true, $ne: null },
-  }).lean();
+  /* --- ISSUE B: legacy annual/yearly fields → nextReviewDate; transferHistory keys --- */
+  function addOneYearFrom(d) {
+    if (!d) return null;
+    const x = new Date(d);
+    if (Number.isNaN(x.getTime())) return null;
+    x.setFullYear(x.getFullYear() + 1);
+    return x;
+  }
 
-  for (const e of candidates) {
-    const a = new Date(e.annualAnniversaryDate).getTime();
-    const y = new Date(e.yearlySalaryIncreaseDate).getTime();
-    if (Number.isNaN(a) || Number.isNaN(y)) continue;
-    if (Math.abs(a - y) <= THIRTY_DAYS_MS) continue;
+  const allEmps = await Employee.find({});
 
-    const oldA = e.annualAnniversaryDate;
-    const target = e.yearlySalaryIncreaseDate;
+  for (const doc of allEmps) {
+    const e = doc.toObject();
     const label = e.fullName || e.email || String(e._id);
+    const $set = {};
+    const $unset = {};
+
+    let nextReview =
+      e.nextReviewDate ||
+      e.yearlySalaryIncreaseDate ||
+      e.annualAnniversaryDate ||
+      addOneYearFrom(e.dateOfHire);
+    if (nextReview && !e.nextReviewDate) {
+      $set.nextReviewDate = new Date(nextReview);
+    }
+
+    if (
+      e.yearlySalaryIncreaseDate != null ||
+      e.annualAnniversaryDate != null
+    ) {
+      $unset.yearlySalaryIncreaseDate = "";
+      $unset.annualAnniversaryDate = "";
+    }
+
+    let th = [...(e.transferHistory || [])];
+    let thDirty = false;
+    th = th.map((r) => {
+      const row =
+        r && typeof r.toObject === "function" ? r.toObject() : { ...r };
+      if (
+        Object.prototype.hasOwnProperty.call(row, "yearlyIncreaseDateChanged") ||
+        Object.prototype.hasOwnProperty.call(row, "newYearlyIncreaseDate")
+      ) {
+        row.nextReviewDateReset = !!row.yearlyIncreaseDateChanged;
+        if (row.newYearlyIncreaseDate != null) {
+          row.nextReviewDateAfterTransfer = row.newYearlyIncreaseDate;
+        }
+        delete row.yearlyIncreaseDateChanged;
+        delete row.newYearlyIncreaseDate;
+        thDirty = true;
+      }
+      return row;
+    });
+    if (thDirty) {
+      $set.transferHistory = th;
+    }
+
+    const hasSet = Object.keys($set).length > 0;
+    const hasUnset = Object.keys($unset).length > 0;
+    if (!hasSet && !hasUnset) continue;
+
     console.log(
-      `[DRY RUN] Employee "${label}" (${e._id}) annualAnniversaryDate: ${oldA} → ${target}`,
+      `[DRY RUN] Employee "${label}" (${e._id}) — nextReviewDate / transferHistory migration`,
     );
     employeeDateOps++;
     if (APPLY) {
-      await Employee.updateOne(
-        { _id: e._id },
-        { $set: { annualAnniversaryDate: target } },
-      );
+      /** @type {Record<string, unknown>} */
+      const payload = {};
+      if (hasSet) payload.$set = $set;
+      if (hasUnset) payload.$unset = $unset;
+      await Employee.updateOne({ _id: e._id }, payload);
     }
   }
 

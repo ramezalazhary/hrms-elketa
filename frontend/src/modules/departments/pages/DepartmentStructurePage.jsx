@@ -4,6 +4,7 @@ import { Layout } from "@/shared/components/Layout";
 import { StatusBadge } from "@/shared/components/EntityBadges";
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
 import { API_URL } from "@/shared/api/apiBase";
+import { employeeBelongsToDepartment } from "@/shared/utils/departmentMembership";
 import { 
   Building2, 
   Users, 
@@ -49,7 +50,7 @@ export function DepartmentStructurePage() {
 
   const deptEmployees = useMemo(() => {
     if (!department) return [];
-    return employees.filter(emp => emp.departmentId === department.id || emp.department === department.name);
+    return employees.filter((emp) => employeeBelongsToDepartment(emp, department));
   }, [department, employees]);
 
   const activeCount = useMemo(() => 

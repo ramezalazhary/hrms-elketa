@@ -1,6 +1,5 @@
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { API_URL } from "@/shared/api/apiBase";
 
 const handleResponse = async (response) => {
   const data = await response.json();
@@ -107,6 +106,71 @@ export const processOnboardingSubmissionApi = async (id, data) => {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+/** @param {Record<string, string>} [params] */
+export const listLeaveRequestsApi = async (params) => {
+  const q = params ? `?${new URLSearchParams(params).toString()}` : "";
+  const response = await fetchWithAuth(`${API_URL}/leave-requests${q}`);
+  return handleResponse(response);
+};
+
+/** @param {{ employeeId?: string }} [params] — omit for own balance */
+export const getLeaveBalanceApi = async (params) => {
+  const q = params?.employeeId
+    ? `?${new URLSearchParams({ employeeId: params.employeeId }).toString()}`
+    : "";
+  const response = await fetchWithAuth(`${API_URL}/leave-requests/balance${q}`);
+  return handleResponse(response);
+};
+
+/** HR/Admin: add manual annual leave day credits (increases vacation entitlement). */
+export const postLeaveBalanceCreditApi = async ({ employeeId, days, reason }) => {
+  const response = await fetchWithAuth(`${API_URL}/leave-requests/balance-credit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ employeeId, days, reason }),
+  });
+  return handleResponse(response);
+};
+
+/** HR/Admin: bulk vacation credits (department, employeeIds, or Admin-only all active). */
+export const postLeaveBalanceCreditBulkApi = async (body) => {
+  const response = await fetchWithAuth(
+    `${API_URL}/leave-requests/balance-credit/bulk`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  return handleResponse(response);
+};
+
+export const createLeaveRequestApi = async (data) => {
+  const response = await fetchWithAuth(`${API_URL}/leave-requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+export const leaveRequestActionApi = async (id, body) => {
+  const response = await fetchWithAuth(`${API_URL}/leave-requests/${id}/action`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return handleResponse(response);
+};
+
+export const cancelLeaveRequestApi = async (id) => {
+  const response = await fetchWithAuth(`${API_URL}/leave-requests/${id}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
   });
   return handleResponse(response);
 };

@@ -24,6 +24,14 @@ const OrganizationPolicySchema = new Schema(
         percentage: { type: Number, required: true, min: 0 }
       }
     ],
+    companyTimezone: { type: String, default: "Africa/Cairo" },
+    leavePolicies: [
+      {
+        version: { type: Number, required: true },
+        vacationRules: { type: Schema.Types.Mixed, default: {} },
+        excuseRules: { type: Schema.Types.Mixed, default: {} },
+      },
+    ],
   },
   { timestamps: true }
 );

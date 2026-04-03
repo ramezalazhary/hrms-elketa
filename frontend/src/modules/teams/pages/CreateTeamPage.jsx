@@ -7,6 +7,7 @@ import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { createTeamThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
+import { employeeBelongsToDepartment } from "@/shared/utils/departmentMembership";
 
 export function CreateTeamPage() {
   const dispatch = useAppDispatch();
@@ -27,11 +28,7 @@ export function CreateTeamPage() {
     const dept = departments.find(d => d.id === deptIdStr || d._id === deptIdStr);
     if (!dept) return [];
     
-    return employees.filter(emp => 
-      emp.departmentId === deptIdStr || 
-      emp.departmentId?._id === deptIdStr || 
-      emp.department === dept.name
-    );
+    return employees.filter((emp) => employeeBelongsToDepartment(emp, dept));
   }, [selectedDeptId, employees, departments]);
 
   const employeeOptions = useMemo(() => 

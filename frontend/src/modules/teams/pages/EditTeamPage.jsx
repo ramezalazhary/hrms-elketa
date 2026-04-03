@@ -7,6 +7,7 @@ import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { updateTeamThunk, fetchTeamThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
+import { employeeBelongsToDepartment } from "@/shared/utils/departmentMembership";
 
 export function EditTeamPage() {
   const { teamId } = useParams();
@@ -37,11 +38,7 @@ export function EditTeamPage() {
     const dept = departments.find(d => d.id === selectedDeptId || d._id === selectedDeptId);
     if (!dept) return [];
     
-    return employees.filter(emp => 
-      emp.departmentId === selectedDeptId || 
-      emp.departmentId?._id === selectedDeptId || 
-      emp.department === dept.name
-    );
+    return employees.filter((emp) => employeeBelongsToDepartment(emp, dept));
   }, [selectedDeptId, employees, departments]);
 
   const employeeOptions = useMemo(() => 
@@ -58,7 +55,7 @@ export function EditTeamPage() {
         updateTeamThunk({
           id: teamId,
           name: formData.name,
-          managerEmail: formData.managerEmail || null,
+          leaderEmail: formData.leaderEmail || null,
           members: formData.members || [],
           description: formData.description || "",
           status: formData.status || "ACTIVE",
@@ -87,7 +84,7 @@ export function EditTeamPage() {
         onSubmit={handleSubmit}
         initialValues={{
           name: team.name,
-          managerEmail: team.managerEmail || "",
+          leaderEmail: team.leaderEmail || "",
           members: team.members || [],
           description: team.description || "",
           status: team.status || "ACTIVE",
@@ -95,8 +92,8 @@ export function EditTeamPage() {
         fields={[
           { name: "name", label: "Team Name", type: "text", required: true },
           { 
-            name: "managerEmail", 
-            label: "Team Head (Manager)", 
+            name: "leaderEmail", 
+            label: "Team Head (Leader)", 
             type: "searchableSelect",
             placeholder: "Search employees in department...",
             options: employeeOptions 

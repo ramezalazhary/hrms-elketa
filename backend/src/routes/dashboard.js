@@ -88,7 +88,7 @@ router.get('/metrics', requireAuth, async (req, res) => {
     const salaryQuery = Employee.countDocuments({
       status: { $ne: 'TERMINATED' },
       ...(access.scope === 'department' ? { department: req.user.department } : {}), // approximate sync, we'll keep simple
-      yearlySalaryIncreaseDate: { $gte: today, $lte: thirtyDays }
+      nextReviewDate: { $gte: today, $lte: thirtyDays }
     });
 
     // Branch 3: ID Expiring Extractor

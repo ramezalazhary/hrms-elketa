@@ -6,6 +6,7 @@ import { createEmployeeThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { useState, useEffect, useMemo } from "react";
 import { getDocumentRequirementsApi } from "@/modules/organization/api";
+import { resolveBranchesFromPolicy } from "@/shared/utils/workLocations";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
 
@@ -93,7 +94,7 @@ export function CreateEmployeePage() {
   }, [selectedGovernorate]);
 
   const selectedBranches = useMemo(() => {
-    return policyLocations.find((l) => l.governorate === selectedGovernorate && l.city === selectedCity)?.branches || [];
+    return resolveBranchesFromPolicy(policyLocations, selectedGovernorate, selectedCity);
   }, [policyLocations, selectedGovernorate, selectedCity]);
 
   const branchOptions = selectedBranches.length > 0 
@@ -243,7 +244,7 @@ export function CreateEmployeePage() {
             label: "Privilege Level",
             type: "select",
             required: true,
-            options: role === "ADMIN" || role === "HR_STAFF" || role === 3
+            options: role === "ADMIN" || role === "HR_STAFF" || role === "HR_MANAGER"
               ? [
                   { label: "Employee", value: "EMPLOYEE" },
                   { label: "Team Leader", value: "TEAM_LEADER" },
@@ -402,6 +403,7 @@ export function CreateEmployeePage() {
               form6Date: form6Date || undefined,
               insuranceNumber: insuranceNumber || undefined,
             };
+            payload.useDefaultReporting = true;
 
             const response = await dispatch(createEmployeeThunk(payload)).unwrap();
 

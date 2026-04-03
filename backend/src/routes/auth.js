@@ -157,7 +157,7 @@ router.post(
   validateWithJoi(userCreationSchema),
   async (req, res) => {
     try {
-      const { email, password, role } = req.body;
+      const { email, password } = req.body;
 
       // Check if employee already exists
       const existingEmployee = await Employee.findOne({ email });
@@ -168,11 +168,11 @@ router.post(
       // Hash password
       const passwordHash = await hashPassword(password);
 
-      // Create employee with auth fields
+      // Create employee with auth fields — role is always EMPLOYEE for public registration
       const newEmployee = new Employee({
         email,
         passwordHash,
-        role,
+        role: "EMPLOYEE",
         fullName: email.split("@")[0], // Placeholder
         position: "Unknown", // Placeholder
         department: "Unknown", // Placeholder
@@ -407,9 +407,14 @@ router.put("/:id/status", async (req, res) => {
     }
 
     const token = header.slice("Bearer ".length);
-    const decoded = jwt.decode(token);
+    let decoded;
+    try {
+      const secret = process.env.JWT_SECRET || "dev-secret";
+      decoded = jwt.verify(token, secret);
+    } catch {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
 
-    // We trust that the token is somewhat valid, check admin role
     if (!decoded || decoded.role !== "ADMIN") {
       return res
         .status(403)
