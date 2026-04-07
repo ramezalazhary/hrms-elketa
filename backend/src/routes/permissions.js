@@ -9,6 +9,7 @@ import { UserPermission } from "../models/Permission.js";
 import { Employee } from "../models/Employee.js";
 import { validatePermissionCreation } from "../middleware/validation.js";
 import { strictLimiter } from "../middleware/security.js";
+import { isAdminRole } from "../utils/roles.js";
 
 const router = Router();
 
@@ -20,7 +21,7 @@ const HR_DEPARTMENT_NAME = process.env.HR_DEPARTMENT_NAME || "HR";
  * @returns {Promise<void>} `next()` or 403/404 JSON.
  */
 async function restrictHrHeadToHrEmployees(req, res, next) {
-  if (req.user.role === "ADMIN" || req.user.role === 3) return next();
+  if (isAdminRole(req.user.role)) return next();
 
   const targetUser = await Employee.findById(req.params.userId).select("email");
   if (!targetUser) return res.status(404).json({ error: "User not found" });
@@ -126,7 +127,7 @@ router.put(
       if (!items)
         return res.status(400).json({ error: "permissions array is required" });
 
-      const isAdmin = req.user.role === "ADMIN" || req.user.role === 3;
+      const isAdmin = isAdminRole(req.user.role);
       if (!isAdmin) {
         const hrHead = await isHrDepartmentHead(req.user.email);
         if (hrHead) {

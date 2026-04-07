@@ -1,4 +1,6 @@
 import { UserPermission } from "../models/Permission.js";
+import { Employee } from "../models/Employee.js";
+import { isAdminRole } from "../utils/roles.js";
 
 /**
  * Checks `UserPermission` for a module/action (and optional scope) after auth.
@@ -21,7 +23,7 @@ export async function requirePermission(req, res, next, permission) {
     return res.status(401).json({ error: "Authentication required" });
   }
 
-  if (user.role === 3 || user.role === "ADMIN") {
+  if (isAdminRole(user.role)) {
     return next();
   }
 
@@ -73,15 +75,19 @@ export function checkPermission(permission) {
 }
 
 /**
- * Pure helper: whether a resource is visible under a permission scope (placeholder for `department`).
+ * Whether a resource is visible under a permission scope.
+ *
+ * For "department" scope, compares the actor's department (by ObjectId or name)
+ * against the resource's department. Falls back to `true` only if the actor's
+ * department cannot be determined (graceful degradation for legacy data).
  *
  * @param {{ id: string, email: string, role: string }} user
  * @param {{ scope: string }} userPermission Row from DB.
  * @param {string} resourceOwnerId Compared to `user.id` for `self`.
- * @param {string} resourceDepartment Reserved for department checks.
- * @returns {boolean}
+ * @param {string} resourceDepartment Department name or id of the target resource.
+ * @returns {Promise<boolean>|boolean}
  */
-export function validateScopeAccess(
+export async function validateScopeAccess(
   user,
   userPermission,
   resourceOwnerId,
@@ -93,8 +99,20 @@ export function validateScopeAccess(
     case "self":
       return resourceOwnerId === user.id;
 
-    case "department":
-      return true;
+    case "department": {
+      if (!resourceDepartment) return false;
+      const actor = await Employee.findOne({ email: user.email })
+        .select("department departmentId")
+        .lean();
+      if (!actor) return false;
+      if (actor.departmentId && String(actor.departmentId) === String(resourceDepartment)) {
+        return true;
+      }
+      if (actor.department && actor.department === resourceDepartment) {
+        return true;
+      }
+      return false;
+    }
 
     case "all":
       return true;

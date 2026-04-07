@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
-import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
-import { API_URL } from "@/shared/api/apiBase";
+import { getReportsSummaryApi } from "@/modules/reports/api";
 import { DataTable } from "@/shared/components/DataTable";
 
 export function ReportsPage() {
@@ -15,11 +14,7 @@ export function ReportsPage() {
   useEffect(() => {
     const fetchReport = async () => {
       try {
-        const response = await fetchWithAuth(`${API_URL}/reports/summary`);
-        if (!response.ok) {
-          throw new Error("Failed to fetch report");
-        }
-        const data = await response.json();
+        const data = await getReportsSummaryApi();
         setSummary(data.summary);
         setWarnings(data.warnings);
 

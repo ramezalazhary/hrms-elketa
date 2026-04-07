@@ -2,6 +2,7 @@ import { Router } from "express";
 import { ManagementRequest } from "../models/ManagementRequest.js";
 import { Department } from "../models/Department.js";
 import { requireAuth } from "../middleware/auth.js";
+import { isAdminRole } from "../utils/roles.js";
 
 const router = Router();
 
@@ -26,7 +27,10 @@ router.post("/", requireAuth, async (req, res) => {
 
     res.status(201).json(newRequest);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    if (error.name === "ValidationError") {
+      return res.status(400).json({ error: Object.values(error.errors).map(e => e.message).join(', ') });
+    }
+    res.status(500).json({ error: error.message || "Internal server error" });
   }
 });
 
@@ -36,11 +40,10 @@ router.get("/", requireAuth, async (req, res) => {
     const user = req.user;
     let query = {};
 
-    const isAdmin = user.role === "ADMIN" || user.role === 3;
-    const isHR = user.role === "HR_STAFF" || isAdmin;
+    const isAdmin = isAdminRole(user.role);
+    const isHR = user.role === "HR_STAFF" || user.role === "HR_MANAGER" || isAdmin;
 
     if (!isHR) {
-      // If not HR, find if they are a Department Head.
       const managedDept = await Department.findOne({ head: user.email });
       if (managedDept) {
         query.departmentId = managedDept._id;
@@ -55,7 +58,7 @@ router.get("/", requireAuth, async (req, res) => {
     });
     res.json(requests);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -67,8 +70,8 @@ router.patch("/:id", requireAuth, async (req, res) => {
     const user = req.user;
 
     // Permissions: Only Admin, HR, or Department Head can approve.
-    const isAdmin = user.role === "ADMIN" || user.role === 3;
-    const isHR = user.role === "HR_STAFF" || isAdmin;
+    const isAdmin = isAdminRole(user.role);
+    const isHR = user.role === "HR_STAFF" || user.role === "HR_MANAGER" || isAdmin;
 
     const request = await ManagementRequest.findById(id);
     if (!request) return res.status(404).json({ error: "Request not found" });
@@ -90,7 +93,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
     const isDual = request.type === "HR_MODULES";
 
     if (isDual) {
-      if (isAdmin || user.role === "HR_STAFF") {
+      if (isAdmin || user.role === "HR_STAFF" || user.role === "HR_MANAGER") {
         request.hrApproval.status = status;
         request.hrApproval.processedBy = user.email;
         request.hrApproval.processedAt = new Date();
@@ -119,7 +122,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
 
     res.json(request);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

@@ -5,10 +5,18 @@ import { useToast } from "@/shared/components/ToastProvider";
 import { createEmployeeThunk } from "../store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { useState, useEffect, useMemo } from "react";
+import { getBranchesApi } from "@/modules/branches/api";
+import { getTeamsApi } from "@/modules/teams/api";
 import { getDocumentRequirementsApi } from "@/modules/organization/api";
-import { resolveBranchesFromPolicy } from "@/shared/utils/workLocations";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
+import { skillsFromCommaText } from "@/shared/utils/skillsFromText";
+import { languagesFromText } from "@/shared/utils/employeeFormLanguages";
+import {
+  policyBranchDisplayName,
+  policyBranchMatchKeys,
+  branchRecordLocationText,
+} from "@/shared/utils/policyWorkLocationBranches";
 
 export function CreateEmployeePage() {
   const dispatch = useAppDispatch();
@@ -21,18 +29,47 @@ export function CreateEmployeePage() {
   const [selectedCity, setSelectedCity] = useState("");
   const [socialInsuranceStatus, setSocialInsuranceStatus] = useState("NOT_INSURED");
   const [hasMedicalInsurance, setHasMedicalInsurance] = useState("NO");
-  const [policyLocations, setPolicyLocations] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [orgPolicy, setOrgPolicy] = useState(null);
+  const [selectedWorkLocation, setSelectedWorkLocation] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [standaloneTeams, setStandaloneTeams] = useState([]);
+  const [employmentStatus, setEmploymentStatus] = useState("ACTIVE");
 
   useEffect(() => {
     dispatch(fetchDepartmentsThunk());
-    const loadPolicy = async () => {
+    const loadData = async () => {
       try {
-        const data = await getDocumentRequirementsApi();
-        if (data.workLocations) setPolicyLocations(data.workLocations);
-      } catch (err) {}
+        const [branchesData, policyData] = await Promise.all([
+          getBranchesApi().catch(() => []),
+          getDocumentRequirementsApi().catch(() => null),
+        ]);
+        setBranches(Array.isArray(branchesData) ? branchesData : []);
+        if (policyData) setOrgPolicy(policyData);
+      } catch (err) {
+        console.error("Failed to load initial data:", err);
+      }
     };
-    loadPolicy();
+    loadData();
   }, [dispatch]);
+
+  useEffect(() => {
+    if (!selectedDepartment) {
+      setStandaloneTeams([]);
+      return;
+    }
+    const dept = departments.find((d) => d.name === selectedDepartment);
+    if (!dept?._id && !dept?.id) return;
+    let cancelled = false;
+    getTeamsApi({ departmentId: dept._id || dept.id })
+      .then((data) => {
+        if (!cancelled) setStandaloneTeams(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setStandaloneTeams([]);
+      });
+    return () => { cancelled = true; };
+  }, [selectedDepartment, departments]);
 
   const devDemoFill = useMemo(() => {
     if (!import.meta.env.DEV) return undefined;
@@ -86,6 +123,12 @@ export function CreateEmployeePage() {
           medicalCondition: "",
         };
       },
+      afterFill: (patch) => {
+        if (patch.governorate) setSelectedGovernorate(patch.governorate);
+        if (patch.city) setSelectedCity(patch.city);
+        if (patch.socialInsuranceStatus) setSocialInsuranceStatus(patch.socialInsuranceStatus);
+        if (patch.hasMedicalInsurance) setHasMedicalInsurance(patch.hasMedicalInsurance);
+      },
     };
   }, [departments]);
 
@@ -93,13 +136,90 @@ export function CreateEmployeePage() {
     return getCitiesForGovernorate(selectedGovernorate).map((c) => ({ label: c, value: c }));
   }, [selectedGovernorate]);
 
-  const selectedBranches = useMemo(() => {
-    return resolveBranchesFromPolicy(policyLocations, selectedGovernorate, selectedCity);
-  }, [policyLocations, selectedGovernorate, selectedCity]);
+  const teamOptions = useMemo(() => {
+    if (!selectedDepartment) return [{ label: "— Select a department first —", value: "" }];
+    const dept = departments.find((d) => d.name === selectedDepartment);
+    const nameSet = new Set();
+    const options = [];
 
-  const branchOptions = selectedBranches.length > 0 
-      ? selectedBranches.map((b) => ({ label: b, value: b }))
-      : [{ label: "— Select city or register branches in Policy —", value: "" }];
+    // Embedded teams from department
+    for (const t of dept?.teams || []) {
+      if (t.name && !nameSet.has(t.name)) {
+        nameSet.add(t.name);
+        options.push({ label: t.name, value: t.name });
+      }
+    }
+    // Standalone teams fetched from API
+    for (const t of standaloneTeams) {
+      if (t.name && !nameSet.has(t.name)) {
+        nameSet.add(t.name);
+        options.push({ label: t.name, value: t.name });
+      }
+    }
+    if (options.length === 0) return [{ label: "— No teams in this department —", value: "" }];
+    return options;
+  }, [selectedDepartment, departments, standaloneTeams]);
+
+  const workLocationOptions = useMemo(() => {
+    const locations = orgPolicy?.workLocations || [];
+    if (locations.length === 0) return [{ label: "— No locations configured in org policy —", value: "" }];
+    return locations.map((loc, idx) => ({
+      label: `${loc.city} (${loc.governorate})`,
+      value: String(idx),
+    }));
+  }, [orgPolicy]);
+
+  const branchOptions = useMemo(() => {
+    if (!selectedWorkLocation) return [{ label: "— Select a work location first —", value: "" }];
+    const locations = orgPolicy?.workLocations || [];
+    const loc = locations[Number(selectedWorkLocation)];
+    if (!loc) return [{ label: "— Select a work location first —", value: "" }];
+
+    const policyEntries = loc.branches || [];
+    const allBranches = Array.isArray(branches) ? branches : [];
+    const locCity = (loc.city || "").trim().toLowerCase();
+    const locGov = (loc.governorate || "").trim().toLowerCase();
+
+    const matched = allBranches.filter((b) => {
+      const bName = (b.name || "").trim().toLowerCase();
+      const bCode = (b.code || "").trim().toLowerCase();
+      const bCity = (b.city || "").trim().toLowerCase();
+      const bLocation = branchRecordLocationText(b);
+      for (const entry of policyEntries) {
+        const keys = policyBranchMatchKeys(entry);
+        if (keys.length && (keys.includes(bName) || (bCode && keys.includes(bCode)))) return true;
+      }
+      if (locCity && bCity && bCity === locCity) return true;
+      if (locCity && bLocation && bLocation.includes(locCity)) return true;
+      if (locGov && bCity && bCity.includes(locGov)) return true;
+      return false;
+    });
+
+    if (matched.length > 0) {
+      return matched.map((b) => ({
+        label: `${b.name} (${b.code})${b.city ? ` - ${b.city}` : ""}`,
+        value: b.id,
+      }));
+    }
+
+    const policyLabels = policyEntries.map(policyBranchDisplayName).filter(Boolean);
+    if (policyLabels.length > 0) {
+      return policyLabels.map((name) => ({
+        label: name,
+        value: name,
+      }));
+    }
+
+    // Fallback: show all branches if any exist
+    if (allBranches.length > 0) {
+      return allBranches.map((b) => ({
+        label: `${b.name} (${b.code})${b.city ? ` - ${b.city}` : ""}`,
+        value: b.id,
+      }));
+    }
+
+    return [{ label: "— No branches at this location —", value: "" }];
+  }, [selectedWorkLocation, orgPolicy, branches]);
 
   if (provisionedData) {
     return (
@@ -152,14 +272,23 @@ export function CreateEmployeePage() {
       <FormBuilder
         onCancel={() => navigate("/employees")}
         devDemoFill={devDemoFill}
-        onChange={(name, value) => {
+        onChange={(name, value, setFormValues) => {
           if (name === "governorate") {
             setSelectedGovernorate(value);
             setSelectedCity("");
           }
           if (name === "city") setSelectedCity(value);
+          if (name === "department") {
+            setSelectedDepartment(value);
+            setFormValues?.((prev) => ({ ...prev, team: "" }));
+          }
+          if (name === "workLocation") {
+            setSelectedWorkLocation(value);
+            setFormValues?.((prev) => ({ ...prev, branchId: "" }));
+          }
           if (name === "socialInsuranceStatus") setSocialInsuranceStatus(value);
           if (name === "hasMedicalInsurance") setHasMedicalInsurance(value);
+          if (name === "status") setEmploymentStatus(value);
         }}
         fields={[
           { type: "section", label: "1. Personal Information" },
@@ -193,6 +322,7 @@ export function CreateEmployeePage() {
           { name: "nationality", label: "Nationality", type: "text" },
           { name: "idNumber", label: "National ID Number", type: "text" },
           { name: "nationalIdExpiryDate", label: "National ID Expiry Date", type: "date" },
+          { name: "profilePicture", label: "Profile picture (URL)", type: "text", fullWidth: true, placeholder: "https://... or leave blank" },
 
           { type: "section", label: "2. Contact Information" },
           { name: "email", label: "Personal Email", type: "email", required: true },
@@ -214,6 +344,8 @@ export function CreateEmployeePage() {
               ? cityOptions
               : [{ label: "— Select governorate first —", value: "" }],
           },
+          { name: "additionalWhatsapp", label: "WhatsApp", type: "text", placeholder: "Optional" },
+          { name: "additionalSkype", label: "Skype", type: "text", placeholder: "Optional" },
 
           { type: "section", label: "3. Job & Administrative" },
           { name: "employeeCode", label: "Employee Code", type: "text" },
@@ -229,13 +361,19 @@ export function CreateEmployeePage() {
             name: "team",
             label: "Team / Unit",
             type: "select",
-            options: departments.flatMap(d => (d.teams || []).map(t => ({ label: `${t.name} (${d.name})`, value: t.name })))
+            options: teamOptions,
           },
           {
             name: "workLocation",
-            label: "Work Location / Branch",
+            label: "Work Location",
             type: "select",
-            options: branchOptions
+            options: workLocationOptions,
+          },
+          {
+            name: "branchId",
+            label: "Branch",
+            type: "select",
+            options: branchOptions,
           },
           { name: "subLocation", label: "Sub-Location (Floor / Wing)", type: "text" },
           { name: "onlineStorageLink", label: "Online Storage Link", type: "text" },
@@ -250,6 +388,7 @@ export function CreateEmployeePage() {
                   { label: "Team Leader", value: "TEAM_LEADER" },
                   { label: "Manager", value: "MANAGER" },
                   { label: "HR Staff", value: "HR_STAFF" },
+                  { label: "HR Manager", value: "HR_MANAGER" },
                   { label: "Admin", value: "ADMIN" },
                 ]
               : [
@@ -283,8 +422,54 @@ export function CreateEmployeePage() {
               { label: "Terminated", value: "TERMINATED" },
             ]
           },
+          ...(employmentStatus === "RESIGNED" || employmentStatus === "TERMINATED"
+            ? [
+                { name: "terminationDate", label: "Termination date", type: "date" },
+                {
+                  name: "terminationReason",
+                  label: "Termination reason",
+                  type: "textarea",
+                  fullWidth: true,
+                  placeholder: "Brief reason (optional)",
+                },
+              ]
+            : []),
 
-          { type: "section", label: "4. Benefits & Compensation" },
+          { type: "section", label: "4. Education & Skills" },
+          { name: "educationDegree", label: "Degree / qualification", type: "text", placeholder: "e.g. B.Sc. Computer Science" },
+          { name: "educationInstitution", label: "School / institution", type: "text", placeholder: "e.g. Cairo University" },
+          { name: "educationYear", label: "Graduation year", type: "text", placeholder: "e.g. 2014" },
+          { name: "educationGraduationDate", label: "Graduation date", type: "date" },
+          {
+            name: "skillsTechnical",
+            label: "Technical skills",
+            type: "textarea",
+            fullWidth: true,
+            placeholder: "Separate with commas — e.g. React, Node.js, SQL",
+          },
+          {
+            name: "skillsSoft",
+            label: "Soft skills",
+            type: "textarea",
+            fullWidth: true,
+            placeholder: "e.g. Communication, Leadership, Teamwork",
+          },
+          {
+            name: "trainingCoursesText",
+            label: "Training courses",
+            type: "textarea",
+            fullWidth: true,
+            placeholder: "Comma-separated — e.g. AWS Cloud Practitioner, Scrum Master",
+          },
+          {
+            name: "languagesText",
+            label: "Languages",
+            type: "textarea",
+            fullWidth: true,
+            placeholder: "e.g. English (ADVANCED), Arabic — optional level in parentheses",
+          },
+
+          { type: "section", label: "5. Benefits & Compensation" },
            { name: "baseSalary", label: "Base Salary", type: "number" },
            {
               name: "paymentMethod",
@@ -299,8 +484,10 @@ export function CreateEmployeePage() {
            },
            { name: "bankAccount", label: "Bank Account Number", type: "text" },
            { name: "currency", label: "Currency", type: "text", placeholder: "EGP" },
+           { name: "financialAllowances", label: "Allowances (amount)", type: "number" },
+           { name: "financialSocialSecurity", label: "Payroll / social security ref.", type: "text", placeholder: "Reference or note" },
 
-           { type: "section", label: "5. Social Insurance & Health" },
+           { type: "section", label: "6. Social Insurance & Health" },
            {
               name: "hasMedicalInsurance",
               label: "Has Medical Insurance?",
@@ -325,6 +512,7 @@ export function CreateEmployeePage() {
                    { label: "Comprehensive", value: "COMPREHENSIVE" },
                 ]
              },
+             { name: "insuranceValidUntil", label: "Policy valid until", type: "date" },
              { name: "medicalCondition", label: "Medical Condition / Disease Type", type: "text" },
            ] : []),
            {
@@ -354,11 +542,14 @@ export function CreateEmployeePage() {
               insuranceProvider,
               insurancePolicy,
               insuranceCoverage,
+              insuranceValidUntil,
               baseSalary,
               paymentMethod,
               bankAccount,
               hasMedicalInsurance,
               currency,
+              financialAllowances,
+              financialSocialSecurity,
               socialInsuranceStatus,
               insuranceDate,
               subscriptionWage,
@@ -368,12 +559,88 @@ export function CreateEmployeePage() {
               form6Date,
               insuranceNumber,
               medicalCondition,
+              dateOfHireDummy,
+              educationDegree,
+              educationInstitution,
+              educationYear,
+              educationGraduationDate,
+              skillsTechnical,
+              skillsSoft,
+              trainingCoursesText,
+              languagesText,
+              additionalWhatsapp,
+              additionalSkype,
+              terminationDate,
+              terminationReason,
               ...rest
             } = values;
 
             const payload = { ...rest };
-            for (const key of ["dateOfBirth", "dateOfHire", "nationalIdExpiryDate", "dateOfHireDummy"]) {
+            // Resolve workLocation from policy index to actual city label
+            const locIdx = Number(payload.workLocation);
+            const policyLocs = orgPolicy?.workLocations || [];
+            if (!isNaN(locIdx) && policyLocs[locIdx]) {
+              const loc = policyLocs[locIdx];
+              payload.workLocation = `${loc.city}, ${loc.governorate}`;
+            } else {
+              delete payload.workLocation;
+            }
+            // If branchId is a name string (from policy) rather than an ObjectId, store it in workLocation
+            if (payload.branchId && !/^[a-f\d]{24}$/i.test(payload.branchId)) {
+              payload.workLocation = payload.branchId;
+              delete payload.branchId;
+            }
+            for (const key of [
+              "dateOfBirth",
+              "dateOfHire",
+              "nationalIdExpiryDate",
+              "dateOfHireDummy",
+              "insuranceValidUntil",
+              "terminationDate",
+            ]) {
               if (payload[key] === "") delete payload[key];
+            }
+            if (!payload.profilePicture || String(payload.profilePicture).trim() === "") {
+              delete payload.profilePicture;
+            }
+
+            const wa = (additionalWhatsapp || "").trim();
+            const sk = (additionalSkype || "").trim();
+            if (wa || sk) {
+              payload.additionalContact = {
+                ...(wa ? { whatsapp: wa } : {}),
+                ...(sk ? { skype: sk } : {}),
+              };
+            }
+
+            const degreeTrim = (educationDegree || "").trim();
+            const instTrim = (educationInstitution || "").trim();
+            const yearTrim = (educationYear || "").trim();
+            const gradDate = educationGraduationDate || "";
+            if (degreeTrim || gradDate || instTrim || yearTrim) {
+              payload.education = [
+                {
+                  degree: degreeTrim || "",
+                  institution: instTrim,
+                  year: yearTrim || (gradDate ? gradDate.slice(0, 4) : ""),
+                  graduationDate: gradDate || undefined,
+                },
+              ];
+            }
+
+            payload.skills = {
+              technical: skillsFromCommaText(skillsTechnical),
+              soft: skillsFromCommaText(skillsSoft),
+            };
+            payload.trainingCourses = skillsFromCommaText(trainingCoursesText);
+            payload.languages = languagesFromText(languagesText);
+
+            if (payload.status === "RESIGNED" || payload.status === "TERMINATED") {
+              if (terminationDate) payload.terminationDate = terminationDate;
+              if ((terminationReason || "").trim()) payload.terminationReason = terminationReason.trim();
+            } else {
+              delete payload.terminationDate;
+              delete payload.terminationReason;
             }
 
             if (hasMedicalInsurance === "YES") {
@@ -381,6 +648,7 @@ export function CreateEmployeePage() {
                 provider: insuranceProvider || undefined,
                 policyNumber: insurancePolicy || undefined,
                 coverageType: insuranceCoverage || "HEALTH",
+                ...(insuranceValidUntil ? { validUntil: insuranceValidUntil } : {}),
               };
               if (medicalCondition) payload.medicalCondition = medicalCondition;
             } else {
@@ -392,6 +660,12 @@ export function CreateEmployeePage() {
               paymentMethod: paymentMethod || "BANK_TRANSFER",
               bankAccount: bankAccount || undefined,
               currency: currency || "EGP",
+              ...(financialAllowances !== "" && financialAllowances != null
+                ? { allowances: Number(financialAllowances) }
+                : {}),
+              ...((financialSocialSecurity || "").trim()
+                ? { socialSecurity: (financialSocialSecurity || "").trim() }
+                : {}),
             };
             payload.socialInsurance = {
               status: socialInsuranceStatus || "NOT_INSURED",

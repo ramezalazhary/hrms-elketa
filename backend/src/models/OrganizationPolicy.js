@@ -14,8 +14,9 @@ const OrganizationPolicySchema = new Schema(
       {
         governorate: { type: String, required: true },
         city: { type: String, required: true },
-        branches: [String]
-      }
+        // Branch-shaped objects (see Branch model); Mixed allows legacy string rows until re-saved.
+        branches: { type: [Schema.Types.Mixed], default: [] },
+      },
     ],
     salaryIncreaseRules: [
       {
@@ -25,6 +26,17 @@ const OrganizationPolicySchema = new Schema(
       }
     ],
     companyTimezone: { type: String, default: "Africa/Cairo" },
+    /**
+     * First calendar day of each company's "month" (1–31). Used for excuse limits per MONTH
+     * and monthly excuse balance (UTC). 1 = standard calendar month.
+     */
+    companyMonthStartDay: { type: Number, default: 1, min: 1, max: 31 },
+    /** Executive lead (CEO / managing director); informational + org charts. */
+    chiefExecutiveEmployeeId: { type: Schema.Types.ObjectId, ref: "Employee" },
+    chiefExecutiveTitle: {
+      type: String,
+      default: "Chief Executive Officer",
+    },
     leavePolicies: [
       {
         version: { type: Number, required: true },

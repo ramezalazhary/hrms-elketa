@@ -230,7 +230,10 @@ export function requireRole(allowedRoles) {
     if (typeof allowedRoles === "number") {
       const roleWeight = {
         EMPLOYEE: 1,
+        TEAM_LEADER: 2,
         MANAGER: 2,
+        HR_STAFF: 3,
+        HR_MANAGER: 3,
         ADMIN: 3,
       };
       if ((roleWeight[user.role] || 1) < allowedRoles) {

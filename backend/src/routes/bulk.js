@@ -9,9 +9,11 @@ import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
 import { Team } from "../models/Team.js";
 import { Position } from "../models/Position.js";
+import { Branch } from "../models/Branch.js";
 import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
 import { Attendance } from "../models/Attendance.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { syncEmployeeOrgCaches } from "../services/employeeOrgCaches.js";
 
 const router = Router();
 const upload = multer({ dest: "uploads/" });
@@ -20,7 +22,6 @@ const __dirname = path.dirname(__filename);
 
 /**
  * GET /api/bulk/template
- * Downloads the standardized Excel template for data imports.
  */
 router.get("/template", requireAuth, requireRole(3), (req, res) => {
   const templatePath = path.join(__dirname, "..", "..", "HRMS_Template.xlsx");
@@ -31,17 +32,24 @@ router.get("/template", requireAuth, requireRole(3), (req, res) => {
 });
 
 /**
- * POST /api/bulk/upload
- * Clears existing organizational data and imports new records from the uploaded Excel file.
+ * POST /api/bulk/upload — destructive org reset + import. Requires ALLOW_DESTRUCTIVE_BULK=true.
  */
 router.post("/upload", requireAuth, requireRole(3), upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file provided for upload." });
+
+  if (process.env.ALLOW_DESTRUCTIVE_BULK !== "true") {
+    return res.status(403).json({
+      error:
+        "Destructive bulk import is disabled. Set environment variable ALLOW_DESTRUCTIVE_BULK=true on the server to enable.",
+    });
+  }
 
   try {
     const workbook = XLSX.readFile(req.file.path);
     const passwordHash = await bcrypt.hash("emp123", 10);
 
-    // 1. Wipe current state
+    const prevPolicy = await OrganizationPolicy.findOne({ name: "default" }).lean();
+
     await Promise.all([
       Employee.deleteMany({}),
       Department.deleteMany({}),
@@ -49,96 +57,119 @@ router.post("/upload", requireAuth, requireRole(3), upload.single("file"), async
       Position.deleteMany({}),
       OrganizationPolicy.deleteMany({}),
       Attendance.deleteMany({}),
+      Branch.deleteMany({}),
     ]);
 
-    // 2. Import Branches (Organization Policy)
-    const branchData = XLSX.utils.sheet_to_json(workbook.Sheets["Branches"]);
+    const branchSheet = workbook.Sheets["Branches"];
+    const branchData = branchSheet ? XLSX.utils.sheet_to_json(branchSheet) : [];
+    let workLocations = prevPolicy?.workLocations || [];
     if (branchData.length > 0) {
       const locationsMap = new Map();
-      branchData.forEach(row => {
+      branchData.forEach((row) => {
         const key = `${row.Governorate}|${row.City}`;
         if (!locationsMap.has(key)) locationsMap.set(key, []);
-        if (row['Branch Name']) locationsMap.get(key).push(row['Branch Name']);
+        if (row["Branch Name"]) locationsMap.get(key).push(row["Branch Name"]);
       });
-
-      const workLocations = Array.from(locationsMap.entries()).map(([key, branches]) => {
-        const [governorate, city] = key.split('|');
+      workLocations = Array.from(locationsMap.entries()).map(([key, branches]) => {
+        const [governorate, city] = key.split("|");
         return { governorate, city, branches };
       });
-
-      await OrganizationPolicy.create({ name: "default", workLocations });
     }
 
-    // 3. Import Departments
-    const deptRows = XLSX.utils.sheet_to_json(workbook.Sheets["Departments"]);
-    const depts = await Department.insertMany(deptRows.map(r => ({
-      name: r['Dept Name'],
-      code: r['Dept Code'],
-      headTitle: r['Head Title'] || "Department Head"
-    })));
+    await OrganizationPolicy.create({
+      name: "default",
+      workLocations,
+      documentRequirements: prevPolicy?.documentRequirements || [],
+      leavePolicies: prevPolicy?.leavePolicies || [],
+      salaryIncreaseRules: prevPolicy?.salaryIncreaseRules || [],
+      companyTimezone: prevPolicy?.companyTimezone || "Africa/Cairo",
+    });
 
-    // 4. Import Teams
+    const deptRows = XLSX.utils.sheet_to_json(workbook.Sheets["Departments"]);
+    const depts = await Department.insertMany(
+      deptRows.map((r) => ({
+        name: r["Dept Name"],
+        code: r["Dept Code"],
+        headTitle: r["Head Title"] || "Department Head",
+      })),
+    );
+
     const teamRows = XLSX.utils.sheet_to_json(workbook.Sheets["Teams"]);
     const teams = [];
     for (const r of teamRows) {
-      const dept = depts.find(d => d.name === r['Department Name']);
+      const dept = depts.find((d) => d.name === r["Department Name"]);
       if (dept) {
-        teams.push(await Team.create({
-          name: r['Team Name'],
-          departmentId: dept._id,
-          description: r['Description']
-        }));
+        teams.push(
+          await Team.create({
+            name: r["Team Name"],
+            departmentId: dept._id,
+            description: r["Description"],
+          }),
+        );
       }
     }
 
-    // 5. Import Positions
     const posRows = XLSX.utils.sheet_to_json(workbook.Sheets["Positions"]);
     for (const r of posRows) {
-      const dept = depts.find(d => d.name === r['Department Name']);
+      const dept = depts.find((d) => d.name === r["Department Name"]);
       if (dept) {
         await Position.create({
-          title: r['Title'],
-          level: r['Level'] || "Mid",
+          title: r["Title"],
+          level: r["Level"] || "Mid",
           departmentId: dept._id,
-          responsibility: r['Responsibility']
+          responsibility: r["Responsibility"],
         });
       }
     }
 
-    // 6. Import Employees
     const empRows = XLSX.utils.sheet_to_json(workbook.Sheets["Employees"]);
     const employees = [];
     for (const r of empRows) {
-      const dept = depts.find(d => d.name === r['Department']);
-      const team = teams.find(t => t.name === r['Team']);
-      
+      const dept = depts.find((d) => d.name === r["Department"]);
+      const team = teams.find((t) => t.name === r["Team"]);
+      let positionId;
+      if (r["Position"] && dept) {
+        const pos = await Position.findOne({
+          departmentId: dept._id,
+          title: r["Position"],
+        })
+          .select("_id")
+          .lean();
+        positionId = pos?._id;
+      }
+
       const emp = await Employee.create({
-        fullName: r['Full Name'],
-        fullNameArabic: r['Full Name Arabic'],
-        email: r['Email'],
-        employeeCode: r['Employee Code'],
-        role: r['Role'] || "EMPLOYEE",
-        position: r['Position'],
-        department: r['Department'],
+        fullName: r["Full Name"],
+        fullNameArabic: r["Full Name Arabic"],
+        email: r["Email"],
+        employeeCode: r["Employee Code"],
+        role: r["Role"] || "EMPLOYEE",
+        position: r["Position"],
+        department: r["Department"],
+        team: r["Team"] || undefined,
         departmentId: dept?._id,
         teamId: team?._id,
+        positionId,
         passwordHash,
-        dateOfHire: r['Date of Hire'] ? new Date(r['Date of Hire']) : undefined,
-        financial: { baseSalary: Number(r['Base Salary']) || 0 },
-        idNumber: r['National ID'],
-        nationalIdExpiryDate: r['ID Expiry Date'] ? new Date(r['ID Expiry Date']) : undefined,
-        status: "ACTIVE"
+        dateOfHire: r["Date of Hire"] ? new Date(r["Date of Hire"]) : undefined,
+        financial: { baseSalary: Number(r["Base Salary"]) || 0 },
+        idNumber: r["National ID"],
+        nationalIdExpiryDate: r["ID Expiry Date"] ? new Date(r["ID Expiry Date"]) : undefined,
+        status: "ACTIVE",
       });
+      await syncEmployeeOrgCaches(emp);
+      if (emp.isModified()) await emp.save();
       employees.push(emp);
     }
 
-    // Post-processing: Link managers/leads based on role
-    // (In a real system, we might need manager emails in the sheet to link correctly, 
-    // but for this template, we assume managers/leads are created and we link them by hierarchy level)
     for (const emp of employees) {
       if (emp.role === "EMPLOYEE") {
-        const lead = employees.find(e => e.role === "TEAM_LEADER" && e.departmentId?.equals(emp.departmentId));
-        const manager = employees.find(e => e.role === "MANAGER" && e.departmentId?.equals(emp.departmentId));
+        const lead = employees.find(
+          (e) => e.role === "TEAM_LEADER" && e.departmentId?.equals(emp.departmentId),
+        );
+        const manager = employees.find(
+          (e) => e.role === "MANAGER" && e.departmentId?.equals(emp.departmentId),
+        );
         if (lead) emp.teamLeaderId = lead._id;
         if (manager) emp.managerId = manager._id;
         await emp.save();

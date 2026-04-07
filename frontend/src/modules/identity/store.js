@@ -1,4 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import { getErrorMessage } from "@/shared/api/handleApiResponse";
 import { loginApi, refreshTokenApi, logoutApi, changePasswordApi } from "./api";
 
 
@@ -19,27 +20,35 @@ const initialState = {
   refreshToken: storedAuth?.refreshToken ?? null,
   isRefreshing: false,
   isLoginPending: false,
+  loginError: null,
 };
 
 export const loginThunk = createAsyncThunk(
   "identity/login",
-  async (payload) => {
-    const reponse = await loginApi(payload.email, payload.password);
-    return reponse;
+  async (payload, { rejectWithValue }) => {
+    try {
+      return await loginApi(payload.email, payload.password);
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, "Sign in failed. Check your email and password."));
+    }
   },
 );
 
 export const refreshTokenThunk = createAsyncThunk(
   "identity/refreshToken",
-  async (_, { getState }) => {
+  async (_, { getState, rejectWithValue }) => {
     const state = getState();
     const refreshToken = state.identity.refreshToken;
 
     if (!refreshToken) {
-      throw new Error("No refresh token available");
+      return rejectWithValue("No refresh token available");
     }
 
-    return refreshTokenApi(refreshToken);
+    try {
+      return await refreshTokenApi(refreshToken);
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, "Session expired"));
+    }
   },
 );
 
@@ -59,8 +68,13 @@ export const logoutThunk = createAsyncThunk(
 
 export const changePasswordThunk = createAsyncThunk(
   "identity/changePassword",
-  async (payload) =>
-    changePasswordApi(payload.currentPassword, payload.newPassword),
+  async (payload, { rejectWithValue }) => {
+    try {
+      return await changePasswordApi(payload.currentPassword, payload.newPassword);
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, "Failed to change password"));
+    }
+  },
 );
 
 const identitySlice = createSlice({
@@ -73,6 +87,7 @@ const identitySlice = createSlice({
       state.refreshToken = null;
       state.isRefreshing = false;
       state.isLoginPending = false;
+      state.loginError = null;
       try {
         localStorage.removeItem("auth");
       } catch {
@@ -90,11 +105,15 @@ const identitySlice = createSlice({
       };
       localStorage.setItem("auth", JSON.stringify(authData));
     },
+    clearLoginError: (state) => {
+      state.loginError = null;
+    },
   },
   extraReducers: (builder) => {
     builder
       .addCase(loginThunk.pending, (state) => {
         state.isLoginPending = true;
+        state.loginError = null;
       })
       .addCase(loginThunk.fulfilled, (state, action) => {
         state.accessToken = action.payload.accessToken;
@@ -102,6 +121,7 @@ const identitySlice = createSlice({
         state.currentUser = action.payload.user;
         state.isRefreshing = false;
         state.isLoginPending = false;
+        state.loginError = null;
         localStorage.setItem(
           "auth",
           JSON.stringify({
@@ -111,8 +131,9 @@ const identitySlice = createSlice({
           }),
         );
       })
-      .addCase(loginThunk.rejected, (state) => {
+      .addCase(loginThunk.rejected, (state, action) => {
         state.isLoginPending = false;
+        state.loginError = action.payload || action.error.message;
       })
       .addCase(refreshTokenThunk.pending, (state) => {
         state.isRefreshing = true;
@@ -150,7 +171,6 @@ const identitySlice = createSlice({
         try {
           localStorage.removeItem("auth");
         } catch {
-          console.log("IN ChangePassword Thunk  Error in remove auth");
           // ignore
         }
       });
@@ -158,4 +178,4 @@ const identitySlice = createSlice({
 });
 
 export const identityReducer = identitySlice.reducer;
-export const { logout, setTokens } = identitySlice.actions;
+export const { logout, setTokens, clearLoginError } = identitySlice.actions;

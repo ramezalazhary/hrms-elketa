@@ -7,6 +7,7 @@
 import { Router } from "express";
 import { Employee } from "../models/Employee.js";
 import { requireAuth } from "../middleware/auth.js";
+import { isAdminRole } from "../utils/roles.js";
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get("/", requireAuth, async (req, res) => {
   try {
     const user = req.user;
     const isAdmin =
-      user.role === "ADMIN" || user.role === "HR_MANAGER" || user.role === "HR_STAFF" || user.role === 3;
+      isAdminRole(user.role) || user.role === "HR_MANAGER" || user.role === "HR_STAFF";
 
     if (!isAdmin) {
       // Non-admin users only see their own alerts
@@ -117,7 +118,7 @@ router.get("/", requireAuth, async (req, res) => {
     return res.json({ alerts, summary });
   } catch (error) {
     console.error("GET /api/alerts:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "Failed to load alerts" });
   }
 });
 
@@ -127,6 +128,11 @@ router.get("/", requireAuth, async (req, res) => {
  */
 router.get("/salary-increase-summary", requireAuth, async (req, res) => {
   try {
+    const user = req.user;
+    if (!isAdminRole(user.role) && user.role !== "HR_MANAGER" && user.role !== "HR_STAFF") {
+      return res.status(403).json({ error: "Forbidden: insufficient permissions" });
+    }
+
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
@@ -145,7 +151,7 @@ router.get("/salary-increase-summary", requireAuth, async (req, res) => {
     return res.json({ count, employees });
   } catch (error) {
     console.error("GET /api/alerts/salary-increase-summary:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "Failed to load salary increase summary" });
   }
 });
 

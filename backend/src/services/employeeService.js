@@ -1,6 +1,7 @@
 import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
 import { hashPassword } from "../middleware/auth.js";
+import { syncEmployeeOrgCaches } from "./employeeOrgCaches.js";
 
 /** Empty strings from JSON must not be cast to Date (Mongoose CastError). */
 function optionalDate(value) {
@@ -108,5 +109,7 @@ export async function createEmployee(data) {
   });
 
   await newEmployee.save();
+  await syncEmployeeOrgCaches(newEmployee);
+  if (newEmployee.isModified()) await newEmployee.save();
   return newEmployee;
 }

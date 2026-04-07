@@ -26,12 +26,18 @@ import onboardingRouter from "./routes/onboarding.js";
 import alertsRouter from "./routes/alerts.js";
 import dashboardRouter from "./routes/dashboard.js";
 import bulkRouter from "./routes/bulk.js";
+import branchesRouter from "./routes/branches.js";
+import assessmentsRouter from "./routes/assessments.js";
 import { securityHeaders, apiLimiter } from "./middleware/security.js";
+import { errorMiddleware } from "./middleware/errorMiddleware.js";
+import { NotFoundError } from "./utils/ApiError.js";
+
 
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
+
 
 app.use(securityHeaders);
 
@@ -39,18 +45,18 @@ app.use(securityHeaders);
 const corsOptions =
   process.env.NODE_ENV === "production"
     ? {
-        origin: process.env.FRONTEND_URL || "http://localhost:5173",
-        credentials: true,
-        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization"],
-      }
+      origin: process.env.FRONTEND_URL || "http://localhost:5173",
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+    }
     : {
-        // In development allow any origin (useful when Vite picks different ports)
-        origin: (origin, cb) => cb(null, true),
-        credentials: true,
-        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization"],
-      };
+      // In development allow any origin (useful when Vite picks different ports)
+      origin: (origin, cb) => cb(null, true),
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+    };
 
 app.use(cors(corsOptions));
 
@@ -73,26 +79,17 @@ app.use("/api/dashboard", dashboardRouter);
 app.use("/api/policy", organizationPolicyRouter);
 app.use("/api/leave-requests", leaveRequestsRouter);
 app.use("/api/bulk", bulkRouter);
+app.use("/api/branches", branchesRouter);
+app.use("/api/assessments", assessmentsRouter);
 
-/** Unmatched `/api/*` paths return JSON 404 (does not catch non-API routes if added later). */
-app.use("/api/*", (req, res) => {
-  res.status(404).json({ error: "API endpoint not found" });
+/** Unmatched `/api/*` paths → 404 via the error middleware. */
+app.use("/api/*", (req, _res, next) => {
+  next(new NotFoundError(`API endpoint not found: ${req.method} ${req.originalUrl}`));
 });
 
-/**
- * Express error handler: logs stack in development, generic message in production.
- * @param {Error} err
- */
-app.use((err, req, res, next) => {
-  console.error("Global error:", err);
+/** Centralised error handler (ApiError / Mongoose / generic). */
+app.use(errorMiddleware);
 
-  const isDevelopment = process.env.NODE_ENV !== "production";
-
-  res.status(err.status || 500).json({
-    error: isDevelopment ? err.message : "Internal server error",
-    ...(isDevelopment && { stack: err.stack }),
-  });
-});
 
 const port = Number(process.env.PORT) || 5000;
 
@@ -110,3 +107,12 @@ connectDb()
     console.error("Failed to connect to database:", err);
     process.exit(1);
   });
+
+/* ── Process-level safety nets ── */
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Rejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+  process.exit(1);
+});

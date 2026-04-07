@@ -3,7 +3,7 @@ import { Schema, model } from "mongoose";
 
 const UserPermissionSchema = new Schema(
   {
-    userId: { type: String, required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: "Employee", required: true, index: true },
     module: { type: String, required: true },
     actions: { type: [String], required: true, default: [] },
     scope: { type: String, required: true, default: "self" },

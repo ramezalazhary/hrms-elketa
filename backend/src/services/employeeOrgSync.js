@@ -21,31 +21,30 @@ export async function syncEmployeeLeadershipAfterSave(employee) {
         await prevHead.save();
       }
     }
+    // Sync BOTH legacy email AND normalized ObjectId
     await Department.updateOne(
       { _id: deptId },
-      { $set: { head: email } },
+      { $set: { head: email, headId: employee._id } },
     );
   } else {
     await Department.updateMany(
       { _id: deptId, head: email },
-      { $set: { head: "", headTitle: "Vacant" } },
+      { $set: { head: "", headId: null, headTitle: "Vacant" } },
     );
   }
 
-  if (employee.role === "TEAM_LEADER" && employee.team) {
+  if (employee.role === "TEAM_LEADER" && employee.teamId) {
+    // Use teamId (ObjectId) as primary key — more reliable than team name
     await Team.updateMany(
-      {
-        departmentId: deptId,
-        leaderEmail: email,
-        name: { $ne: employee.team },
-      },
-      { $set: { leaderEmail: null } },
+      { departmentId: deptId, leaderId: employee._id, _id: { $ne: employee.teamId } },
+      { $set: { leaderEmail: null, leaderId: null } },
+    );
+    await Team.updateMany(
+      { departmentId: deptId, leaderEmail: email, _id: { $ne: employee.teamId } },
+      { $set: { leaderEmail: null, leaderId: null } },
     );
 
-    const teamDoc = await Team.findOne({
-      name: employee.team,
-      departmentId: deptId,
-    });
+    const teamDoc = await Team.findById(employee.teamId);
     if (teamDoc) {
       if (teamDoc.leaderEmail && teamDoc.leaderEmail !== email) {
         const prev = await Employee.findOne({ email: teamDoc.leaderEmail });
@@ -54,18 +53,23 @@ export async function syncEmployeeLeadershipAfterSave(employee) {
           await prev.save();
         }
       }
+      // Sync BOTH legacy email AND normalized ObjectId
       teamDoc.leaderEmail = email;
+      teamDoc.leaderId = employee._id;
       await teamDoc.save();
     }
 
-    await Department.updateOne(
-      { _id: deptId, "teams.name": employee.team },
-      { $set: { "teams.$.leaderEmail": email } },
-    );
-  } else {
+    // Also update embedded team in Department.teams[] (legacy)
+    if (employee.team) {
+      await Department.updateOne(
+        { _id: deptId, "teams.name": employee.team },
+        { $set: { "teams.$.leaderEmail": email } },
+      );
+    }
+  } else if (employee.role !== "TEAM_LEADER") {
     await Team.updateMany(
       { departmentId: deptId, leaderEmail: email },
-      { $set: { leaderEmail: null } },
+      { $set: { leaderEmail: null, leaderId: null } },
     );
     await Department.updateMany(
       { _id: deptId, "teams.leaderEmail": email },

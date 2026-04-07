@@ -6,13 +6,16 @@ import { positionsRoutes } from "./positions/routes";
 import { teamsRoutes } from "./teams/routes";
 import { attendanceRoutes } from "./attendance/routes";
 
+const contractsRoutesActive =
+  import.meta.env.VITE_ENABLE_CONTRACTS === "true" ? contractsRoutes : [];
+
 export const coreModuleRoutes = [
   ...employeesRoutes,
   ...departmentsRoutes,
   ...teamsRoutes,
   ...positionsRoutes,
   ...employmentsRoutes,
-  ...contractsRoutes,
+  ...contractsRoutesActive,
   ...attendanceRoutes,
 ];
 

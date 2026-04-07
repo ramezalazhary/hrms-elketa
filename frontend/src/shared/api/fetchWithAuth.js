@@ -28,6 +28,8 @@ export function getAuthHeaders() {
 
 /**
  * `fetch` wrapper: injects Bearer token; on **401** attempts one refresh via `refreshTokenThunk` and retries.
+ * Also catches network errors (no internet, server down) and throws a friendlier message.
+ *
  * @param {RequestInfo} input URL or Request
  * @param {RequestInit} [init] Standard fetch options (headers merged).
  * @returns {Promise<Response>} Final HTTP response (caller still checks `ok`).
@@ -47,7 +49,16 @@ export async function fetchWithAuth(input, init) {
     headers,
   };
 
-  let response = await fetch(input, requestInit);
+  let response;
+
+  try {
+    response = await fetch(input, requestInit);
+  } catch (networkError) {
+    // Network errors (no internet, DNS failure, CORS blocked, server unreachable)
+    throw new Error(
+      "Unable to connect to the server. Please check your internet connection and try again."
+    );
+  }
 
   if (response.status === 401 && getRefreshToken()) {
     try {
@@ -56,14 +67,22 @@ export async function fetchWithAuth(input, init) {
       const newToken = getAuthToken();
       if (newToken) {
         headers.set("Authorization", `Bearer ${newToken}`);
-        response = await fetch(input, {
-          ...init,
-          headers,
-        });
+        try {
+          response = await fetch(input, {
+            ...init,
+            headers,
+          });
+        } catch (retryNetworkError) {
+          throw new Error(
+            "Unable to connect to the server. Please check your internet connection and try again."
+          );
+        }
       }
     } catch (refreshError) {
+      // Token refresh failed — user session is expired
+      // The identity store handles clearing state on rejection
       console.error("Token refresh failed:", refreshError);
-      throw refreshError;
+      throw new Error("Your session has expired. Please sign in again.");
     }
   }
 

@@ -1,16 +1,6 @@
 import { getAuthHeaders } from "@/shared/api/fetchWithAuth";
 import { API_URL } from "@/shared/api/apiBase";
-
-/**
- * @param {Response} response Fetch response.
- * @returns {Promise<any>} Parsed JSON, or rejected promise with server error body.
- */
-function handleResponse(response) {
-  if (!response.ok) {
-    return response.json().then((error) => Promise.reject(error));
-  }
-  return response.json();
-}
+import { handleApiResponse } from "@/shared/api/handleApiResponse";
 
 /**
  * @param {string} email
@@ -24,7 +14,7 @@ export const loginApi = async (email, password) => {
     body: JSON.stringify({ email, password }),
   });
 
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 /**
@@ -38,7 +28,7 @@ export const refreshTokenApi = async (refreshToken) => {
     body: JSON.stringify({ refreshToken }),
   });
 
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 /**
@@ -52,10 +42,7 @@ export const logoutApi = async () => {
     headers: getAuthHeaders(),
   });
 
-  if (response.ok) {
-    return response.json();
-  }
-  throw new Error("Logout failed");
+  return handleApiResponse(response);
 };
 
 /**
@@ -73,7 +60,7 @@ export const changePasswordApi = async (currentPassword, newPassword) => {
     body: JSON.stringify({ currentPassword, newPassword }),
   });
 
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 /**
@@ -87,5 +74,5 @@ export const forgotPasswordApi = async (email) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };

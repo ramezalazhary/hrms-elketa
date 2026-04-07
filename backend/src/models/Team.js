@@ -10,7 +10,8 @@ const TeamSchema = new Schema(
       required: true,
       index: true,
     },
-    leaderEmail: { type: String }, // Leader Email
+    leaderEmail: { type: String }, // ← Legacy cache (prefer leaderId)
+    leaderId: { type: Schema.Types.ObjectId, ref: "Employee" }, // ← Normalized
     leaderTitle: { type: String, default: "Team Leader" },
     leaderResponsibility: { type: String },
     description: { type: String },
@@ -21,7 +22,8 @@ const TeamSchema = new Schema(
         responsibility: { type: String },
       },
     ],
-    members: [{ type: String }], // Array of employee emails
+    members: [{ type: String }], // ← Legacy cache: array of employee emails (prefer memberIds)
+    memberIds: [{ type: Schema.Types.ObjectId, ref: "Employee" }], // ← Normalized
     status: {
       type: String,
       enum: ["ACTIVE", "ARCHIVED"],

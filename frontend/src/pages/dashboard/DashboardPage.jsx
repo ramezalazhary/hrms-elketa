@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { getTeamsApi } from "@/modules/teams/api";
+import { SubmitAssessmentModal } from "@/modules/employees/components/SubmitAssessmentModal";
+import {
+  canManagerOrTeamLeaderEvaluateEmployee,
+  canTeamLeaderEvaluateRosterMember,
+  departmentHeadedByUser,
+} from "@/modules/employees/utils/evaluationAccess";
 import { Layout } from "@/shared/components/Layout";
+import { useToast } from "@/shared/components/ToastProvider";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
@@ -17,13 +25,20 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { Calendar, Clock, AlertTriangle, TrendingUp, FileWarning, ShieldCheck } from "lucide-react";
+import { Calendar, Clock, AlertTriangle, TrendingUp, FileWarning, ShieldCheck, Star } from "lucide-react";
 import { StatusBadge } from "@/shared/components/EntityBadges";
-import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
-import { API_URL } from "@/shared/api/apiBase";
+import {
+  listManagementRequestsApi,
+  createManagementRequestApi,
+  updateManagementRequestStatusApi,
+  getDashboardAlertsApi,
+  getDashboardMetricsApi,
+} from "@/modules/dashboard/api";
+import { getEmployeeAttendanceApi, getTodayAttendanceApi } from "@/modules/attendance/api";
 import { formatTotalHours } from "@/modules/attendance/utils";
 import { DashboardAlerts } from "./DashboardAlerts";
 import { employeeBelongsToDepartment } from "@/shared/utils/departmentMembership";
+import { mergedTeamNamesForDepartment } from "@/shared/utils/mergeDepartmentTeams";
 
 const STATUS_PIE_COLORS = {
   Active: "#10b981",
@@ -99,22 +114,34 @@ function WelcomeBanner({ employee, attendanceHistory }) {
   );
 }
 
-function EmployeeDashboard({ currentUser, employees }) {
+function EmployeeDashboard({ currentUser, employees, onSendRequest }) {
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [requestData, setRequestData] = useState({ type: 'ANALYTICS', message: '' });
+  const [submitting, setSubmitting] = useState(false);
 
   const employee = useMemo(() => 
     employees.find(e => e.email === currentUser?.email),
     [employees, currentUser]
   );
 
+  const handleSubmitRequest = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    await onSendRequest(requestData);
+    setIsRequestModalOpen(false);
+    setRequestData({ type: 'ANALYTICS', message: '' });
+    setSubmitting(false);
+  };
+
   useEffect(() => {
     const empId = employee?._id || employee?.id;
     if (!empId) return;
     const fetchHistory = async () => {
       try {
-        const res = await fetchWithAuth(`${API_URL}/attendance/employee/${empId}`);
-        if (res.ok) setAttendanceHistory(await res.json());
+        const data = await getEmployeeAttendanceApi(empId);
+        setAttendanceHistory(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error("Failed to fetch personal attendance", e);
       } finally {
@@ -297,31 +324,112 @@ function EmployeeDashboard({ currentUser, employees }) {
             </div>
           </div>
 
-          <article className="rounded-2xl border border-dashed border-zinc-200 p-6 bg-zinc-50/30">
-             <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Professional Tip</p>
-             <p className="text-xs text-zinc-500 italic leading-relaxed">
-               You can review your full historical documents and salary cycle details in your profile tab.
-             </p>
+          {/* Special Requests Module */}
+          <article className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden flex flex-col justify-center items-center py-6 px-6 bg-gradient-to-br from-indigo-50/50 to-white">
+            <h3 className="text-sm font-black text-indigo-900 mb-1">Require Privileges?</h3>
+            <p className="text-[10px] text-indigo-600/70 text-center mb-4 max-w-[200px] leading-relaxed">
+              Send a formal request for Analytics, HR Modules, or special permissions.
+            </p>
+            <button 
+              onClick={() => setIsRequestModalOpen(true)} 
+              className="px-4 py-2 bg-indigo-600 text-white text-[10px] font-bold rounded-xl shadow-sm hover:bg-indigo-700 transition active:scale-95 uppercase tracking-widest"
+            >
+              Submit Request
+            </button>
           </article>
         </div>
       </div>
+
+      {isRequestModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 backdrop-blur-sm p-4">
+          <form 
+            onSubmit={handleSubmitRequest}
+            className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-zinc-200 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200"
+          >
+            <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50/50">
+              <h2 className="font-bold text-zinc-900">New Management Request</h2>
+              <p className="text-xs text-zinc-500 mt-1">Submit a formal request for elevated features.</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-700 mb-1.5 uppercase tracking-widest">Type of Request</label>
+                <select
+                  required
+                  value={requestData.type}
+                  onChange={e => setRequestData({ ...requestData, type: e.target.value })}
+                  className="w-full rounded-xl border border-zinc-200 px-4 py-2.5 text-sm bg-zinc-50/50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                >
+                  <option value="ANALYTICS">Analytics Access</option>
+                  <option value="HR_MODULES">HR Modules</option>
+                  <option value="PERMISSION">Special Permissions</option>
+                  <option value="OTHER">Other Request</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-700 mb-1.5 uppercase tracking-widest">Context & Reason</label>
+                <textarea
+                  required
+                  value={requestData.message}
+                  onChange={e => setRequestData({ ...requestData, message: e.target.value })}
+                  rows={4}
+                  placeholder="Explain why you need this access..."
+                  className="w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm bg-zinc-50/50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition resize-none"
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-zinc-100 bg-zinc-50/50 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => setIsRequestModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 rounded-xl transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-sm hover:bg-indigo-700 transition disabled:opacity-50"
+              >
+                {submitting ? "Sending..." : "Submit Request"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </Layout>
   );
 }
 
-function TeamLeaderDashboard({ teams, employees, currentUserEmployee }) {
+function teamRosterMembers(team, employees) {
+  const name = (team.name || "").trim();
+  const memberEmails = new Set(
+    (team.members || []).map((m) => String(m).toLowerCase().trim()).filter(Boolean),
+  );
+  return employees.filter((emp) => {
+    const em = (emp.email || "").toLowerCase().trim();
+    if (memberEmails.has(em)) return true;
+    if (name && (emp.team || "").trim() === name) return true;
+    return false;
+  });
+}
+
+function TeamLeaderDashboard({ teams, employees, currentUserEmployee, currentUser }) {
   const [dailyAttendance, setDailyAttendance] = useState([]);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [evaluateTarget, setEvaluateTarget] = useState(null);
+
+  const ledTeamNames = useMemo(
+    () => [...new Set(teams.map((t) => t.name).filter(Boolean))],
+    [teams],
+  );
 
   useEffect(() => {
     const fetchDaily = async () => {
       setLoadingAttendance(true);
       try {
-        const res = await fetchWithAuth(`${API_URL}/attendance?todayOnly=true`);
-        if (res.ok) {
-           const data = await res.json();
-           setDailyAttendance(data);
-        }
+        const data = await getTodayAttendanceApi();
+        setDailyAttendance(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Failed to fetch daily attendance", err);
       } finally {
@@ -412,7 +520,7 @@ function TeamLeaderDashboard({ teams, employees, currentUserEmployee }) {
 
         <div className="space-y-8">
           {teams.map(team => {
-            const teamMembers = employees.filter(emp => (team.members || []).includes(emp.email));
+            const teamMembers = teamRosterMembers(team, employees);
             const activeCount = teamMembers.filter(e => e.status === 'ACTIVE').length;
 
             return (
@@ -443,13 +551,20 @@ function TeamLeaderDashboard({ teams, employees, currentUserEmployee }) {
                           <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Employee</th>
                           <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Information</th>
                           <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Status</th>
+                          <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-100 text-xs text-zinc-800">
                         {teamMembers.length === 0 ? (
-                          <tr><td colSpan="3" className="px-6 py-8 text-center text-zinc-400 italic">No members assigned to this team yet.</td></tr>
+                          <tr><td colSpan="4" className="px-6 py-8 text-center text-zinc-400 italic">No members assigned to this team yet.</td></tr>
                         ) : (
-                          teamMembers.map(emp => (
+                          teamMembers.map(emp => {
+                            const canEvalHere =
+                              canManagerOrTeamLeaderEvaluateEmployee(emp, currentUser, {
+                                excludeHrAdminRoles: false,
+                                ledTeamNames,
+                              }) || canTeamLeaderEvaluateRosterMember(emp, team, currentUser);
+                            return (
                             <tr key={emp.id} className="hover:bg-zinc-50/50 transition-colors">
                               <td className="px-6 py-4">
                                 <div className="font-bold text-zinc-900">{emp.fullName}</div>
@@ -460,8 +575,28 @@ function TeamLeaderDashboard({ teams, employees, currentUserEmployee }) {
                                 <div className="text-[10px] text-zinc-400">{emp.email}</div>
                               </td>
                               <td className="px-6 py-4"><StatusBadge status={emp.status} /></td>
+                              <td className="px-6 py-4 text-right">
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  {canEvalHere && emp.status !== "TERMINATED" && emp.status !== "RESIGNED" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setEvaluateTarget(emp)}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-amber-100 transition-colors"
+                                    >
+                                      <Star size={12} /> Evaluate
+                                    </button>
+                                  ) : null}
+                                  <Link
+                                    to={`/employees/${emp.id || emp._id}`}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-zinc-600 hover:bg-zinc-100 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-zinc-200 transition-colors"
+                                  >
+                                    View
+                                  </Link>
+                                </div>
+                              </td>
                             </tr>
-                          ))
+                          );
+                          })
                         )}
                       </tbody>
                     </table>
@@ -477,23 +612,62 @@ function TeamLeaderDashboard({ teams, employees, currentUserEmployee }) {
           )}
         </div>
       </div>
+
+      {evaluateTarget && (
+        <SubmitAssessmentModal
+          employee={evaluateTarget}
+          onClose={() => setEvaluateTarget(null)}
+        />
+      )}
     </Layout>
   );
 }
 
-function DepartmentManagerDashboard({ department, employees, requests, onHandleRequest, currentUserEmployee, alertsSummary }) {
+function DepartmentManagerDashboard({ department, employees, requests, onHandleRequest, currentUserEmployee, currentUser, alertsSummary }) {
   const [dailyAttendance, setDailyAttendance] = useState([]);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [evaluateTarget, setEvaluateTarget] = useState(null);
+  const [standaloneTeamsForDept, setStandaloneTeamsForDept] = useState([]);
+
+  useEffect(() => {
+    const deptId = department?.id ?? department?._id;
+    if (!deptId) {
+      setStandaloneTeamsForDept([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const teams = await getTeamsApi({ departmentId: String(deptId) });
+        if (!cancelled) setStandaloneTeamsForDept(Array.isArray(teams) ? teams : []);
+      } catch (e) {
+        console.error("Failed to load teams for department manager evaluate gate", e);
+        if (!cancelled) setStandaloneTeamsForDept([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [department?.id, department?._id]);
+
+  const deptHeadTeamNames = useMemo(
+    () => [...new Set(mergedTeamNamesForDepartment(department, standaloneTeamsForDept))],
+    [department, standaloneTeamsForDept],
+  );
+
+  const deptManagerTeamsByDepartmentId = useMemo(() => {
+    const id = String(department.id ?? department._id ?? "");
+    const m = new Map();
+    if (id) m.set(id, standaloneTeamsForDept);
+    return m;
+  }, [department, standaloneTeamsForDept]);
 
   useEffect(() => {
     const fetchDaily = async () => {
       setLoadingAttendance(true);
       try {
-        const res = await fetchWithAuth(`${API_URL}/attendance?todayOnly=true`);
-        if (res.ok) {
-           const data = await res.json();
-           setDailyAttendance(data);
-        }
+        const data = await getTodayAttendanceApi();
+        setDailyAttendance(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Failed to fetch daily attendance", err);
       } finally {
@@ -686,6 +860,7 @@ function DepartmentManagerDashboard({ department, employees, requests, onHandleR
                   <th className="px-6 py-4 font-bold text-zinc-400 uppercase tracking-widest">Employee</th>
                   <th className="px-6 py-4 font-bold text-zinc-400 uppercase tracking-widest">Position</th>
                   <th className="px-6 py-4 font-bold text-zinc-400 uppercase tracking-widest">Status</th>
+                  <th className="px-6 py-4 font-bold text-zinc-400 uppercase tracking-widest text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 italic font-medium text-zinc-800">
@@ -697,6 +872,30 @@ function DepartmentManagerDashboard({ department, employees, requests, onHandleR
                     </td>
                     <td className="px-6 py-4">{emp.position}</td>
                     <td className="px-6 py-4"><StatusBadge status={emp.status} /></td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {canManagerOrTeamLeaderEvaluateEmployee(emp, currentUser, {
+                          excludeHrAdminRoles: false,
+                          deptHeadTeamNames,
+                          departments: [department],
+                          teamsByDepartmentId: deptManagerTeamsByDepartmentId,
+                        }) && emp.status !== "TERMINATED" && emp.status !== "RESIGNED" ? (
+                          <button
+                            type="button"
+                            onClick={() => setEvaluateTarget(emp)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-amber-100 transition-colors"
+                          >
+                            <Star size={12} /> Evaluate
+                          </button>
+                        ) : null}
+                        <Link
+                          to={`/employees/${emp.id || emp._id}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-zinc-600 hover:bg-zinc-100 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-zinc-200 transition-colors"
+                        >
+                          View
+                        </Link>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -704,6 +903,13 @@ function DepartmentManagerDashboard({ department, employees, requests, onHandleR
           </div>
         </section>
       </div>
+
+      {evaluateTarget && (
+        <SubmitAssessmentModal
+          employee={evaluateTarget}
+          onClose={() => setEvaluateTarget(null)}
+        />
+      )}
     </Layout>
   );
 }
@@ -922,6 +1128,7 @@ function AdminDashboard({ employees, departments, employeesPerDepartment, reques
 
 export function DashboardPage() {
   const dispatch = useAppDispatch();
+  const { showToast } = useToast();
   const { currentUser } = useAppSelector((state) => state.identity);
   const { items: employees } = useAppSelector((state) => state.employees);
   const { items: departments } = useAppSelector((state) => state.departments);
@@ -932,8 +1139,8 @@ export function DashboardPage() {
 
   const refreshRequests = async () => {
     try {
-      const res = await fetchWithAuth(`${API_URL}/management-requests`);
-      if (res.ok) setRequests(await res.json());
+      const data = await listManagementRequestsApi();
+      setRequests(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("Failed to fetch requests", e);
     }
@@ -941,31 +1148,23 @@ export function DashboardPage() {
 
   const handleSendRequest = async (data) => {
     try {
-      await fetchWithAuth(`${API_URL}/management-requests`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(data)
-      });
+      await createManagementRequestApi(data);
       await refreshRequests();
+      showToast("Request submitted successfully", "success");
     } catch (e) {
       console.error("Request failed", e);
+      showToast(e?.error || e?.message || "Failed to submit request", "error");
     }
   };
 
   const handleUpdateRequest = async (id, status) => {
     try {
-      await fetchWithAuth(`${API_URL}/management-requests/${id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ status })
-      });
+      await updateManagementRequestStatusApi(id, status);
       await refreshRequests();
+      showToast(`Request ${status.toLowerCase()} successfully`, "success");
     } catch (e) {
       console.error("Update failed", e);
+      showToast(e?.error || e?.message || "Failed to update request", "error");
     }
   };
 
@@ -975,14 +1174,14 @@ export function DashboardPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetchWithAuth(`${API_URL}/management-requests`);
-        if (!cancelled && res.ok) setRequests(await res.json());
+        const reqs = await listManagementRequestsApi().catch(() => null);
+        if (!cancelled && reqs != null) setRequests(Array.isArray(reqs) ? reqs : []);
 
-        const resAlerts = await fetchWithAuth(`${API_URL}/dashboard/alerts`);
-        if (!cancelled && resAlerts.ok) setAlertsSummary(await resAlerts.json());
+        const alerts = await getDashboardAlertsApi().catch(() => null);
+        if (!cancelled && alerts != null) setAlertsSummary(alerts);
 
-        const resMetrics = await fetchWithAuth(`${API_URL}/dashboard/metrics`);
-        if (!cancelled && resMetrics.ok) setMetricsSummary(await resMetrics.json());
+        const metrics = await getDashboardMetricsApi().catch(() => null);
+        if (!cancelled && metrics != null) setMetricsSummary(metrics);
       } catch (e) {
         console.error("Failed to fetch dashboard summaries", e);
       }
@@ -992,9 +1191,10 @@ export function DashboardPage() {
     };
   }, [dispatch]);
 
-  const managedDepartments = useMemo(() =>
-    departments.filter(d => d.head === currentUser?.email),
-    [departments, currentUser]);
+  const managedDepartments = useMemo(
+    () => departments.filter((d) => departmentHeadedByUser(d, currentUser)),
+    [departments, currentUser],
+  );
 
   const managedTeams = useMemo(() => {
     const teams = [];
@@ -1007,6 +1207,58 @@ export function DashboardPage() {
     });
     return teams;
   }, [departments, currentUser]);
+
+  const [standaloneTeamsLed, setStandaloneTeamsLed] = useState([]);
+
+  useEffect(() => {
+    if (currentUser?.role !== "TEAM_LEADER") {
+      setStandaloneTeamsLed([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const all = await getTeamsApi();
+        if (!Array.isArray(all) || cancelled) return;
+        const uid = currentUser?.id ? String(currentUser.id) : "";
+        const email = (currentUser?.email || "").toLowerCase().trim();
+        const led = all.filter((t) => {
+          if (t.status && t.status !== "ACTIVE") return false;
+          const le = (t.leaderEmail || "").toLowerCase().trim();
+          const lid = t.leaderId?.id ?? t.leaderId?._id ?? t.leaderId;
+          return (email && le === email) || (uid && lid != null && String(lid) === uid);
+        });
+        if (!cancelled) setStandaloneTeamsLed(led);
+      } catch (e) {
+        console.error("Failed to load teams for team leader dashboard", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.role, currentUser?.email, currentUser?.id]);
+
+  const mergedManagedTeams = useMemo(() => {
+    const fromDept = managedTeams;
+    const seen = new Set(
+      fromDept.map((t) => (t.name || "").trim().toLowerCase()).filter(Boolean),
+    );
+    const extra = standaloneTeamsLed
+      .filter((t) => {
+        const key = (t.name || "").trim().toLowerCase();
+        return key && !seen.has(key);
+      })
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        members: t.members || [],
+        leaderEmail: t.leaderEmail,
+        leaderTitle: t.leaderTitle,
+        leaderResponsibility: t.leaderResponsibility,
+        departmentName: t.departmentId?.name || "",
+      }));
+    return [...fromDept, ...extra];
+  }, [managedTeams, standaloneTeamsLed]);
 
   const employeesPerDepartment = useMemo(() => {
     const counts = new Map();
@@ -1041,7 +1293,18 @@ export function DashboardPage() {
   const isEmployee = currentUser?.role === "EMPLOYEE";
 
   if (isEmployee) {
-    return <EmployeeDashboard currentUser={currentUser} employees={employees} />;
+    return <EmployeeDashboard 
+      currentUser={currentUser} 
+      employees={employees} 
+      onSendRequest={(data) => {
+        const dept = departments.find(d => d.name === currentUserEmployee?.department);
+        return handleSendRequest({
+          ...data,
+          departmentId: dept?._id || dept?.id,
+          departmentName: currentUserEmployee?.department || "Unassigned"
+        });
+      }}
+    />;
   }
 
   if (managedDepartments.length > 0) {
@@ -1051,27 +1314,32 @@ export function DashboardPage() {
       requests={requests}
       onHandleRequest={handleUpdateRequest}
       currentUserEmployee={currentUserEmployee}
+      currentUser={currentUser}
       alertsSummary={alertsSummary}
-      metricsSummary={metricsSummary}
     />;
   }
 
   // Always show TeamLeaderDashboard for Team Leaders, even if they have no teams yet.
   if (currentUser?.role === "TEAM_LEADER") {
     return <TeamLeaderDashboard
-      teams={managedTeams}
+      teams={mergedManagedTeams}
       employees={employees}
       currentUserEmployee={currentUserEmployee}
+      currentUser={currentUser}
     />;
   }
 
   return <EmployeeDashboard 
     currentUser={currentUser} 
+    employees={employees}
     requests={requests} 
-    onSendRequest={(data) => handleSendRequest({
-      ...data,
-      departmentId: currentUserEmployee?.departmentId,
-      departmentName: currentUserEmployee?.department
-    })} 
+    onSendRequest={(data) => {
+      const dept = departments.find(d => d.name === currentUserEmployee?.department);
+      return handleSendRequest({
+        ...data,
+        departmentId: dept?._id || dept?.id,
+        departmentName: currentUserEmployee?.department || "Unassigned"
+      });
+    }} 
   />;
 }

@@ -10,16 +10,15 @@ const router = Router();
 // Endpoint 1: Generate & Gather Alerts via Aggregation
 router.get('/alerts', requireAuth, async (req, res) => {
   try {
-    // Attempt generation run (Asynchronous scan - keeps documents updated)
     await generateAlerts();
 
     const access = await resolveEmployeeAccess(req.user);
 
-    // Build filter base allowing Managers to only see their department
     const employeeMatch = { status: { $ne: 'TERMINATED' } };
     if (access.scope === 'department') {
        const userEmp = await Employee.findOne({ email: req.user.email });
-       if (userEmp) employeeMatch.department = userEmp.department;
+       if (userEmp?.departmentId) employeeMatch.departmentId = userEmp.departmentId;
+       else if (userEmp?.department) employeeMatch.department = userEmp.department;
     }
 
     const relevantEmployees = await Employee.find(employeeMatch).select('_id').lean();
@@ -60,15 +59,18 @@ router.get('/alerts', requireAuth, async (req, res) => {
 router.get('/metrics', requireAuth, async (req, res) => {
   try {
     const access = await resolveEmployeeAccess(req.user);
-    
-    const pipeline = [];
+
+    let deptFilter = {};
     if (access.scope === 'department') {
        const userEmp = await Employee.findOne({ email: req.user.email });
-       if (userEmp) pipeline.push({ $match: { department: userEmp.department } });
+       if (userEmp?.departmentId) deptFilter = { departmentId: userEmp.departmentId };
+       else if (userEmp?.department) deptFilter = { department: userEmp.department };
     }
+
+    const pipeline = [];
+    if (Object.keys(deptFilter).length) pipeline.push({ $match: deptFilter });
     pipeline.push({ $match: { status: { $ne: 'TERMINATED' } } });
 
-    // Branch 1: Stats summary
     const statsQuery = Employee.aggregate([
       ...pipeline,
       {
@@ -80,23 +82,22 @@ router.get('/metrics', requireAuth, async (req, res) => {
       }
     ]);
 
-    // Branch 2: Upcoming Salary Extractor
     const today = new Date();
     const thirtyDays = new Date(today);
     thirtyDays.setDate(thirtyDays.getDate() + 30);
 
     const salaryQuery = Employee.countDocuments({
       status: { $ne: 'TERMINATED' },
-      ...(access.scope === 'department' ? { department: req.user.department } : {}), // approximate sync, we'll keep simple
+      ...deptFilter,
       nextReviewDate: { $gte: today, $lte: thirtyDays }
     });
 
-    // Branch 3: ID Expiring Extractor
     const sixtyDays = new Date(today);
     sixtyDays.setDate(sixtyDays.getDate() + 60);
 
     const idQuery = Employee.countDocuments({
       status: { $ne: 'TERMINATED' },
+      ...deptFilter,
       nationalIdExpiryDate: { $gte: today, $lte: sixtyDays }
     });
 

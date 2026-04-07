@@ -5,7 +5,7 @@ const ApprovalStepSchema = new Schema(
   {
     role: {
       type: String,
-      enum: ["TEAM_LEADER", "MANAGER", "HR"],
+      enum: ["TEAM_LEADER", "MANAGER", "HR", "MANAGEMENT"],
       required: true,
     },
     status: {
@@ -57,6 +57,14 @@ const LeaveRequestSchema = new Schema(
     approvals: { type: [ApprovalStepSchema], default: [] },
 
     policySnapshot: { type: Schema.Types.Mixed, required: true },
+
+    /** Computed at submit: policy hire rules + dates; HR sees this before deciding. */
+    eligibility: { type: Schema.Types.Mixed },
+    /**
+     * True when submitted while not yet eligible by policy; approved requests with this flag
+     * do not consume vacation/excuse balance.
+     */
+    preEligibility: { type: Boolean, default: false },
 
     balanceContext: {
       baseEntitlementDays: { type: Number },

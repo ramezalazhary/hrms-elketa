@@ -48,11 +48,11 @@ const EmployeeSchema = new Schema(
 
     // ******************************************************* Job & Administrative *******************************************************
     employeeCode: { type: String, unique: true },
-    position: { type: String, required: true },
-    department: { type: String, required: true },
-    team: { type: String }, // Sub-unit within department
-    managerId: { type: Schema.Types.ObjectId, ref: "Employee" }, // Direct Manager (used when useDefaultReporting is false)
-    teamLeaderId: { type: Schema.Types.ObjectId, ref: "Employee" }, // Team Leader (used when useDefaultReporting is false)
+    position: { type: String }, // ← Cache: auto-synced from positionId.title
+    department: { type: String }, // ← Cache: auto-synced from departmentId.name
+    team: { type: String }, // ← Cache: auto-synced from teamId.name
+    managerId: { type: Schema.Types.ObjectId, ref: "Employee" }, // Direct Manager
+    teamLeaderId: { type: Schema.Types.ObjectId, ref: "Employee" }, // Team Leader
     /** When true (default), use Department.head / team leader from org structure for reporting. */
     useDefaultReporting: { type: Boolean, default: true },
     dateOfHire: { type: Date },
@@ -63,8 +63,8 @@ const EmployeeSchema = new Schema(
       enum: ["FULL_TIME", "PART_TIME", "CONTRACTOR", "TEMPORARY"],
       default: "FULL_TIME",
     },
-    workLocation: { type: String }, // Branch/Office
-    branchId: { type: Schema.Types.ObjectId, ref: "Branch" },
+    branchId: { type: Schema.Types.ObjectId, ref: "Branch" }, // Reference to physical location
+    workLocation: { type: String }, // Cache: auto-synced from branchId.name
     subLocation: { type: String },
     status: {
       type: String,
@@ -81,6 +81,7 @@ const EmployeeSchema = new Schema(
         degree: { type: String },
         institution: { type: String },
         year: { type: String },
+        graduationDate: { type: Date },
       },
     ],
     trainingCourses: [String],

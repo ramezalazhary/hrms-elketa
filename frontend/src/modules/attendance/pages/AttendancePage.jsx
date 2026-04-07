@@ -480,6 +480,7 @@ export function AttendancePage() {
                     <option value="PRESENT">Present</option>
                     <option value="ABSENT">Absent</option>
                     <option value="LATE">Late Arrival</option>
+                    <option value="EXCUSED">Excused (approved permission)</option>
                     <option value="ON_LEAVE">On Leave</option>
                   </select>
                 </div>

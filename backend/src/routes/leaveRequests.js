@@ -3,6 +3,7 @@
  */
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
+import { ApiError } from "../utils/ApiError.js";
 import {
   createLeaveRequest,
   listLeaveRequests,
@@ -17,13 +18,24 @@ import {
 
 const router = Router();
 
+function errStatus(e) {
+  return e.statusCode || e.status || 500;
+}
+
+function errBody(e, fallback) {
+  const code = errStatus(e);
+  const isOperational = e instanceof ApiError;
+  return {
+    error: isOperational || code < 500 ? (e.message || fallback) : fallback,
+  };
+}
+
 router.post("/", requireAuth, async (req, res) => {
   try {
     const doc = await createLeaveRequest(req.user, req.body);
     return res.status(201).json(doc);
   } catch (e) {
-    const status = e.status || 500;
-    return res.status(status).json({ error: e.message || "Failed to create request" });
+    return res.status(errStatus(e)).json(errBody(e, "Failed to create request"));
   }
 });
 
@@ -32,8 +44,7 @@ router.get("/", requireAuth, async (req, res) => {
     const result = await listLeaveRequests(req.user, req.query);
     return res.json(result);
   } catch (e) {
-    const status = e.status || 500;
-    return res.status(status).json({ error: e.message || "Failed to list requests" });
+    return res.status(errStatus(e)).json(errBody(e, "Failed to list requests"));
   }
 });
 
@@ -44,8 +55,7 @@ router.get("/balance", requireAuth, async (req, res) => {
     const balance = await getLeaveBalanceSnapshot(employeeId);
     return res.json(balance);
   } catch (e) {
-    const status = e.status || 500;
-    return res.status(status).json({ error: e.message || "Failed to load balance" });
+    return res.status(errStatus(e)).json(errBody(e, "Failed to load balance"));
   }
 });
 
@@ -59,8 +69,7 @@ router.post("/balance-credit", requireAuth, async (req, res) => {
     });
     return res.status(201).json(snapshot);
   } catch (e) {
-    const status = e.status || 500;
-    return res.status(status).json({ error: e.message || "Failed to add credit" });
+    return res.status(errStatus(e)).json(errBody(e, "Failed to add credit"));
   }
 });
 
@@ -70,8 +79,7 @@ router.post("/balance-credit/bulk", requireAuth, async (req, res) => {
     const result = await addAnnualLeaveCreditBulk(req.user, body);
     return res.status(201).json(result);
   } catch (e) {
-    const status = e.status || 500;
-    return res.status(status).json({ error: e.message || "Failed to add bulk credit" });
+    return res.status(errStatus(e)).json(errBody(e, "Failed to add bulk credit"));
   }
 });
 
@@ -80,8 +88,7 @@ router.get("/:id", requireAuth, async (req, res) => {
     const doc = await getLeaveRequestById(req.params.id, req.user);
     return res.json(doc);
   } catch (e) {
-    const status = e.status || 500;
-    return res.status(status).json({ error: e.message || "Failed to load request" });
+    return res.status(errStatus(e)).json(errBody(e, "Failed to load request"));
   }
 });
 
@@ -96,8 +103,7 @@ router.post("/:id/action", requireAuth, async (req, res) => {
     );
     return res.json(doc);
   } catch (e) {
-    const status = e.status || 500;
-    return res.status(status).json({ error: e.message || "Action failed" });
+    return res.status(errStatus(e)).json(errBody(e, "Action failed"));
   }
 });
 
@@ -106,8 +112,7 @@ router.post("/:id/cancel", requireAuth, async (req, res) => {
     const doc = await cancelLeaveRequest(req.params.id, req.user);
     return res.json(doc);
   } catch (e) {
-    const status = e.status || 500;
-    return res.status(status).json({ error: e.message || "Cancel failed" });
+    return res.status(errStatus(e)).json(errBody(e, "Cancel failed"));
   }
 });
 

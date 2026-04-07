@@ -1,22 +1,16 @@
 /**
- * @file `/api/reports` — aggregated dashboards; gated by `canViewReports` (Admin + HR_STAFF).
+ * @file `/api/reports` — aggregated dashboards; gated by `canViewReports` (shared util).
  */
 import { Router } from "express";
 import { Department } from "../models/Department.js";
 import { Team } from "../models/Team.js";
 import { Position } from "../models/Position.js";
 import { Employee } from "../models/Employee.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { canViewReports } from "../utils/roles.js";
+import mongoose from "mongoose";
 
 const router = Router();
-
-/**
- * @param {{ role: string|number }} user
- * @returns {boolean}
- */
-function canViewReports(user) {
-  return user.role === 3 || user.role === "ADMIN" || user.role === "HR_STAFF";
-}
 
 // GET /reports/summary - Get system summary with aggregation
 router.get("/summary", requireAuth, async (req, res) => {
@@ -24,7 +18,7 @@ router.get("/summary", requireAuth, async (req, res) => {
     if (!canViewReports(req.user)) {
       return res
         .status(403)
-        .json({ error: "Forbidden: Only Admin and HR_STAFF can view reports" });
+        .json({ error: "Forbidden: Only Admin, HR_MANAGER, and HR_STAFF can view reports" });
     }
 
     // Get departments summary
@@ -131,10 +125,11 @@ router.get("/summary", requireAuth, async (req, res) => {
       "name type status",
     );
 
-    // Get teams without managers
-    const teamsWithoutManager = await Team.find({ managerEmail: null }).select(
-      "name status departmentId",
-    );
+    // Get teams without a leader
+    const teamsWithoutManager = await Team.find({
+      $or: [{ leaderEmail: null }, { leaderEmail: "" }],
+      status: "ACTIVE",
+    }).select("name status departmentId");
 
     // Build warnings
     const warnings = [];
@@ -257,7 +252,7 @@ router.get("/organizations", requireAuth, async (req, res) => {
     if (!canViewReports(req.user)) {
       return res
         .status(403)
-        .json({ error: "Forbidden: Only Admin and HR_STAFF can view reports" });
+        .json({ error: "Forbidden: Only Admin, HR_MANAGER, and HR_STAFF can view reports" });
     }
 
     // Get all departments with their teams and employee counts
@@ -301,5 +296,92 @@ router.get("/organizations", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch organization data" });
   }
 });
+
+
+// GET /reports/org-consistency — read-only checks for id / collection drift
+router.get("/org-consistency", requireAuth, async (req, res) => {
+  try {
+    if (!canViewReports(req.user)) {
+      return res.status(403).json({
+        error: "Forbidden: Only Admin, HR_MANAGER, and HR_STAFF can view this report",
+      });
+    }
+
+    const deptIds = (await Department.find().select("_id").lean()).map((d) =>
+      d._id.toString(),
+    );
+    const deptIdSet = new Set(deptIds);
+    const objectIds = [...deptIdSet].map((id) => new mongoose.Types.ObjectId(id));
+
+    const orphanTeamFilter =
+      objectIds.length === 0
+        ? {}
+        : {
+            $or: [
+              { departmentId: { $exists: false } },
+              { departmentId: null },
+              { departmentId: { $nin: objectIds } },
+            ],
+          };
+
+    const orphanPositionFilter =
+      objectIds.length === 0
+        ? {}
+        : {
+            $or: [
+              { departmentId: { $exists: false } },
+              { departmentId: null },
+              { departmentId: { $nin: objectIds } },
+            ],
+          };
+
+    const [orphanTeamsCount, orphanTeams, orphanPositionsCount, orphanPositions] =
+      await Promise.all([
+        Team.countDocuments(orphanTeamFilter),
+        Team.find(orphanTeamFilter).select("name departmentId").limit(50).lean(),
+        Position.countDocuments(orphanPositionFilter),
+        Position.find(orphanPositionFilter).select("title departmentId").limit(50).lean(),
+      ]);
+
+    const teamDeptMismatchAgg = await Employee.aggregate([
+      {
+        $match: {
+          teamId: { $exists: true, $ne: null },
+          departmentId: { $exists: true, $ne: null },
+          status: { $ne: "TERMINATED" },
+        },
+      },
+      { $lookup: { from: "teams", localField: "teamId", foreignField: "_id", as: "tm" } },
+      { $unwind: "$tm" },
+      { $match: { $expr: { $ne: ["$departmentId", "$tm.departmentId"] } } },
+      { $count: "n" },
+    ]);
+    const teamDeptMismatchCount = teamDeptMismatchAgg[0]?.n ?? 0;
+
+    const stringDeptWithoutId = await Employee.countDocuments({
+      status: { $ne: "TERMINATED" },
+      $or: [{ departmentId: { $exists: false } }, { departmentId: null }],
+      department: { $exists: true, $nin: [null, ""] },
+    });
+
+    res.json({
+      summary: {
+        departmentCount: deptIds.length,
+        orphanTeamsCount,
+        orphanPositionsCount,
+        employeesTeamDeptMismatch: teamDeptMismatchCount,
+        activeEmployeesWithDeptStringButNoDeptId: stringDeptWithoutId,
+      },
+      samples: {
+        orphanTeams,
+        orphanPositions,
+      },
+    });
+  } catch (error) {
+    console.error("org-consistency:", error);
+    res.status(500).json({ error: "Failed to compute org consistency" });
+  }
+});
+
 
 export default router;

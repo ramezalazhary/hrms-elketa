@@ -1,12 +1,6 @@
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
 import { API_URL } from "@/shared/api/apiBase";
-
-async function handleResponse(response) {
-  if (!response.ok) {
-    return await response.json().then((error) => Promise.reject(error));
-  }
-  return await response.json();
-}
+import { handleApiResponse } from "@/shared/api/handleApiResponse";
 
 export const getPositionsApi = async (filters = {}) => {
   const params = new URLSearchParams();
@@ -18,12 +12,12 @@ export const getPositionsApi = async (filters = {}) => {
     ? `${API_URL}/positions?${params}`
     : `${API_URL}/positions`;
   const response = await fetchWithAuth(url);
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const getPositionApi = async (positionId) => {
   const response = await fetchWithAuth(`${API_URL}/positions/${positionId}`);
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const createPositionApi = async (position) => {
@@ -32,7 +26,7 @@ export const createPositionApi = async (position) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(position),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const updatePositionApi = async (position) => {
@@ -41,12 +35,12 @@ export const updatePositionApi = async (position) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(position),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const deletePositionApi = async (positionId) => {
   const response = await fetchWithAuth(`${API_URL}/positions/${positionId}`, {
     method: "DELETE",
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };

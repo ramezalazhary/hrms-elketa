@@ -1,12 +1,6 @@
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
 import { API_URL } from "@/shared/api/apiBase";
-
-async function handleResponse(response) {
-  if (!response.ok) {
-    return await response.json().then((error) => Promise.reject(error));
-  }
-  return await response.json();
-}
+import { handleApiResponse } from "@/shared/api/handleApiResponse";
 
 export const getTeamsApi = async (filters = {}) => {
   const params = new URLSearchParams();
@@ -16,12 +10,12 @@ export const getTeamsApi = async (filters = {}) => {
     ? `${API_URL}/teams?${params}`
     : `${API_URL}/teams`;
   const response = await fetchWithAuth(url);
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const getTeamApi = async (teamId) => {
   const response = await fetchWithAuth(`${API_URL}/teams/${teamId}`);
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const createTeamApi = async (team) => {
@@ -30,7 +24,7 @@ export const createTeamApi = async (team) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(team),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const updateTeamApi = async (team) => {
@@ -39,12 +33,12 @@ export const updateTeamApi = async (team) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(team),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const deleteTeamApi = async (teamId) => {
   const response = await fetchWithAuth(`${API_URL}/teams/${teamId}`, {
     method: "DELETE",
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };

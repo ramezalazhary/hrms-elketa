@@ -19,6 +19,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
+import { policyBranchDisplayName } from "@/shared/utils/policyWorkLocationBranches";
 
 const STEPS = [
   { id: 1, label: "Personal", icon: User },
@@ -72,14 +73,17 @@ export function WelcomePage() {
     ];
     if (!policy?.workLocations) return defaults;
     const merged = [...defaults];
+    const labels = (branches) =>
+      (branches || []).map(policyBranchDisplayName).filter(Boolean);
     policy.workLocations.forEach((loc) => {
+      const nextLabels = labels(loc.branches);
       const existing = merged.find(
         (m) => m.city.toLowerCase() === loc.city.toLowerCase()
       );
       if (existing) {
-        existing.branches = [...new Set([...existing.branches, ...loc.branches])];
+        existing.branches = [...new Set([...labels(existing.branches), ...nextLabels])];
       } else {
-        merged.push(loc);
+        merged.push({ city: loc.city, branches: nextLabels });
       }
     });
     return merged;

@@ -1,79 +1,80 @@
-import React from "react";
-import { AlertTriangle, RefreshCw, Home } from "lucide-react";
+import { Component } from "react";
+import { AlertTriangle, RotateCcw, Home } from "lucide-react";
 
 /**
- * Error Boundary component to catch and display errors gracefully
- * Provides a user-friendly fallback UI with options to retry or navigate home
+ * React Error Boundary — catches unhandled render-time exceptions and
+ * displays a branded fallback instead of a white screen.
+ *
+ * Wrap this around route outlets or page-level sections:
+ *   <ErrorBoundary> <Outlet /> </ErrorBoundary>
  */
-class ErrorBoundary extends React.Component {
+export class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    this.state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
   }
 
-  componentDidCatch(err, errorInfo) {
-    this.setState({
-      error: err,
-      errorInfo,
-    });
-
-    // Log error to monitoring service in production
-    console.error("Error Boundary caught an error:", err, errorInfo);
+  componentDidCatch(error, info) {
+    console.error("ErrorBoundary caught:", error, info.componentStack);
   }
 
-  handleRetry = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
+  handleReset = () => {
+    this.setState({ hasError: false, error: null });
   };
 
   render() {
     if (this.state.hasError) {
+      // Allow a custom fallback via props
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
+      const isDev = import.meta.env.DEV;
+
       return (
-        <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-sm border border-zinc-200 p-6">
-            <div className="flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mx-auto mb-4">
-              <AlertTriangle className="w-6 h-6 text-red-600" />
-            </div>
+        <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 mb-5 shadow-sm">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
 
-            <h1 className="text-lg font-semibold text-zinc-900 text-center mb-2">
-              Something went wrong
-            </h1>
+          <h2 className="text-xl font-bold text-slate-900 mb-2">
+            Something went wrong
+          </h2>
+          <p className="max-w-md text-sm text-slate-500 mb-6">
+            An unexpected error occurred while rendering this page. You can try
+            refreshing or going back to the home page.
+          </p>
 
-            <p className="text-sm text-zinc-600 text-center mb-6">
-              We&apos;re sorry, but something unexpected happened.
-              {import.meta.env.DEV && (
-                <details className="mt-2 text-left">
-                  <summary className="cursor-pointer text-xs text-zinc-500 hover:text-zinc-700">
-                    Technical details
-                  </summary>
-                  <pre className="mt-2 p-2 bg-zinc-100 rounded text-xs overflow-auto">
-                    {this.state.error?.toString()}
-                    {this.state.errorInfo?.componentStack}
-                  </pre>
-                </details>
-              )}
-            </p>
+          {isDev && this.state.error && (
+            <details className="mb-6 w-full max-w-lg rounded-xl border border-rose-200 bg-rose-50 p-4 text-left">
+              <summary className="cursor-pointer text-xs font-bold uppercase tracking-wider text-rose-700 mb-2">
+                Error Details (Development Only)
+              </summary>
+              <pre className="overflow-auto text-xs text-rose-800 whitespace-pre-wrap">
+                {this.state.error.toString()}
+                {"\n"}
+                {this.state.error.stack}
+              </pre>
+            </details>
+          )}
 
-            <div className="flex gap-3">
-              <button
-                onClick={this.handleRetry}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Try Again
-              </button>
-
-              <button
-                onClick={() => (window.location.href = "/")}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-zinc-100 text-zinc-700 text-sm font-medium rounded-md hover:bg-zinc-200 transition-colors"
-              >
-                <Home className="w-4 h-4" />
-                Go Home
-              </button>
-            </div>
+          <div className="flex gap-3">
+            <button
+              onClick={this.handleReset}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <RotateCcw className="h-4 w-4" /> Try Again
+            </button>
+            <a
+              href="/"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-600 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-teal-600/25 transition hover:shadow-xl"
+            >
+              <Home className="h-4 w-4" /> Home
+            </a>
           </div>
         </div>
       );
@@ -81,13 +82,4 @@ class ErrorBoundary extends React.Component {
 
     return this.props.children;
   }
-}
-
-export { ErrorBoundary };
-
-/**
- * Page-level error boundary for specific routes
- */
-export function PageErrorBoundary({ children }) {
-  return <ErrorBoundary>{children}</ErrorBoundary>;
 }

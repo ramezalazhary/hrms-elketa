@@ -1,0 +1,68 @@
+# Leaves Request (Vacation & Excuse) Architecture Analysis
+
+This document provides a comprehensive, deep-dive analysis of the existing backend and frontend architecture for "Leave Requests" (which cover both **Vacations** and **Excuses**) in your HRMS React application.
+
+## 1. Data Models (Backend)
+
+The tracking of time-off relies on three interconnected models:
+
+*   **`LeaveRequest` (`backend/src/models/LeaveRequest.js`)**: The single source of truth for all time-off.
+    *   Unified model covering both `VACATION` (full days, start/end dates) and `EXCUSE` (intraday time slots, start/end times).
+    *   **Snapshots**: Maintains a snapshot (`policySnapshot`) of the active organizational rules at the time of submission. This guarantees that legacy/older requests are structurally sound even if HR changes the global policy rules later.
+    *   **Contextual Balance**: Tracks a soft balance (`balanceContext`) recording what the employee's entitlement, bonus days, pending days, and used days balances look like exactly when this document is processed.
+    *   **Status & Approvals**: Saves the explicit approval pipeline (`approvals` array) needed to move the top-level `status` from `PENDING` to `APPROVED`.
+
+*   **`OrganizationPolicy` (`backend/src/models/OrganizationPolicy.js`)**: 
+    *   Contains `leavePolicies` array, versioning the rules. The system mathematically picks the highest `version` number as the currently "active" policy.
+    *   `vacationRules`: Dictates base `annualDays` (e.g., 21), limits like `maxConsecutiveDays`, and eligibility flags like `minDaysAfterHire`.
+    *   `excuseRules`: Dictates constraints like `maxHoursPerExcuse`, limits on occurrences per period (`maxExcusesPerPeriod`), the rolling window length (`excuseLimitPeriod` like WEEK, MONTH, YEAR), and `minDaysAfterHire`.
+
+*   **`Employee` (`backend/src/models/Employee.js`)**: 
+    *   Contains `annualLeaveCredits` array which allows HR to grant supplementary days (bonuses, legal carry-over, or adjustments) on top of the base policy entitlement. The sums of these credits get merged into the final balancing calculation.
+    *   Relies on `dateOfHire` to validate eligibility (based on `minDaysAfterHire`).
+
+## 2. Business Logic & Management Engine (Backend Services)
+
+The backend engines mapping complex organizational rules are managed primarily in `backend/src/services/leaveRequestService.js` and `leavePolicyService.js`.
+
+### Deep Dive: `leaveRequestService.js` Logic
+*   **Approval Pipeline Assembly**: When a request is created, the system dynamically queries the DB to find the `Team.leaderEmail` and the `Department.head` (Manager's email). It then attaches these steps (`TEAM_LEADER` ➔ `MANAGER` ➔ `HR`) to the `approvals` array. If an employee lacks a team leader, that step is skipped.
+*   **Step-by-step Action Processing** (`applyLeaveRequestAction`):
+    *   An approver calls the API to `APPROVE` or `REJECT`.
+    *   The service checks the `approvals` array for the **first step that is `PENDING`**. 
+    *   It strictly verifies that the user invoking the action has the correct email mapped to the current step (e.g., verifying `user.email === teamLeaderEmail`).
+    *   The step is marked `APPROVED` or `REJECTED`. If `REJECTED`, a comment is strictly enforced.
+    *   The system then triggers `syncDocumentStatus()`—if *any* step is rejected, the entire document becomes `REJECTED`. If *all* steps are approved, it becomes `APPROVED`. Otherwise, it stays `PENDING`.
+*   **Overlap Prevention ("No Magic Booking")**: The `assertNoOverlap` function blocks dual reservations. A vacation cannot overlap another vacation, an excuse cannot overlap an excuse, and an excuse cannot natively fall within an existing vacation block.
+*   **Soft Balance Calculation**: Balances (`days` or `minutes`) are computed live. 
+    *   `Entitlement` = Base Policy Limits + `annualLeaveCredits` (bonuses).
+    *   `Used` = SUM(Approved requests relative to the period limit)
+    *   `Reserved` = SUM(Pending requests relative to the period limit)
+    *   `Remaining` = Entitlement - Used - Reserved.
+*   **Cancellation Rules**: 
+    *   If a request is `PENDING`, only the employee themselves or HR can cancel it.
+    *   If a request is `APPROVED`, **only an HR Admin** can retroactively cancel it to refund the days.
+
+## 3. Frontend Architecture Flow
+
+The React UI surfaces this functionality via API-bound hooks and contextually aware interfaces in `src/modules/employees/`.
+
+### Employee End-User Flow (`TimeOffPage.jsx`)
+*   **Unified Form**: A single submission interface toggles between `VACATION` and `EXCUSE`. It serializes the times/dates securely payloading it to the single endpoint.
+*   **Soft Balance Visualization**: Before submitting, workers see a real-time card mapping "Remaining Balance", visually separated between Approved deductions and Pending reservations.
+*   **Self-Service Cancelling**: Employees see their list segmented into `Pending`, `Approved`, and `Rejected/Cancelled`. They have a one-click action to withdraw a pending request, instantly restoring their balance. 
+
+### Management & Approver Flow (`LeaveApprovalsPage.jsx`)
+*   **Smart Queue Filtering**: When an approver visits this page, the frontend requests `?queue=1`. The backend maps the user's email against *every* pending request in the system, returning only the ones where the user is specifically up next in the approval chain.
+*   **Decision Impact Text**: A highly customized UI function (`balanceLines`) intercepts the balance data. It prints plain English scenarios for the manager, such as: *"This request: 2.0 d. If you fully approve it, the user will have 4.0 d left. If you reject it, they will bounce back to 6.0 d."* By providing contextual numbers, managers are protected from accidentally giving away too many days.
+
+### Admin/HR Flow
+*   **Global Architecture Mapping (`OrganizationRulesPage.jsx`)**: The global configuration UI. Allows admins to manipulate the `OrganizationPolicy` defaults. They map the timezone that affects overlapping checks, tweak baseline days (21), or tweak minimum wait times after the date of hire to request varying types of leaves.
+*   **Manual Adjustments (`BulkLeaveBalanceCreditPage.jsx`)**: HR admins utilize bulk endpoints to forcefully overwrite or append extra "Bonus Days" to whole departments or selected users, solving arbitrary legal carry-overs or performance rewards.
+
+## 4. Key Takeaways & Recommendations
+
+1.   **Organizational Hierarchy Risks**: The approval chain relies intimately on cleanly populated data mapping `Department.head` and `Team.leaderEmail`. If departments are empty, misspelled between records, or managers resign without being reassigned, the `PENDING` request logic could deadlock, requiring HR intervention to approve. 
+    *   **Recommendation**: Implement a fallback mechanism or an orphan-request report for HR.
+2.   **Timezones Logic Check**: Since calculations parse `YYYY-MM-DD` and fix it to UTC noon (`parseYmdToUtcNoon`), cross-border logic uses the defined `Company Timezone`. It is extremely stable, assuming the company stays regionally aligned.
+3.   **Stateless Ledgers**: Because "Days Left" is mathematically aggregated off live documents instead of an integer scalar column (like `employee.daysLeft = 5`), race conditions are mostly averted. The DB simply computes totals on read, preventing desync bugs.

@@ -11,7 +11,17 @@ import {
   buildPolicySnapshot,
   getDefaultPolicyDoc,
   resolveActiveLeavePolicy,
+  resolveAnnualDaysForEmployee,
+  isFirstVacationYear,
+  getCompanyMonthStartDay,
+  excusePeriodKeyUtc,
 } from "./leavePolicyService.js";
+import { Attendance } from "../models/Attendance.js";
+import {
+  parseTimeToMinutes,
+  excuseCoversLateCheckIn,
+} from "../utils/excuseAttendance.js";
+import { ApiError } from "../utils/ApiError.js";
 
 const HR_ROLES = new Set(["HR_STAFF", "HR_MANAGER", "ADMIN"]);
 
@@ -50,42 +60,63 @@ function calendarDaysFromHireToDate(hireDate, targetDate) {
 }
 
 /**
- * Enforce minDaysAfterHire from policy (per kind). Each employee uses their own dateOfHire.
+ * Informational only — requests are never blocked; HR decides. `preEligibility` mirrors `!eligible`.
  */
-function assertEligibleByHireDate(employee, kind, firstRequestDay, vacationRules, excuseRules) {
+function computeEligibility(employee, kind, firstRequestDay, vacationRules, excuseRules) {
   if (employee.dateOfHire && utcDayStart(firstRequestDay) < utcDayStart(employee.dateOfHire)) {
-    const err = new Error(
-      kind === "VACATION"
-        ? "Vacation cannot start before your hire date."
-        : "Excuse date cannot be before your hire date.",
-    );
-    err.status = 400;
-    throw err;
+    return {
+      eligible: false,
+      reason:
+        kind === "VACATION"
+          ? "Dates cannot start before hire date."
+          : "Excuse date cannot be before hire date.",
+      eligibleAfterDate: employee.dateOfHire,
+      daysUntilEligible: null,
+    };
   }
 
   const minV = Math.max(0, Number(vacationRules?.minDaysAfterHire) || 0);
   const minE = Math.max(0, Number(excuseRules?.minDaysAfterHire) || 0);
   const min = kind === "VACATION" ? minV : minE;
-  if (min <= 0) return;
+  if (min <= 0) {
+    return {
+      eligible: true,
+      reason: "",
+      eligibleAfterDate: null,
+      daysUntilEligible: null,
+    };
+  }
 
   if (!employee.dateOfHire) {
-    const err = new Error(
-      "No hire date on your profile; HR must set date of hire before requests are allowed under this policy.",
-    );
-    err.status = 400;
-    throw err;
+    return {
+      eligible: false,
+      reason:
+        "No hire date on profile; policy requires days after hire — HR can still review.",
+      eligibleAfterDate: null,
+      daysUntilEligible: null,
+    };
   }
 
   const days = calendarDaysFromHireToDate(employee.dateOfHire, firstRequestDay);
   if (days == null || days < min) {
-    const err = new Error(
-      kind === "VACATION"
-        ? `Vacation requests are allowed only after ${min} full calendar day(s) from your hire date (organization policy).`
-        : `Excuse requests are allowed only after ${min} full calendar day(s) from your hire date (organization policy).`,
-    );
-    err.status = 400;
-    throw err;
+    const hire = new Date(employee.dateOfHire);
+    const eligibleAfter = new Date(hire);
+    eligibleAfter.setUTCDate(eligibleAfter.getUTCDate() + min);
+    const need = min - (days ?? 0);
+    return {
+      eligible: false,
+      reason: `Policy: ${min} full calendar day(s) after hire before ${kind === "VACATION" ? "vacation" : "excuse"} (informational).`,
+      eligibleAfterDate: eligibleAfter,
+      daysUntilEligible: need > 0 ? need : 0,
+    };
   }
+
+  return {
+    eligible: true,
+    reason: "",
+    eligibleAfterDate: null,
+    daysUntilEligible: null,
+  };
 }
 
 function parseHHMM(s) {
@@ -117,40 +148,23 @@ function getMaxExcuseMinutesPerRequest(er) {
   return 8 * 60;
 }
 
-/**
- * Stable period key for counting excuses (UTC). WEEK = Monday-start week.
- * @param {Date} excuseDate
- * @param {string} periodRaw WEEK | MONTH | YEAR
- */
-function excusePeriodKey(excuseDate, periodRaw) {
-  const d = new Date(excuseDate);
-  const p = String(periodRaw || "MONTH").toUpperCase();
-  const y = d.getUTCFullYear();
-  const mo = d.getUTCMonth() + 1;
-  const day = d.getUTCDate();
-  if (p === "YEAR") return `Y|${y}`;
-  if (p === "MONTH") return `M|${y}-${String(mo).padStart(2, "0")}`;
-  if (p === "WEEK") {
-    const x = new Date(Date.UTC(y, mo - 1, day));
-    const dow = x.getUTCDay();
-    const mondayDelta = dow === 0 ? -6 : 1 - dow;
-    x.setUTCDate(x.getUTCDate() + mondayDelta);
-    return `W|${x.getUTCFullYear()}-${String(x.getUTCMonth() + 1).padStart(2, "0")}-${String(x.getUTCDate()).padStart(2, "0")}`;
-  }
-  return `M|${y}-${String(mo).padStart(2, "0")}`;
-}
-
 function normalizeExcuseLimitPeriod(er) {
   const p = String(er.excuseLimitPeriod || "MONTH").toUpperCase();
   if (p === "WEEK" || p === "MONTH" || p === "YEAR") return p;
   return "MONTH";
 }
 
-async function assertExcusePeriodCapacity(employeeId, excuseDate, er, excludeId) {
+async function assertExcusePeriodCapacity(
+  employeeId,
+  excuseDate,
+  er,
+  excludeId,
+  companyMonthStartDay,
+) {
   const maxN = Math.max(0, Number(er.maxExcusesPerPeriod) || 0);
   if (maxN <= 0) return;
   const period = normalizeExcuseLimitPeriod(er);
-  const newKey = excusePeriodKey(excuseDate, period);
+  const newKey = excusePeriodKeyUtc(excuseDate, period, companyMonthStartDay);
   const others = await LeaveRequest.find({
     employeeId,
     kind: "EXCUSE",
@@ -160,14 +174,14 @@ async function assertExcusePeriodCapacity(employeeId, excuseDate, er, excludeId)
   for (const r of others) {
     if (excludeId && String(r._id) === String(excludeId)) continue;
     if (!r.excuseDate) continue;
-    if (excusePeriodKey(r.excuseDate, period) === newKey) n += 1;
+    if (
+      excusePeriodKeyUtc(r.excuseDate, period, companyMonthStartDay) === newKey
+    ) {
+      n += 1;
+    }
   }
   if (n >= maxN) {
-    const err = new Error(
-      `Excuse limit reached: maximum ${maxN} request(s) per ${period} (organization policy).`,
-    );
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, `Excuse limit reached: maximum ${maxN} request(s) per ${period} (organization policy).`,);
   }
 }
 
@@ -196,26 +210,16 @@ export async function resolveApproverEmails(employee) {
   return { teamLeaderEmail, managerEmail };
 }
 
-function buildApprovalPipeline(
-  teamLeaderEmail,
-  managerEmail,
-  employeeEmail,
-) {
+/** HR first; then one MANAGEMENT step (team leader OR manager may act). */
+function buildApprovalPipeline(teamLeaderEmail, managerEmail, employeeEmail) {
   const emp = normEmail(employeeEmail);
-  const steps = [];
-  if (teamLeaderEmail && normEmail(teamLeaderEmail) !== emp) {
-    steps.push({
-      role: "TEAM_LEADER",
-      status: "PENDING",
-    });
+  const tlOk = teamLeaderEmail && normEmail(teamLeaderEmail) !== emp;
+  const mgrOk = managerEmail && normEmail(managerEmail) !== emp;
+  const hasMgmt = tlOk || mgrOk;
+  const steps = [{ role: "HR", status: "PENDING" }];
+  if (hasMgmt) {
+    steps.push({ role: "MANAGEMENT", status: "PENDING" });
   }
-  if (managerEmail && normEmail(managerEmail) !== emp) {
-    steps.push({
-      role: "MANAGER",
-      status: "PENDING",
-    });
-  }
-  steps.push({ role: "HR", status: "PENDING" });
   return steps;
 }
 
@@ -298,9 +302,7 @@ async function assertNoOverlap(employeeId, draft, excludeId) {
   for (const o of others) {
     if (excludeId && String(o._id) === String(excludeId)) continue;
     if (requestsConflict(draft, o)) {
-      const err = new Error("Request overlaps an existing pending or approved request");
-      err.status = 409;
-      throw err;
+      throw new ApiError(409, "Request overlaps an existing pending or approved request");
     }
   }
 }
@@ -321,7 +323,13 @@ export function sumAnnualLeaveCreditDays(employee) {
   return Math.round(s);
 }
 
-async function aggregateUsage(employeeId, excludeId) {
+/**
+ * @param {object} [usageOpts]
+ * @param {boolean} [usageOpts.filterExcuseToFiscalMonth] Only count EXCUSE minutes in the fiscal month of `balanceAnchorDate`
+ * @param {number} [usageOpts.companyMonthStartDay]
+ * @param {Date} [usageOpts.balanceAnchorDate]
+ */
+async function aggregateUsage(employeeId, excludeId, usageOpts = {}) {
   const reqs = await LeaveRequest.find({
     employeeId,
     status: { $in: ["PENDING", "APPROVED"] },
@@ -330,14 +338,31 @@ async function aggregateUsage(employeeId, excludeId) {
   let pendingReservedDays = 0;
   let usedApprovedMinutes = 0;
   let pendingReservedMinutes = 0;
+
+  const filterExcuse = Boolean(usageOpts.filterExcuseToFiscalMonth);
+  const monthStart = getCompanyMonthStartDay({
+    companyMonthStartDay: usageOpts.companyMonthStartDay,
+  });
+  const anchor = usageOpts.balanceAnchorDate
+    ? new Date(usageOpts.balanceAnchorDate)
+    : new Date();
+  const currentExcuseMonthKey = filterExcuse
+    ? excusePeriodKeyUtc(anchor, "MONTH", monthStart)
+    : null;
+
   for (const r of reqs) {
     if (excludeId && String(r._id) === String(excludeId)) continue;
+    if (r.preEligibility) continue;
     const days = r.computed?.days ?? 0;
     const mins = r.computed?.minutes ?? 0;
     if (r.kind === "VACATION") {
       if (r.status === "APPROVED") usedApprovedDays += days;
       else pendingReservedDays += days;
     } else if (r.kind === "EXCUSE") {
+      if (filterExcuse) {
+        const rk = excusePeriodKeyUtc(r.excuseDate, "MONTH", monthStart);
+        if (rk !== currentExcuseMonthKey) continue;
+      }
       if (r.status === "APPROVED") usedApprovedMinutes += mins;
       else pendingReservedMinutes += mins;
     }
@@ -364,15 +389,11 @@ const MAX_CREDIT_REASON_LENGTH = 500;
  */
 export async function addAnnualLeaveCredit(user, body) {
   if (!HR_ROLES.has(user.role)) {
-    const err = new Error("Forbidden: only HR or Admin can add leave credits");
-    err.status = 403;
-    throw err;
+    throw new ApiError(403, "Forbidden: only HR or Admin can add leave credits");
   }
   const employeeId = body?.employeeId;
   if (!employeeId) {
-    const err = new Error("employeeId is required");
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, "employeeId is required");
   }
   const daysInt = Math.floor(Number(body?.days));
   if (
@@ -380,31 +401,19 @@ export async function addAnnualLeaveCredit(user, body) {
     daysInt < 1 ||
     daysInt > MAX_ANNUAL_LEAVE_CREDIT_DAYS
   ) {
-    const err = new Error(
-      `days must be an integer from 1 to ${MAX_ANNUAL_LEAVE_CREDIT_DAYS}`,
-    );
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, `days must be an integer from 1 to ${MAX_ANNUAL_LEAVE_CREDIT_DAYS}`,);
   }
   const reason = String(body?.reason ?? "").trim();
   if (!reason) {
-    const err = new Error("reason is required");
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, "reason is required");
   }
   if (reason.length > MAX_CREDIT_REASON_LENGTH) {
-    const err = new Error(
-      `reason must be at most ${MAX_CREDIT_REASON_LENGTH} characters`,
-    );
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, `reason must be at most ${MAX_CREDIT_REASON_LENGTH} characters`,);
   }
 
   const employee = await Employee.findById(employeeId);
   if (!employee) {
-    const err = new Error("Employee not found");
-    err.status = 404;
-    throw err;
+    throw new ApiError(404, "Employee not found");
   }
   if (!employee.annualLeaveCredits) employee.annualLeaveCredits = [];
   employee.annualLeaveCredits.push({
@@ -432,24 +441,14 @@ function parseAnnualLeaveCreditDaysAndReason(body) {
     daysInt < 1 ||
     daysInt > MAX_ANNUAL_LEAVE_CREDIT_DAYS
   ) {
-    const err = new Error(
-      `days must be an integer from 1 to ${MAX_ANNUAL_LEAVE_CREDIT_DAYS}`,
-    );
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, `days must be an integer from 1 to ${MAX_ANNUAL_LEAVE_CREDIT_DAYS}`,);
   }
   const reason = String(body?.reason ?? "").trim();
   if (!reason) {
-    const err = new Error("reason is required");
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, "reason is required");
   }
   if (reason.length > MAX_CREDIT_REASON_LENGTH) {
-    const err = new Error(
-      `reason must be at most ${MAX_CREDIT_REASON_LENGTH} characters`,
-    );
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, `reason must be at most ${MAX_CREDIT_REASON_LENGTH} characters`,);
   }
   return { daysInt, reason };
 }
@@ -468,9 +467,7 @@ function parseAnnualLeaveCreditDaysAndReason(body) {
  */
 export async function addAnnualLeaveCreditBulk(user, body) {
   if (!HR_ROLES.has(user.role)) {
-    const err = new Error("Forbidden: only HR or Admin can add leave credits");
-    err.status = 403;
-    throw err;
+    throw new ApiError(403, "Forbidden: only HR or Admin can add leave credits");
   }
   const { daysInt, reason } = parseAnnualLeaveCreditDaysAndReason(body);
 
@@ -500,27 +497,17 @@ export async function addAnnualLeaveCreditBulk(user, body) {
     }
     targetIds = [...seen];
     if (targetIds.length === 0) {
-      const err = new Error(
-        "employeeIds must contain at least one valid MongoDB id",
-      );
-      err.status = 400;
-      throw err;
+      throw new ApiError(400, "employeeIds must contain at least one valid MongoDB id",);
     }
     if (targetIds.length > MAX_BULK_EMPLOYEE_IDS) {
-      const err = new Error(
-        `At most ${MAX_BULK_EMPLOYEE_IDS} employee ids per bulk credit request`,
-      );
-      err.status = 400;
-      throw err;
+      throw new ApiError(400, `At most ${MAX_BULK_EMPLOYEE_IDS} employee ids per bulk credit request`,);
     }
     scopeKind = "EMPLOYEE_IDS";
     scopeDetail = `${targetIds.length} selected`;
   } else if (body?.departmentId) {
     const dept = await Department.findById(body.departmentId);
     if (!dept) {
-      const err = new Error("Department not found");
-      err.status = 404;
-      throw err;
+      throw new ApiError(404, "Department not found");
     }
     const rows = await Employee.find({
       ...activeStatusFilter,
@@ -546,30 +533,18 @@ export async function addAnnualLeaveCreditBulk(user, body) {
     scopeDetail = dept.name || String(dept._id);
   } else if (body?.scope === "ALL" && body?.confirmAllEmployees === true) {
     if (user.role !== "ADMIN") {
-      const err = new Error(
-        "Forbidden: only Admin can credit all employees at once",
-      );
-      err.status = 403;
-      throw err;
+      throw new ApiError(403, "Forbidden: only Admin can credit all employees at once",);
     }
     const rows = await Employee.find(activeStatusFilter).select("_id").lean();
     targetIds = rows.map((r) => String(r._id));
     scopeKind = "ALL";
     scopeDetail = "all active employees";
   } else {
-    const err = new Error(
-      "Provide departmentId, non-empty employeeIds, or scope ALL with confirmAllEmployees true",
-    );
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, "Provide departmentId, non-empty employeeIds, or scope ALL with confirmAllEmployees true",);
   }
 
   if (targetIds.length > MAX_BULK_TOTAL_TARGETS) {
-    const err = new Error(
-      `Too many employees (${targetIds.length}). Maximum ${MAX_BULK_TOTAL_TARGETS} per request.`,
-    );
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, `Too many employees (${targetIds.length}). Maximum ${MAX_BULK_TOTAL_TARGETS} per request.`,);
   }
 
   if (targetIds.length === 0) {
@@ -608,16 +583,12 @@ export async function assertCanViewEmployeeLeaveBalance(user, employeeId) {
   if (HR_ROLES.has(user.role)) return;
   const subject = await Employee.findById(employeeId);
   if (!subject) {
-    const err = new Error("Employee not found");
-    err.status = 404;
-    throw err;
+    throw new ApiError(404, "Employee not found");
   }
   const ctx = await resolveApproverEmails(subject);
   if (normEmail(ctx.teamLeaderEmail) === normEmail(user.email)) return;
   if (normEmail(ctx.managerEmail) === normEmail(user.email)) return;
-  const err = new Error("Forbidden");
-  err.status = 403;
-  throw err;
+  throw new ApiError(403, "Forbidden");
 }
 
 /**
@@ -627,18 +598,23 @@ export async function assertCanViewEmployeeLeaveBalance(user, employeeId) {
 export async function getLeaveBalanceSnapshot(employeeId) {
   const employee = await Employee.findById(employeeId);
   if (!employee) {
-    const err = new Error("Employee not found");
-    err.status = 404;
-    throw err;
+    throw new ApiError(404, "Employee not found");
   }
   const policyDoc = await getDefaultPolicyDoc();
   const active = resolveActiveLeavePolicy(policyDoc?.leavePolicies || []);
-  const baseEntitlementDays = Number(active.vacationRules.annualDays) || 21;
+  const vr = active.vacationRules;
+  const baseEntitlementDays = resolveAnnualDaysForEmployee(employee, vr);
   const bonusDays = sumAnnualLeaveCreditDays(employee.toObject?.() ?? employee);
   const entitlementDays = baseEntitlementDays + bonusDays;
+  const firstVacationYear = isFirstVacationYear(employee, vr);
   const entitlementMinutes = Number(active.excuseRules.maxMinutesPerMonth) || 40 * 60;
+  const companyMonthStartDay = getCompanyMonthStartDay(policyDoc);
 
-  const usage = await aggregateUsage(employeeId, null);
+  const usage = await aggregateUsage(employeeId, null, {
+    filterExcuseToFiscalMonth: true,
+    companyMonthStartDay,
+    balanceAnchorDate: new Date(),
+  });
   const remainingDays =
     entitlementDays - usage.usedApprovedDays - usage.pendingReservedDays;
   const remainingMinutes =
@@ -671,12 +647,15 @@ export async function getLeaveBalanceSnapshot(employeeId) {
       pendingDays: usage.pendingReservedDays,
       remainingDays,
       credits,
+      firstVacationYear,
+      entitlementVariesByYear: Boolean(vr?.entitlementVariesByYear),
     },
     excuse: {
       entitlementMinutes,
       approvedMinutes: usage.usedApprovedMinutes,
       pendingMinutes: usage.pendingReservedMinutes,
       remainingMinutes,
+      companyMonthStartDay,
     },
   };
 }
@@ -689,6 +668,11 @@ function userCanActOnPendingStep(userEmail, userRole, stepRole, ctx) {
   if (stepRole === "MANAGER") {
     return ctx.managerEmail && normEmail(ctx.managerEmail) === u;
   }
+  if (stepRole === "MANAGEMENT") {
+    const tl = ctx.teamLeaderEmail && normEmail(ctx.teamLeaderEmail) === u;
+    const mgr = ctx.managerEmail && normEmail(ctx.managerEmail) === u;
+    return tl || mgr;
+  }
   if (stepRole === "HR") {
     return HR_ROLES.has(userRole);
   }
@@ -699,34 +683,74 @@ function firstPendingIndex(approvals) {
   return approvals.findIndex((a) => a.status === "PENDING");
 }
 
+async function syncApprovedExcuseToAttendance(leaveDoc) {
+  if (leaveDoc.kind !== "EXCUSE" || leaveDoc.status !== "APPROVED") return;
+  const day = new Date(leaveDoc.excuseDate);
+  day.setUTCHours(0, 0, 0, 0);
+  const att = await Attendance.findOne({
+    employeeId: leaveDoc.employeeId,
+    date: day,
+  });
+  if (!att || att.status !== "LATE") return;
+  const emp = await Employee.findById(leaveDoc.employeeId).populate(
+    "departmentId",
+  );
+  if (!emp) return;
+  const dept = emp.departmentId;
+  const standardStartTime = dept?.standardStartTime || "09:00";
+  const gracePeriod = dept?.gracePeriod ?? 15;
+  const shiftStartMin = parseTimeToMinutes(standardStartTime);
+  const checkInMin = parseTimeToMinutes(att.checkIn);
+  const es = parseTimeToMinutes(leaveDoc.startTime);
+  const ee = parseTimeToMinutes(leaveDoc.endTime);
+  if (
+    shiftStartMin == null ||
+    checkInMin == null ||
+    es == null ||
+    ee == null
+  ) {
+    return;
+  }
+  if (
+    !excuseCoversLateCheckIn(
+      checkInMin,
+      es,
+      ee,
+      shiftStartMin,
+      gracePeriod,
+    )
+  ) {
+    return;
+  }
+  att.status = "EXCUSED";
+  att.excuseCovered = true;
+  att.excuseLeaveRequestId = leaveDoc._id;
+  await att.save();
+}
+
 /**
  * @param {{ id: string, email: string, role: string }} user
  */
 export async function createLeaveRequest(user, body) {
   const employee = await Employee.findById(user.id);
   if (!employee) {
-    const err = new Error("Employee not found");
-    err.status = 404;
-    throw err;
+    throw new ApiError(404, "Employee not found");
   }
 
   const kind = body.kind;
   if (kind !== "VACATION" && kind !== "EXCUSE") {
-    const err = new Error("Invalid kind");
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, "Invalid kind");
   }
 
   const policyDoc = await getDefaultPolicyDoc();
   if (!policyDoc) {
-    const err = new Error("Organization policy not configured");
-    err.status = 500;
-    throw err;
+    throw new ApiError(500, "Organization policy not configured");
   }
 
   const policySnapshot = buildPolicySnapshot(policyDoc, kind);
   const vr = policySnapshot.vacationRules;
   const er = policySnapshot.excuseRules;
+  const companyMonthStartDay = getCompanyMonthStartDay(policyDoc);
 
   let startDate;
   let endDate;
@@ -739,33 +763,23 @@ export async function createLeaveRequest(user, body) {
     startDate = parseYmdToUtcNoon(body.startDate);
     endDate = parseYmdToUtcNoon(body.endDate);
     if (!startDate || !endDate) {
-      const err = new Error("startDate and endDate are required (YYYY-MM-DD)");
-      err.status = 400;
-      throw err;
+      throw new ApiError(400, "startDate and endDate are required (YYYY-MM-DD)");
     }
     if (utcDayStart(endDate) < utcDayStart(startDate)) {
-      const err = new Error("endDate must be on or after startDate");
-      err.status = 400;
-      throw err;
+      throw new ApiError(400, "endDate must be on or after startDate");
     }
     computed.days = inclusiveVacationDays(startDate, endDate);
     const maxC = Number(vr.maxConsecutiveDays) || 365;
     if (computed.days > maxC) {
-      const err = new Error(`Vacation exceeds max consecutive days (${maxC})`);
-      err.status = 400;
-      throw err;
+      throw new ApiError(400, `Vacation exceeds max consecutive days (${maxC})`);
     }
   } else {
     excuseDate = parseYmdToUtcNoon(body.excuseDate || body.date);
     if (!excuseDate) {
-      const err = new Error("excuseDate is required (YYYY-MM-DD)");
-      err.status = 400;
-      throw err;
+      throw new ApiError(400, "excuseDate is required (YYYY-MM-DD)");
     }
     if (!body.startTime || !body.endTime) {
-      const err = new Error("startTime and endTime are required (HH:mm)");
-      err.status = 400;
-      throw err;
+      throw new ApiError(400, "startTime and endTime are required (HH:mm)");
     }
     computed.minutes = computeExcuseMinutes(
       body.startTime,
@@ -773,24 +787,25 @@ export async function createLeaveRequest(user, body) {
       er.roundingMinutes,
     );
     if (computed.minutes <= 0) {
-      const err = new Error("Invalid excuse time range");
-      err.status = 400;
-      throw err;
+      throw new ApiError(400, "Invalid excuse time range");
     }
     const maxR = getMaxExcuseMinutesPerRequest(er);
     if (computed.minutes > maxR) {
       const hours = (maxR / 60).toFixed(maxR % 60 === 0 ? 0 : 1);
-      const err = new Error(
-        `Excuse exceeds max length for one request (${hours} hour(s) / ${maxR} minutes per policy).`,
-      );
-      err.status = 400;
-      throw err;
+      throw new ApiError(400, `Excuse exceeds max length for one request (${hours} hour(s) / ${maxR} minutes per policy).`,);
     }
-    await assertExcusePeriodCapacity(employee._id, excuseDate, er, null);
+    await assertExcusePeriodCapacity(
+      employee._id,
+      excuseDate,
+      er,
+      null,
+      companyMonthStartDay,
+    );
   }
 
   const firstDay = kind === "VACATION" ? startDate : excuseDate;
-  assertEligibleByHireDate(employee, kind, firstDay, vr, er);
+  const eligibility = computeEligibility(employee, kind, firstDay, vr, er);
+  const preEligibility = !eligibility.eligible;
 
   const { teamLeaderEmail, managerEmail } =
     await resolveApproverEmails(employee);
@@ -813,11 +828,19 @@ export async function createLeaveRequest(user, body) {
 
   await assertNoOverlap(employee._id, draft, null);
 
-  const usage = await aggregateUsage(employee._id, null);
-  const baseEntitlementDays = Number(vr.annualDays) || 21;
+  const usage = await aggregateUsage(employee._id, null, {
+    filterExcuseToFiscalMonth: true,
+    companyMonthStartDay,
+    balanceAnchorDate: new Date(),
+  });
+  const baseEntitlementDays = resolveAnnualDaysForEmployee(employee, vr);
   const bonusDays = sumAnnualLeaveCreditDays(employee);
   const entitlementDays = baseEntitlementDays + bonusDays;
   const entitlementMinutes = Number(er.maxMinutesPerMonth) || 40 * 60;
+  const pendingAddDays =
+    kind === "VACATION" && !preEligibility ? computed.days : 0;
+  const pendingAddMins =
+    kind === "EXCUSE" && !preEligibility ? computed.minutes : 0;
 
   const doc = new LeaveRequest({
     employeeId: employee._id,
@@ -833,6 +856,8 @@ export async function createLeaveRequest(user, body) {
     status: "PENDING",
     approvals,
     policySnapshot,
+    eligibility,
+    preEligibility,
     balanceContext: {
       baseEntitlementDays,
       bonusDays,
@@ -840,9 +865,9 @@ export async function createLeaveRequest(user, body) {
       entitlementMinutes,
       usedApprovedDays: usage.usedApprovedDays,
       usedApprovedMinutes: usage.usedApprovedMinutes,
-      pendingReservedDays: usage.pendingReservedDays + computed.days,
+      pendingReservedDays: usage.pendingReservedDays + pendingAddDays,
       pendingReservedMinutes:
-        usage.pendingReservedMinutes + computed.minutes,
+        usage.pendingReservedMinutes + pendingAddMins,
     },
     createdBy: user.email,
     lastUpdatedAt: new Date(),
@@ -887,9 +912,7 @@ export async function listLeaveRequests(user, query) {
   if (query.queue === "true" || query.queue === "1") {
     const employee = await Employee.findById(user.id);
     if (!employee) {
-      const err = new Error("Employee not found");
-      err.status = 404;
-      throw err;
+      throw new ApiError(404, "Employee not found");
     }
     const ctx = await resolveApproverEmails(employee);
 
@@ -1008,9 +1031,7 @@ export async function listLeaveRequests(user, query) {
 export async function applyLeaveRequestAction(requestId, user, action, comment) {
   const doc = await LeaveRequest.findById(requestId);
   if (!doc) {
-    const err = new Error("Leave request not found");
-    err.status = 404;
-    throw err;
+    throw new ApiError(404, "Leave request not found");
   }
 
   if (doc.status === "CANCELLED" || doc.status === "REJECTED") {
@@ -1022,17 +1043,13 @@ export async function applyLeaveRequestAction(requestId, user, action, comment) 
 
   const act = String(action || "").toUpperCase();
   if (act !== "APPROVE" && act !== "REJECT") {
-    const err = new Error("Invalid action");
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, "Invalid action");
   }
 
   if (act === "REJECT") {
     const c = (comment || "").trim();
     if (!c) {
-      const err = new Error("comment is required for rejection");
-      err.status = 400;
-      throw err;
+      throw new ApiError(400, "comment is required for rejection");
     }
   }
 
@@ -1048,16 +1065,12 @@ export async function applyLeaveRequestAction(requestId, user, action, comment) 
 
   const subject = await Employee.findById(doc.employeeId);
   if (!subject) {
-    const err = new Error("Subject employee not found");
-    err.status = 404;
-    throw err;
+    throw new ApiError(404, "Subject employee not found");
   }
   const ctx = await resolveApproverEmails(subject);
 
   if (!userCanActOnPendingStep(user.email, user.role, step.role, ctx)) {
-    const err = new Error("Not authorized for this approval step");
-    err.status = 403;
-    throw err;
+    throw new ApiError(403, "Not authorized for this approval step");
   }
 
   if (act === "APPROVE") {
@@ -1075,6 +1088,9 @@ export async function applyLeaveRequestAction(requestId, user, action, comment) 
   doc.lastUpdatedAt = new Date();
   doc.lastUpdatedBy = user.email;
   await doc.save();
+  if (doc.status === "APPROVED" && doc.kind === "EXCUSE") {
+    await syncApprovedExcuseToAttendance(doc);
+  }
   return doc;
 }
 
@@ -1084,9 +1100,7 @@ export async function applyLeaveRequestAction(requestId, user, action, comment) 
 export async function cancelLeaveRequest(requestId, user) {
   const doc = await LeaveRequest.findById(requestId);
   if (!doc) {
-    const err = new Error("Leave request not found");
-    err.status = 404;
-    throw err;
+    throw new ApiError(404, "Leave request not found");
   }
 
   if (doc.status === "CANCELLED") {
@@ -1098,20 +1112,14 @@ export async function cancelLeaveRequest(requestId, user) {
 
   if (doc.status === "PENDING") {
     if (!isOwner && !isHr) {
-      const err = new Error("Only the employee or HR can cancel a pending request");
-      err.status = 403;
-      throw err;
+      throw new ApiError(403, "Only the employee or HR can cancel a pending request");
     }
   } else if (doc.status === "APPROVED") {
     if (!isHr) {
-      const err = new Error("Only HR can cancel an approved request");
-      err.status = 403;
-      throw err;
+      throw new ApiError(403, "Only HR can cancel an approved request");
     }
   } else {
-    const err = new Error("Request cannot be cancelled");
-    err.status = 400;
-    throw err;
+    throw new ApiError(400, "Request cannot be cancelled");
   }
 
   doc.status = "CANCELLED";
@@ -1124,24 +1132,18 @@ export async function cancelLeaveRequest(requestId, user) {
 export async function getLeaveRequestById(requestId, user) {
   const doc = await LeaveRequest.findById(requestId);
   if (!doc) {
-    const err = new Error("Leave request not found");
-    err.status = 404;
-    throw err;
+    throw new ApiError(404, "Leave request not found");
   }
   if (String(doc.employeeId) === String(user.id)) return doc;
   if (HR_ROLES.has(user.role)) return doc;
 
   const subject = await Employee.findById(doc.employeeId);
   if (!subject) {
-    const err = new Error("Forbidden");
-    err.status = 403;
-    throw err;
+    throw new ApiError(403, "Forbidden");
   }
   const ctx = await resolveApproverEmails(subject);
   if (normEmail(ctx.teamLeaderEmail) === normEmail(user.email)) return doc;
   if (normEmail(ctx.managerEmail) === normEmail(user.email)) return doc;
 
-  const err = new Error("Forbidden");
-  err.status = 403;
-  throw err;
+  throw new ApiError(403, "Forbidden");
 }

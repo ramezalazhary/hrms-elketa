@@ -1,21 +1,34 @@
 import { useEffect, useMemo, useState } from "react";
+import { getErrorMessage } from "@/shared/api/handleApiResponse";
+
 import { Link, useSearchParams } from "react-router-dom";
 import { Layout } from "@/shared/components/Layout";
 import { Pagination } from "@/shared/components/Pagination";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { useToast } from "@/shared/components/ToastProvider";
+import { fetchDepartmentsThunk } from "@/modules/departments/store";
+import { getTeamsApi } from "@/modules/teams/api";
 import { fetchEmployeesThunk, deleteEmployeeThunk, processSalaryIncreaseThunk, updateEmployeeThunk } from "../store";
 import { DepartmentBadge, StatusBadge } from "@/shared/components/EntityBadges";
 import {
   Users, UserPlus, TrendingUp, AlertCircle, AlertTriangle,
   UserX, CalendarX2, RotateCcw, Search, Eye, Pencil,
   ArrowUpDown, ChevronDown, Filter, X, Briefcase, Building2,
-  Clock, CreditCard, CalendarDays, MoreHorizontal, UserCheck, UserMinus
+  Clock, CreditCard, CalendarDays, MoreHorizontal, UserCheck, UserMinus, Star,
 } from "lucide-react";
 import { FormBuilder } from "@/shared/components/FormBuilder";
 import { getDocumentRequirementsApi } from "../../organization/api";
 import { SalaryIncreaseModal } from "../components/SalaryIncreaseModal";
 import { TerminateEmployeeModal } from "../components/TerminateEmployeeModal";
+import { SubmitAssessmentModal } from "../components/SubmitAssessmentModal";
+import {
+  canManagerOrTeamLeaderEvaluateEmployee,
+  departmentHeadedByUser,
+} from "../utils/evaluationAccess";
+import {
+  groupStandaloneTeamsByDepartmentId,
+  mergedTeamNamesForDepartment,
+} from "@/shared/utils/mergeDepartmentTeams";
 
 /* ─── tiny helpers ─── */
 const AVATAR_COLORS = [
@@ -43,22 +56,70 @@ export function EmployeesListPage() {
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
   const employees = useAppSelector((s) => s.employees.items);
+  const departments = useAppSelector((s) => s.departments.items);
   const isLoading = useAppSelector((s) => s.employees.isLoading);
   const role = useAppSelector((s) => s.identity.currentUser?.role);
+  const currentUser = useAppSelector((s) => s.identity.currentUser);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [increaseModalTarget, setIncreaseModalTarget] = useState(null);
   const [terminateModalTarget, setTerminateModalTarget] = useState(null);
+  const [evaluateTarget, setEvaluateTarget] = useState(null);
   const [orgPolicy, setOrgPolicy] = useState(null);
   const [viewTab, setViewTab] = useState("active");
   const [openActions, setOpenActions] = useState(null); // row id for action dropdown
   const [showFilters, setShowFilters] = useState(false);
+  /** All standalone teams (one fetch; used for TL/Manager led names + dept-head merge). */
+  const [allOrgTeams, setAllOrgTeams] = useState([]);
+
+  useEffect(() => {
+    void dispatch(fetchDepartmentsThunk());
+  }, [dispatch]);
 
   useEffect(() => {
     (async () => {
-      try { setOrgPolicy(await getDocumentRequirementsApi()); } catch {}
+      try { setOrgPolicy(await getDocumentRequirementsApi()); } catch { }
     })();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const all = await getTeamsApi();
+        if (!cancelled && Array.isArray(all)) setAllOrgTeams(all);
+      } catch {
+        if (!cancelled) setAllOrgTeams([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const teamsByDepartmentId = useMemo(
+    () => groupStandaloneTeamsByDepartmentId(allOrgTeams),
+    [allOrgTeams],
+  );
+
+  const standaloneLedTeamNames = useMemo(() => {
+    const rolesThatMayLeadStandaloneTeams = ["TEAM_LEADER", "MANAGER"];
+    if (!rolesThatMayLeadStandaloneTeams.includes(currentUser?.role)) return [];
+    const uid = currentUser?.id ? String(currentUser.id) : "";
+    const email = (currentUser?.email || "").toLowerCase().trim();
+    return allOrgTeams
+      .filter((t) => {
+        if (t.status && t.status !== "ACTIVE") return false;
+        const le = (t.leaderEmail || "").toLowerCase().trim();
+        const lid = t.leaderId?.id ?? t.leaderId?._id ?? t.leaderId;
+        return (
+          (email && le === email) ||
+          (uid && lid != null && String(lid) === uid)
+        );
+      })
+      .map((t) => t.name)
+      .filter(Boolean);
+  }, [allOrgTeams, currentUser?.role, currentUser?.email, currentUser?.id]);
 
   const search = searchParams.get("search") || "";
   const departmentFilter = searchParams.get("department") || "all";
@@ -74,12 +135,42 @@ export function EmployeesListPage() {
     void dispatch(fetchEmployeesThunk(Object.fromEntries(searchParams.entries())));
   }, [dispatch, searchParams]);
 
+  const listEvaluateOptions = useMemo(() => {
+    const em = (currentUser?.email || "").toLowerCase().trim();
+    const embeddedLed = [];
+    for (const d of departments) {
+      for (const t of d.teams || []) {
+        if (
+          (t.leaderEmail || "").toLowerCase().trim() === em &&
+          t.name
+        ) {
+          embeddedLed.push(t.name);
+        }
+      }
+    }
+    const ledTeamNames = [
+      ...new Set([...embeddedLed, ...standaloneLedTeamNames]),
+    ];
+    const deptHead = [];
+    for (const d of departments) {
+      if (!departmentHeadedByUser(d, currentUser)) continue;
+      const did = String(d.id ?? d._id ?? "");
+      const standalone = did ? teamsByDepartmentId.get(did) || [] : [];
+      deptHead.push(...mergedTeamNamesForDepartment(d, standalone));
+    }
+    return {
+      ledTeamNames,
+      deptHeadTeamNames: [...new Set(deptHead)],
+    };
+  }, [departments, currentUser, standaloneLedTeamNames, teamsByDepartmentId]);
+
   const departmentOptions = useMemo(
     () => Array.from(new Set(employees.map((e) => e.department).filter(Boolean))).sort(),
     [employees],
   );
 
-  console.log(employees[0]?.annualAnniversaryDate,'employees data') 
+
+
   const activeEmployees = useMemo(() => employees.filter(e => e.status !== "TERMINATED" && e.status !== "RESIGNED"), [employees]);
   const terminatedEmployees = useMemo(() => employees.filter(e => e.status === "TERMINATED" || e.status === "RESIGNED"), [employees]);
   const currentList = viewTab === "active" ? activeEmployees : terminatedEmployees;
@@ -139,7 +230,8 @@ export function EmployeesListPage() {
       })).unwrap();
       showToast(`Salary increase processed for ${increaseModalTarget.fullName}`, "success");
       setIncreaseModalTarget(null);
-    } catch (err) { showToast(err.message || "Failed to process increase", "error"); }
+    } catch (err) { showToast(getErrorMessage(err, "Failed to process increase"), "error"); }
+
   };
 
   const handleTerminate = async (values) => {
@@ -152,7 +244,8 @@ export function EmployeesListPage() {
       })).unwrap();
       showToast(`${terminateModalTarget.fullName} marked as ${values.status || "TERMINATED"}`, "success");
       setTerminateModalTarget(null);
-    } catch (err) { showToast(err.message || "Failed", "error"); }
+    } catch (err) { showToast(getErrorMessage(err, "Failed"), "error"); }
+
   };
 
   const handleReactivate = async (emp) => {
@@ -160,7 +253,8 @@ export function EmployeesListPage() {
     try {
       await dispatch(updateEmployeeThunk({ id: emp.id, status: "ACTIVE", terminationDate: null, terminationReason: null })).unwrap();
       showToast(`${emp.fullName} reactivated`, "success");
-    } catch (err) { showToast(err.message || "Failed", "error"); }
+    } catch (err) { showToast(getErrorMessage(err, "Failed to reactivate"), "error"); }
+
   };
 
   const activeFiltersCount = [departmentFilter !== "all", idExpiringSoon, recentTransfers, increasePeriod !== "all"].filter(Boolean).length;
@@ -290,25 +384,47 @@ export function EmployeesListPage() {
                   </div>
                   <div>
                     <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">Salary Period</label>
-                    <select value={increasePeriod} onChange={(e) => {
-                      const val = e.target.value, next = new URLSearchParams(searchParams), now = new Date();
-                      if (val === "all") { next.delete("salaryIncreaseFrom"); next.delete("salaryIncreaseTo"); next.delete("increasePeriod"); }
-                      else if (val === "this-month") {
-                        next.set("salaryIncreaseFrom", new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]);
-                        next.set("salaryIncreaseTo", new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]);
-                        next.set("increasePeriod", "this-month");
-                      } else if (val === "next-month") {
-                        next.set("salaryIncreaseFrom", new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split('T')[0]);
-                        next.set("salaryIncreaseTo", new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString().split('T')[0]);
-                        next.set("increasePeriod", "next-month");
-                      }
-                      setSearchParams(next); setPage(1);
-                    }}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20">
-                      <option value="all">Any time</option>
-                      <option value="this-month">This Month</option>
-                      <option value="next-month">Next Month</option>
-                    </select>
+                    <div className="relative flex items-center gap-1.5">
+                      <input
+                        type="month"
+                        value={increasePeriod !== "all" ? increasePeriod : ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const next = new URLSearchParams(searchParams);
+                          if (!val) {
+                            next.delete("salaryIncreaseFrom");
+                            next.delete("salaryIncreaseTo");
+                            next.delete("increasePeriod");
+                          } else {
+                            const [year, month] = val.split("-").map(Number);
+                            next.set("salaryIncreaseFrom", new Date(year, month - 1, 1).toISOString().split('T')[0]);
+                            next.set("salaryIncreaseTo", new Date(year, month, 0).toISOString().split('T')[0]);
+                            next.set("increasePeriod", val);
+                          }
+                          setSearchParams(next);
+                          setPage(1);
+                        }}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                        placeholder="Any time"
+                      />
+                      {increasePeriod !== "all" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = new URLSearchParams(searchParams);
+                            next.delete("salaryIncreaseFrom");
+                            next.delete("salaryIncreaseTo");
+                            next.delete("increasePeriod");
+                            setSearchParams(next);
+                            setPage(1);
+                          }}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200"
+                          title="Clear month filter"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
@@ -426,7 +542,7 @@ export function EmployeesListPage() {
                           <CreditCard className="h-3 w-3" />
                           <span>
                             {formatDate(
-                              emp?.nextReviewDate ,
+                              emp?.nextReviewDate,
                             )}
                           </span>
                           {isIncreaseDue && <AlertCircle className="h-3 w-3 text-amber-500" />}
@@ -448,6 +564,22 @@ export function EmployeesListPage() {
                         <button onClick={() => setIncreaseModalTarget(emp)}
                           className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-teal-500 to-teal-600 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:shadow-md active:scale-[0.97]">
                           <TrendingUp className="h-3 w-3" /> Increase
+                        </button>
+                      )}
+                      {canManagerOrTeamLeaderEvaluateEmployee(emp, currentUser, {
+                        excludeHrAdminRoles: true,
+                        ledTeamNames: listEvaluateOptions.ledTeamNames,
+                        deptHeadTeamNames: listEvaluateOptions.deptHeadTeamNames,
+                        departments,
+                        teamsByDepartmentId,
+                        allOrgTeams,
+                      }) && (
+                        <button
+                          type="button"
+                          onClick={() => { setEvaluateTarget(emp); setOpenActions(null); }}
+                          className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-900 transition hover:bg-amber-100 hover:border-amber-300"
+                        >
+                          <Star className="h-3 w-3 text-amber-600" /> Evaluate
                         </button>
                       )}
                       <Link to={`/employees/${emp.id}`}
@@ -517,7 +649,7 @@ export function EmployeesListPage() {
 
       {/* ═══ SALARY INCREASE MODAL ═══ */}
       {increaseModalTarget && (
-        <SalaryIncreaseModal 
+        <SalaryIncreaseModal
           employee={increaseModalTarget}
           orgPolicy={orgPolicy}
           onClose={() => setIncreaseModalTarget(null)}
@@ -531,6 +663,13 @@ export function EmployeesListPage() {
           employee={terminateModalTarget}
           onClose={() => setTerminateModalTarget(null)}
           onSubmit={handleTerminate}
+        />
+      )}
+
+      {evaluateTarget && (
+        <SubmitAssessmentModal
+          employee={evaluateTarget}
+          onClose={() => setEvaluateTarget(null)}
         />
       )}
     </Layout>

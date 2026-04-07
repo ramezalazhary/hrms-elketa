@@ -4,6 +4,7 @@ import { OnboardingRequest } from "../models/OnboardingRequest.js";
 import { OnboardingSubmission } from "../models/OnboardingSubmission.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createEmployee } from "../services/employeeService.js";
+import { isHrOrAdmin } from "../utils/roles.js";
 
 const router = Router();
 
@@ -16,8 +17,7 @@ router.post("/generate", requireAuth, async (req, res) => {
     const { expiresHours = 48, department, position, team, employeeCode, baseSalary } = req.body;
     const user = req.user;
 
-    const isAdmin = user.role === "ADMIN" || user.role === "HR_MANAGER" || user.role === "HR_STAFF" || user.role === 3;
-    if (!isAdmin) return res.status(403).json({ error: "Unauthorized" });
+    if (!isHrOrAdmin(user)) return res.status(403).json({ error: "Forbidden" });
 
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date();
@@ -35,7 +35,7 @@ router.post("/generate", requireAuth, async (req, res) => {
       url: `${process.env.FRONTEND_URL || "http://localhost:5173"}/welcome/${token}`
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -53,7 +53,7 @@ router.get("/verify/:token", async (req, res) => {
 
     res.json({ valid: true, prefilledData: link.metadata });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -80,7 +80,7 @@ router.post("/submit/:token", async (req, res) => {
 
     res.json({ message: "Information submitted successfully. Wait for approval." });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -91,13 +91,12 @@ router.post("/submit/:token", async (req, res) => {
 router.get("/links", requireAuth, async (req, res) => {
   try {
     const user = req.user;
-    const isAdmin = user.role === "ADMIN" || user.role === "HR_MANAGER" || user.role === "HR_STAFF" || user.role === 3;
-    if (!isAdmin) return res.status(403).json({ error: "Unauthorized" });
+    if (!isHrOrAdmin(user)) return res.status(403).json({ error: "Forbidden" });
 
     const links = await OnboardingRequest.find().sort({ createdAt: -1 });
     res.json(links);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -107,15 +106,14 @@ router.get("/links", requireAuth, async (req, res) => {
  */
 router.patch("/links/:id/stop", requireAuth, async (req, res) => {
   try {
-    const isAdmin = req.user.role === "ADMIN" || req.user.role === "HR_MANAGER" || req.user.role === "HR_STAFF" || req.user.role === 3;
-    if (!isAdmin) return res.status(403).json({ error: "Unauthorized" });
+    if (!isHrOrAdmin(req.user)) return res.status(403).json({ error: "Forbidden" });
 
     const link = await OnboardingRequest.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
     if (!link) return res.status(404).json({ error: "Link not found" });
 
     res.json({ message: "Link deactivated successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -125,15 +123,14 @@ router.patch("/links/:id/stop", requireAuth, async (req, res) => {
  */
 router.get("/submissions", requireAuth, async (req, res) => {
   try {
-    const isAdmin = req.user.role === "ADMIN" || req.user.role === "HR_MANAGER" || req.user.role === "HR_STAFF" || req.user.role === 3;
-    if (!isAdmin) return res.status(403).json({ error: "Unauthorized" });
+    if (!isHrOrAdmin(req.user)) return res.status(403).json({ error: "Forbidden" });
 
     const submissions = await OnboardingSubmission.find()
       .populate("linkId", "token")
       .sort({ createdAt: -1 });
     res.json(submissions);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -145,8 +142,7 @@ router.patch("/submissions/:id", requireAuth, async (req, res) => {
   try {
     const { status, adminNotes, editedData } = req.body;
     const user = req.user;
-    const isAdmin = user.role === "ADMIN" || user.role === "HR_MANAGER" || user.role === "HR_STAFF" || user.role === 3;
-    if (!isAdmin) return res.status(403).json({ error: "Unauthorized" });
+    if (!isHrOrAdmin(user)) return res.status(403).json({ error: "Forbidden" });
 
     const sub = await OnboardingSubmission.findById(req.params.id);
     if (!sub) return res.status(404).json({ error: "Submission not found" });
@@ -191,7 +187,7 @@ router.patch("/submissions/:id", requireAuth, async (req, res) => {
 
     res.json({ message: `Submission ${status.toLowerCase()} successfully` });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -200,13 +196,12 @@ router.patch("/submissions/:id", requireAuth, async (req, res) => {
  */
 router.delete("/links/:id", requireAuth, async (req, res) => {
   try {
-    const isAdmin = req.user.role === "ADMIN" || req.user.role === "HR_MANAGER" || req.user.role === "HR_STAFF" || req.user.role === 3;
-    if (!isAdmin) return res.status(403).json({ error: "Unauthorized" });
+    if (!isHrOrAdmin(req.user)) return res.status(403).json({ error: "Forbidden" });
 
     await OnboardingRequest.findByIdAndDelete(req.params.id);
     res.json({ message: "Link deleted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

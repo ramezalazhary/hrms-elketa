@@ -1,5 +1,5 @@
 /**
- * @file `/api/employments` — assign/unassign employees to department/team/position; restricted to Admin + HR_STAFF.
+ * @file `/api/employments` — assign/unassign employees to department/team/position; restricted to Admin, HR_MANAGER, and HR_STAFF.
  */
 import { Router } from "express";
 import { Employee } from "../models/Employee.js";
@@ -7,18 +7,11 @@ import { Department } from "../models/Department.js";
 import { Team } from "../models/Team.js";
 import { Position } from "../models/Position.js";
 import { enrichEmployeesForResponse } from "../services/orgResolutionService.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
 import { strictLimiter } from "../middleware/security.js";
+import { canManageEmployments } from "../utils/roles.js";
 
 const router = Router();
-
-/**
- * @param {{ role: string|number }} user
- * @returns {boolean}
- */
-function canManageEmployments(user) {
-  return user.role === 3 || user.role === "ADMIN" || user.role === "HR_STAFF";
-}
 
 // POST /employments/assign - Assign employee to department/team/position
 router.post("/assign", requireAuth, strictLimiter, async (req, res) => {
@@ -27,7 +20,7 @@ router.post("/assign", requireAuth, strictLimiter, async (req, res) => {
       return res
         .status(403)
         .json({
-          error: "Forbidden: Only Admin and HR_STAFF can assign employees",
+          error: "Forbidden: Only Admin, HR_MANAGER, and HR_STAFF can assign employees",
         });
     }
 
@@ -128,7 +121,7 @@ router.post("/assign", requireAuth, strictLimiter, async (req, res) => {
         departmentId: employee.departmentId,
         teamId: employee.teamId || undefined,
         positionId: employee.positionId || undefined,
-        isPrimary: true,
+        isPrimary: false,
         startDate: employee.dateOfHire || new Date(),
       });
     }
@@ -148,16 +141,17 @@ router.post("/assign", requireAuth, strictLimiter, async (req, res) => {
     await employee.save();
 
     const email = employee.email?.trim();
+    const empId = employee._id;
     if (email && teamId) {
       await Team.updateOne(
         { _id: teamId },
-        { $addToSet: { members: email } },
+        { $addToSet: { members: email, memberIds: empId } },
       );
     }
     if (email && previousTeamId && previousTeamId !== (teamId || "").toString()) {
       await Team.updateOne(
         { _id: previousTeamId },
-        { $pull: { members: email } },
+        { $pull: { members: email, memberIds: empId } },
       );
     }
 
@@ -176,7 +170,7 @@ router.post("/assign", requireAuth, strictLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error("Employment assignment error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -187,7 +181,7 @@ router.delete("/unassign", requireAuth, strictLimiter, async (req, res) => {
       return res
         .status(403)
         .json({
-          error: "Forbidden: Only Admin and HR_STAFF can unassign employees",
+          error: "Forbidden: Only Admin, HR_MANAGER, and HR_STAFF can unassign employees",
         });
     }
 
@@ -249,7 +243,7 @@ router.delete("/unassign", requireAuth, strictLimiter, async (req, res) => {
     if (email && previousTeamIdForRoster) {
       await Team.updateOne(
         { _id: previousTeamIdForRoster },
-        { $pull: { members: email } },
+        { $pull: { members: email, memberIds: employee._id } },
       );
     }
 

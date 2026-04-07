@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { Layout } from "@/shared/components/Layout";
 import { DepartmentBadge } from "@/shared/components/EntityBadges";
-import { API_URL } from "@/shared/api/apiBase";
+import { downloadBulkTemplateApi, uploadBulkFileApi, getAlertsFeedApi } from "@/modules/bulk/api";
 import { useAppSelector } from "@/shared/hooks/reduxHooks";
 
 const CHART_COLORS = ["#3f3f46", "#71717a", "#a1a1aa", "#d4d4d8", "#10b981", "#f59e0b", "#6366f1"];
@@ -75,11 +75,7 @@ export function LeadershipOrgOverview({
 
   const handleDownloadTemplate = async () => {
     try {
-      const response = await fetch(`${API_URL}/bulk/template`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (!response.ok) throw new Error("Failed to download template");
-      const blob = await response.blob();
+      const blob = await downloadBulkTemplateApi();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -98,7 +94,7 @@ export function LeadershipOrgOverview({
     if (!file) return;
 
     const confirmed = window.confirm(
-      "⚠️ CRITICAL ACTION: This will PERMANENTLY DELETE all current organizational data (Employees, Departments, etc.) and reset it using the uploaded file. \n\nAre you absolutely sure you want to proceed?"
+      "⚠️ CRITICAL ACTION: This will PERMANENTLY DELETE organizational data and replace it from the file. The server must have ALLOW_DESTRUCTIVE_BULK=true or the upload will be rejected. \n\nAre you absolutely sure you want to proceed?"
     );
 
     if (!confirmed) {
@@ -107,24 +103,11 @@ export function LeadershipOrgOverview({
     }
 
     setIsSyncing(true);
-    const formData = new FormData();
-    formData.append("file", file);
 
     try {
-      const response = await fetch(`${API_URL}/bulk/upload`, {
-        method: "POST",
-        body: formData,
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert("✓ Synchronization successful. The system has been reset with the new data.");
-        window.location.reload();
-      } else {
-        alert(data.error || "Sync failed. Please check the Excel format.");
-      }
+      await uploadBulkFileApi(file);
+      alert("✓ Synchronization successful. The system has been reset with the new data.");
+      window.location.reload();
     } catch (error) {
       console.error(error);
       alert("A network error occurred during the synchronization process.");
@@ -137,17 +120,14 @@ export function LeadershipOrgOverview({
   useEffect(() => {
     async function fetchAlerts() {
       try {
-        const res = await fetch(`${API_URL}/alerts`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
+        if (!accessToken) return;
+        const data = await getAlertsFeedApi();
         setAlerts(data.alerts || []);
       } catch (e) {
         console.error("Failed to fetch alerts:", e);
       }
     }
-    if (accessToken) fetchAlerts();
+    void fetchAlerts();
   }, [accessToken]);
 
   const teamCountByDepartmentId = useMemo(() => {

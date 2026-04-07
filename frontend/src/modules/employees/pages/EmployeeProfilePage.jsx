@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useLocation } from 'react-router-dom'
 import { Layout } from '@/shared/components/Layout'
 import { useAppDispatch, useAppSelector } from '@/shared/hooks/reduxHooks'
 import { useToast } from '@/shared/components/ToastProvider'
@@ -7,8 +7,7 @@ import { FormBuilder } from '@/shared/components/FormBuilder'
 import { DepartmentBadge } from '@/shared/components/EntityBadges'
 import { fetchDepartmentsThunk } from '@/modules/departments/store'
 import { getDocumentRequirementsApi } from '@/modules/organization/api'
-import { API_URL } from '@/shared/api/apiBase'
-import { Clock, MapPin, Phone, TrendingUp, Settings, ArrowRightLeft, Briefcase, Mail, Shield, AlertTriangle, AlertCircle, ArrowLeft, User, UserX, Plane, Gift } from 'lucide-react'
+import { Clock, MapPin, Phone, TrendingUp, Settings, ArrowRightLeft, Briefcase, Mail, Shield, AlertTriangle, AlertCircle, ArrowLeft, User, UserX, Plane, Gift, Star } from 'lucide-react'
 import { formatTotalHours } from '@/modules/attendance/utils'
 import { SalaryIncreaseModal } from '../components/SalaryIncreaseModal'
 import { TransferModal } from '../components/TransferModal'
@@ -16,8 +15,19 @@ import { ManualVacationRecordsModal } from '../components/ManualVacationRecordsM
 import { LeaveBalanceCreditModal } from '../components/LeaveBalanceCreditModal'
 import { LeaveBalanceCreditHistory } from '../components/LeaveBalanceCreditHistory'
 import { TerminateEmployeeModal } from '../components/TerminateEmployeeModal'
+import { SubmitAssessmentModal } from '../components/SubmitAssessmentModal'
+import { isHrOrAdminRole } from '../utils/evaluationAccess'
 import { updateEmployeeThunk, fetchEmployeesThunk } from '../store'
-import { fetchWithAuth } from '@/shared/api/fetchWithAuth'
+import {
+  listLeaveRequestsApi,
+  getLeaveBalanceApi,
+  transferEmployeeApi,
+  resetPasswordApi,
+  processSalaryIncreaseApi,
+  getEmployeeAssessmentsApi,
+  getAssessmentEligibilityApi,
+} from '../api'
+import { getEmployeeAttendanceApi } from '@/modules/attendance/api'
 
 /** Days until a date from now (negative = past) */
 
@@ -81,12 +91,17 @@ function serializeVacationRecords(list, fallbackRecorder) {
 
 export function EmployeeProfilePage() {
   const { employeeId } = useParams()
+  const location = useLocation()
   const { showToast } = useToast()
   const employees = useAppSelector((state) => state.employees.items)
   const departments = useAppSelector((state) => state.departments.items)
   const currentUser = useAppSelector((state) => state.identity.currentUser)
   const [showResetModal, setShowResetModal] = useState(false)
-  const [activeTab, setActiveTab] = useState("overview")
+  
+  const queryParams = new URLSearchParams(location.search);
+  const initialTab = queryParams.get("tab") || "overview";
+  const [activeTab, setActiveTab] = useState(initialTab)
+  
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [showSalaryModal, setShowSalaryModal] = useState(false)
   const [attendanceHistory, setAttendanceHistory] = useState([])
@@ -101,6 +116,12 @@ export function EmployeeProfilePage() {
   const [leaveBalanceSnapshot, setLeaveBalanceSnapshot] = useState(null)
   const [leaveBalanceLoading, setLeaveBalanceLoading] = useState(false)
   const [leaveBalanceForbidden, setLeaveBalanceForbidden] = useState(false)
+  const [showAssessmentModal, setShowAssessmentModal] = useState(false)
+  const [assessmentsData, setAssessmentsData] = useState([])
+  const [isAssessmentsLoading, setIsAssessmentsLoading] = useState(false)
+  const [assessmentsRefreshKey, setAssessmentsRefreshKey] = useState(0)
+  /** null = loading or unknown; resolved object drives tab/submit with legacy fallback when null */
+  const [assessmentGate, setAssessmentGate] = useState(null)
 
   const dispatch = useAppDispatch();
   const [globalPolicy, setGlobalPolicy] = useState(null);
@@ -124,9 +145,8 @@ export function EmployeeProfilePage() {
        const fetchAttendance = async () => {
          setIsAttendanceLoading(true);
          try {
-           const res = await fetchWithAuth(`${API_URL}/attendance/employee/${employeeId}`);
-           const data = await res.json();
-           if (res.ok) setAttendanceHistory(data);
+           const data = await getEmployeeAttendanceApi(employeeId);
+           setAttendanceHistory(Array.isArray(data) ? data : []);
          } catch (err) {
            console.error("Failed to fetch attendance history", err);
          } finally {
@@ -138,28 +158,34 @@ export function EmployeeProfilePage() {
   }, [activeTab, employeeId]);
 
   useEffect(() => {
+    if (activeTab === "assessments" && employeeId) {
+       const fetchAssessments = async () => {
+         setIsAssessmentsLoading(true);
+         try {
+           const data = await getEmployeeAssessmentsApi(employeeId);
+           if (data && data.length > 0 && data[0].assessment) {
+             setAssessmentsData(data[0].assessment);
+           } else {
+             setAssessmentsData([]);
+           }
+         } catch (err) {
+           console.error("Failed to fetch assessments history", err);
+         } finally {
+           setIsAssessmentsLoading(false);
+         }
+       };
+       fetchAssessments();
+    }
+  }, [activeTab, employeeId, assessmentsRefreshKey]);
+
+  useEffect(() => {
     if (activeTab !== "vacations" || !employeeId) return;
     let cancelled = false;
     const loadLeaveRequests = async () => {
       setLeaveRequestsLoading(true);
       setLeaveRequestsForbidden(false);
       try {
-        const q = new URLSearchParams({
-          employeeId,
-          limit: "100",
-        });
-        const res = await fetchWithAuth(`${API_URL}/leave-requests?${q.toString()}`);
-        const data = await res.json();
-        if (!res.ok) {
-          if (res.status === 403) {
-            if (!cancelled) {
-              setLeaveRequests([]);
-              setLeaveRequestsForbidden(true);
-            }
-            return;
-          }
-          throw new Error(data.error || "Failed to load leave requests");
-        }
+        const data = await listLeaveRequestsApi({ employeeId, limit: "100" });
         if (!cancelled) {
           setLeaveRequests(data.requests || []);
           setLeaveRequestsForbidden(false);
@@ -168,10 +194,11 @@ export function EmployeeProfilePage() {
         console.error("Failed to fetch leave requests", err);
         if (!cancelled) {
           setLeaveRequests([]);
-          showToast(
-            typeof err?.message === "string" ? err.message : "Failed to load leave requests",
-            "error",
-          );
+          if (err?.status === 403) {
+            setLeaveRequestsForbidden(true);
+          } else {
+            showToast(err?.message || "Failed to load leave requests", "error");
+          }
         }
       } finally {
         if (!cancelled) setLeaveRequestsLoading(false);
@@ -190,19 +217,7 @@ export function EmployeeProfilePage() {
       setLeaveBalanceLoading(true);
       setLeaveBalanceForbidden(false);
       try {
-        const q = new URLSearchParams({ employeeId });
-        const res = await fetchWithAuth(`${API_URL}/leave-requests/balance?${q}`);
-        const data = await res.json();
-        if (!res.ok) {
-          if (res.status === 403) {
-            if (!cancelled) {
-              setLeaveBalanceSnapshot(null);
-              setLeaveBalanceForbidden(true);
-            }
-            return;
-          }
-          throw new Error(data.error || "Failed to load leave balance");
-        }
+        const data = await getLeaveBalanceApi({ employeeId });
         if (!cancelled) {
           setLeaveBalanceSnapshot(data);
           setLeaveBalanceForbidden(false);
@@ -211,10 +226,11 @@ export function EmployeeProfilePage() {
         console.error("Failed to fetch leave balance", err);
         if (!cancelled) {
           setLeaveBalanceSnapshot(null);
-          showToast(
-            typeof err?.message === "string" ? err.message : "Failed to load leave balance",
-            "error",
-          );
+          if (err?.status === 403) {
+            setLeaveBalanceForbidden(true);
+          } else {
+            showToast(err?.message || "Failed to load leave balance", "error");
+          }
         }
       } finally {
         if (!cancelled) setLeaveBalanceLoading(false);
@@ -227,9 +243,55 @@ export function EmployeeProfilePage() {
   }, [activeTab, employeeId, showToast]);
 
   const employee = useMemo(
-    () => employees.find((item) => item.id === employeeId),
+    () =>
+      employees.find(
+        (item) =>
+          String(item.id ?? item._id ?? "") === String(employeeId ?? ""),
+      ),
     [employeeId, employees],
   )
+
+  useEffect(() => {
+    if (!employeeId || !currentUser) {
+      setAssessmentGate(null);
+      return;
+    }
+    const selfById =
+      currentUser.id != null &&
+      String(currentUser.id) === String(employeeId);
+    const selfByEmail =
+      !!employee?.email &&
+      !!currentUser.email &&
+      String(employee.email).trim().toLowerCase() ===
+        String(currentUser.email).trim().toLowerCase();
+    if (selfById || selfByEmail) {
+      setAssessmentGate({ canView: true, canSubmit: false });
+      return;
+    }
+    if (currentUser.id == null) {
+      setAssessmentGate(null);
+      return;
+    }
+    let cancelled = false;
+    setAssessmentGate(null);
+    void (async () => {
+      try {
+        const r = await getAssessmentEligibilityApi(employeeId);
+        if (!cancelled) {
+          setAssessmentGate({
+            canView: !!r.canAssess,
+            canSubmit: !!r.canAssess,
+          });
+        }
+      } catch {
+        /* Leave null so legacy manager/TL/HR hints still apply for tab; submit stays API-strict */
+        if (!cancelled) setAssessmentGate(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeId, currentUser?.id, currentUser?.email, employee?.email]);
 
   const assignedTeams = useMemo(() => {
     if (!employee || !departments.length) return [];
@@ -269,17 +331,11 @@ export function EmployeeProfilePage() {
 
   const handleResetPassword = async (values) => {
     try {
-      const res = await fetchWithAuth(`${API_URL}/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetEmail: employee.email, newPassword: values.newPassword })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to reset password");
+      await resetPasswordApi({ targetEmail: employee.email, newPassword: values.newPassword });
       showToast(`Password successfully reset for ${employee.email}`, "success");
       setShowResetModal(false);
     } catch(err) {
-      showToast(err.message, "error");
+      showToast(err?.message || "Failed to reset password", "error");
     }
   }
 
@@ -293,6 +349,7 @@ export function EmployeeProfilePage() {
     );
   }
 
+  const isPeerView = employee.apiViewContext === "peer";
   const idExpiryDays = daysUntil(employee.nationalIdExpiryDate);
   const nextReviewAt =
     employee.nextReviewDate ?? employee.yearlySalaryIncreaseDate;
@@ -302,9 +359,42 @@ export function EmployeeProfilePage() {
     currentUser?.role === "ADMIN" ||
     currentUser?.role === "HR_MANAGER" ||
     currentUser?.role === "HR_STAFF";
-  const isSelf = currentUser?.id === employee.id || currentUser?.email === employee.email;
+  const isSelf =
+    (currentUser?.id != null &&
+      employee?.id != null &&
+      String(currentUser.id) === String(employee.id)) ||
+    (!!currentUser?.email &&
+      !!employee?.email &&
+      String(currentUser.email).trim().toLowerCase() ===
+        String(employee.email).trim().toLowerCase());
   const isSelfOrAdmin = canAdmin || isSelf;
+
+  const isDirectManager = employee.managerId?.id === currentUser?.id || employee.effectiveManager?.id === currentUser?.id || employee.managerId === currentUser?.id;
+  const isTeamLeader = employee.teamLeaderId?.id === currentUser?.id || employee.effectiveTeamLeader?.id === currentUser?.id || employee.teamLeaderId === currentUser?.id;
+  const legacyAssessHint =
+    isHrOrAdminRole(currentUser?.role) ||
+    isDirectManager ||
+    isTeamLeader;
+  const canViewAssessments =
+    isSelf ||
+    assessmentGate?.canView === true ||
+    (assessmentGate === null && !isSelf && legacyAssessHint);
+  const canSubmitAssessment =
+    !isSelf && assessmentGate?.canSubmit === true;
+
   const transferHistory = employee.transferHistory || [];
+
+  const profileTabs = useMemo(() => {
+    const tabs = ["overview", "documents", "transfer_history"];
+    if (!isPeerView) tabs.push("salary_history");
+    tabs.push("vacations", "attendance");
+    if (canViewAssessments) tabs.push("assessments");
+    return tabs;
+  }, [isPeerView, canViewAssessments]);
+
+  useEffect(() => {
+    if (isPeerView && activeTab === "salary_history") setActiveTab("overview");
+  }, [isPeerView, activeTab]);
 
   const persistVacationRecords = useCallback(
     async (nextList) => {
@@ -340,18 +430,12 @@ export function EmployeeProfilePage() {
 
   const handleTransfer = async (values) => {
     try {
-      const res = await fetchWithAuth(`${API_URL}/employees/${employeeId}/transfer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values)
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Transfer failed");
+      await transferEmployeeApi(employeeId, values);
       showToast("Employee transferred successfully", "success");
       setShowTransferModal(false);
       void dispatch(fetchEmployeesThunk());
     } catch (err) {
-      showToast(err.message, "error");
+      showToast(err?.message || "Transfer failed", "error");
     }
   }
 
@@ -363,18 +447,12 @@ export function EmployeeProfilePage() {
         increaseAmount: values.method === "FIXED" ? values.value : undefined,
       };
 
-      const res = await fetchWithAuth(`${API_URL}/employees/${employeeId}/process-increase`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Increase failed");
+      await processSalaryIncreaseApi({ id: employeeId, ...payload });
       showToast("Salary increase processed successfully", "success");
       setShowSalaryModal(false);
       void dispatch(fetchEmployeesThunk());
     } catch (err) {
-      showToast(err.message, "error");
+      showToast(err?.message || "Increase failed", "error");
     }
   }
 
@@ -393,6 +471,7 @@ export function EmployeeProfilePage() {
     }
   }
   const isTerminated = employee.status === "TERMINATED" || employee.status === "RESIGNED";
+  console.log("employee", (employee || "error"));
 
   return (
     <Layout
@@ -446,6 +525,16 @@ export function EmployeeProfilePage() {
                   >
                     <TrendingUp className="h-3.5 w-3.5 text-teal-500 shrink-0" />
                     Salary Increase
+                  </button>
+                )}
+                {!isTerminated && canSubmitAssessment && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAssessmentModal(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-amber-600 hover:bg-amber-50 rounded-lg text-left"
+                  >
+                    <Star className="h-3.5 w-3.5 shrink-0" />
+                    Submit Assessment
                   </button>
                 )}
                 {!isTerminated && canAdmin && (
@@ -568,6 +657,15 @@ export function EmployeeProfilePage() {
           </div>
         )}
 
+        {isPeerView && (
+          <div className="rounded-xl border border-sky-200 bg-sky-50/90 p-4 text-sm text-sky-950 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-sky-800">Limited directory view</p>
+            <p className="mt-1 text-xs text-sky-800/90 leading-relaxed">
+              Personal ID details, salary and bank data, personal contact fields, and document download links are not shown at this access level. The email shown is the work email when available.
+            </p>
+          </div>
+        )}
+
         {/* Modern Professional Alert Banners */}
         {isSelfOrAdmin && idExpiryDays !== null && idExpiryDays <= 60 && (
           <div className={`relative overflow-hidden rounded-xl border border-zinc-200 border-l-[6px] p-4 flex items-center gap-4 bg-white shadow-sm transition-all hover:shadow-md ${
@@ -614,7 +712,7 @@ export function EmployeeProfilePage() {
 
         {/* Tab nav */}
         <div className="flex gap-1 border-b border-slate-200 overflow-x-auto no-scrollbar">
-          {["overview", "documents", "transfer_history", "salary_history", "vacations", "attendance"].map((tab) => (
+          {profileTabs.map((tab) => (
             <button
               key={tab}
               type="button"
@@ -643,6 +741,9 @@ export function EmployeeProfilePage() {
               {tab === "attendance" && <Clock className="h-3.5 w-3.5" />}
               {tab === "attendance" && "Attendance"}
 
+              {tab === "assessments" && <Star className="h-3.5 w-3.5 text-amber-500" />}
+              {tab === "assessments" && "Assessments"}
+
               {tab === "vacations" && vacationTabBadgeCount > 0 && (
                 <span className="rounded-full bg-sky-100 text-sky-800 text-[10px] font-bold px-1.5 py-0.5">
                   {vacationTabBadgeCount}
@@ -668,6 +769,15 @@ export function EmployeeProfilePage() {
               </h3>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Employee Code</span> <span className="text-slate-900 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{employee.employeeCode || "N/A"}</span></p>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Status</span> <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${employee.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>{employee.status}</span></p>
+              {(employee.status === "RESIGNED" || employee.status === "TERMINATED") && (employee.terminationDate || employee.terminationReason) && (
+                <p className="md:col-span-2">
+                  <span className="block text-xs font-semibold text-slate-500 uppercase">Separation</span>
+                  <span className="text-slate-900 text-sm">
+                    {employee.terminationDate ? new Date(employee.terminationDate).toLocaleDateString() : "—"}
+                    {employee.terminationReason ? ` · ${employee.terminationReason}` : ""}
+                  </span>
+                </p>
+              )}
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Hire Date</span> <span className="text-slate-900">{employee.dateOfHire ? new Date(employee.dateOfHire).toLocaleDateString() : "N/A"}</span></p>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Next review</span> <span className="text-slate-900">{nextReviewAt ? new Date(nextReviewAt).toLocaleDateString() : "N/A"}</span></p>
               <p><span className="block text-xs font-semibold text-slate-500 uppercase">Job Title</span> <span className="text-slate-900">{employee.position}</span></p>
@@ -756,6 +866,14 @@ export function EmployeeProfilePage() {
                     </span>
                   </p>
                 )}
+                {(employee.additionalContact?.whatsapp || employee.additionalContact?.skype) && (
+                  <p>
+                    <span className="block text-xs font-semibold text-slate-500 uppercase">WhatsApp / Skype</span>
+                    <span className="text-slate-900 text-sm">
+                      {[employee.additionalContact?.whatsapp, employee.additionalContact?.skype].filter(Boolean).join(" · ") || "—"}
+                    </span>
+                  </p>
+                )}
               </div>
 
               {/* Management hierarchy */}
@@ -792,7 +910,7 @@ export function EmployeeProfilePage() {
             </div>
 
             {/* Education & Skills */}
-            <div className="grid gap-4 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm ring-1 ring-violet-500/10 md:grid-cols-2">
+            <div className="grid gap-4 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm ring-1 ring-violet-500/10 md:grid-cols-3">
               <h3 className="col-span-full border-b border-violet-100 pb-2 text-xs font-semibold uppercase tracking-wide text-violet-900">Education & skills</h3>
               <div>
                 <span className="block text-xs font-semibold text-slate-500 uppercase mb-2">Education</span>
@@ -800,20 +918,66 @@ export function EmployeeProfilePage() {
                   <ul className="space-y-2">
                     {employee.education.map((edu, idx) => (
                       <li key={idx} className="text-sm bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <span className="font-semibold text-slate-800">{edu.degree}</span> from <span className="text-slate-600">{edu.institution}</span> ({edu.year})
+                        <span className="font-semibold text-slate-800">{edu.degree || "—"}</span>
+                        {edu.institution ? <> from <span className="text-slate-600">{edu.institution}</span></> : null}
+                        {" "}
+                        ({edu.graduationDate
+                          ? new Date(edu.graduationDate).toLocaleDateString()
+                          : (edu.year || "—")})
                       </li>
                     ))}
                   </ul>
                 ) : <span className="text-slate-400 italic">No education records</span>}
               </div>
               <div>
-                <span className="block text-xs font-semibold text-slate-500 uppercase mb-2">Technical Skills</span>
+                <span className="block text-xs font-semibold text-slate-500 uppercase mb-2">Technical skills</span>
                 <div className="flex flex-wrap gap-1.5">
                   {employee.skills?.technical?.length > 0 ? (
                     employee.skills.technical.map(skill => (
                       <span key={skill} className="rounded-md border border-teal-200/80 bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-900">{skill}</span>
                     ))
                   ) : <span className="text-slate-400 italic">None listed</span>}
+                </div>
+              </div>
+              <div>
+                <span className="block text-xs font-semibold text-slate-500 uppercase mb-2">Soft skills</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {employee.skills?.soft?.length > 0 ? (
+                    employee.skills.soft.map(skill => (
+                      <span key={skill} className="rounded-md border border-amber-200/80 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-950">{skill}</span>
+                    ))
+                  ) : <span className="text-slate-400 italic">None listed</span>}
+                </div>
+              </div>
+              <div className="col-span-full grid gap-4 md:grid-cols-2">
+                <div>
+                  <span className="block text-xs font-semibold text-slate-500 uppercase mb-2">Training courses</span>
+                  {employee.trainingCourses?.length > 0 ? (
+                    <ul className="space-y-1 text-sm text-slate-800">
+                      {employee.trainingCourses.map((c) => (
+                        <li key={c} className="rounded-lg border border-slate-100 bg-slate-50 px-2 py-1">{c}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="text-slate-400 italic text-sm">None listed</span>
+                  )}
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold text-slate-500 uppercase mb-2">Languages</span>
+                  {employee.languages?.length > 0 ? (
+                    <ul className="space-y-1 text-sm text-slate-800">
+                      {employee.languages.map((row, idx) => (
+                        <li key={`${row.language}-${idx}`} className="rounded-lg border border-slate-100 bg-slate-50 px-2 py-1">
+                          {row.language}
+                          {row.proficiency ? (
+                            <span className="text-slate-500"> ({row.proficiency})</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="text-slate-400 italic text-sm">None listed</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -845,6 +1009,10 @@ export function EmployeeProfilePage() {
                     <span className="block text-xs font-semibold text-slate-500 uppercase">Policy Number</span>
                     <span className="text-slate-900 font-mono tracking-wide">{employee.insurance?.policyNumber || "N/A"}</span>
                   </div>
+                  <div>
+                    <span className="block text-xs font-semibold text-slate-500 uppercase">Policy valid until</span>
+                    <span className="text-slate-900">{employee.insurance?.validUntil ? new Date(employee.insurance.validUntil).toLocaleDateString() : "N/A"}</span>
+                  </div>
                   <div className="md:col-span-2">
                     <span className="block text-xs font-semibold text-slate-500 uppercase">Medical Condition / Disease</span>
                     <span className="text-slate-900">{employee.medicalCondition || "N/A"}</span>
@@ -856,6 +1024,18 @@ export function EmployeeProfilePage() {
                   <div>
                     <span className="block text-xs font-semibold text-slate-500 uppercase">Bank Account</span>
                     <span className="text-slate-900 font-mono tracking-wide">{employee.financial?.bankAccount || "N/A"}</span>
+                  </div>
+                  <div>
+                    <span className="block text-xs font-semibold text-slate-500 uppercase">Allowances</span>
+                    <span className="text-slate-900 font-mono text-sm font-bold">
+                      {employee.financial?.allowances != null
+                        ? new Intl.NumberFormat("en-EG", { style: "currency", currency: employee.financial?.currency || "EGP" }).format(employee.financial.allowances)
+                        : "N/A"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-xs font-semibold text-slate-500 uppercase">Social security ref.</span>
+                    <span className="text-slate-900">{employee.financial?.socialSecurity || "N/A"}</span>
                   </div>
                 </div>
 
@@ -1354,6 +1534,122 @@ export function EmployeeProfilePage() {
           )}
         </div>
       )}
+
+      {activeTab === "assessments" && canViewAssessments && (
+        <div className="rounded-2xl border border-amber-200/50 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">Performance Assessments</h3>
+              <p className="text-xs text-slate-500 mt-0.5 tracking-wide">Historical timeline of evaluations and financial bonuses for {employee.fullName}</p>
+            </div>
+            <Star className="h-6 w-6 text-amber-500" />
+          </div>
+
+          {isAssessmentsLoading ? (
+            <div className="py-20 text-center">
+               <div className="h-8 w-8 rounded-full border-2 border-amber-500 border-t-transparent animate-spin mx-auto mb-4" />
+               <p className="text-sm font-medium text-slate-500 tracking-widest uppercase">Fetching Records...</p>
+            </div>
+          ) : assessmentsData.length === 0 ? (
+            <div className="py-20 text-center border-2 border-dashed border-slate-100 rounded-3xl">
+              <Star className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-slate-400 italic text-sm">No assessments on record for this employee.</p>
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-amber-50" />
+              <ol className="space-y-8">
+                {[...assessmentsData].reverse().map((record, idx) => {
+                  const overallStars = record.overall ?? record.rating ?? 0;
+                  const isNewFormat =
+                    record.overall != null ||
+                    record.commitment != null ||
+                    record.attitude != null ||
+                    record.quality != null;
+                  return (
+                  <li key={record.id || idx} className="relative pl-12">
+                    <div className="absolute left-3.5 top-1.5 w-3 h-3 rounded-full bg-amber-500 border-2 border-white shadow-sm ring-4 ring-amber-50" />
+                    <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-white to-amber-50/20 p-5 shadow-sm transition-all hover:shadow-md">
+                      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                        <div>
+                           <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-1 block">Review period: {record.reviewPeriod}</span>
+                           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Overall</p>
+                           <div className="flex gap-1 mt-1.5">
+                             {[1,2,3,4,5].map(star => (
+                               <Star key={star} size={16} className={star <= overallStars ? "text-amber-500 fill-current" : "text-amber-100"} />
+                             ))}
+                           </div>
+                        </div>
+                        <span className="text-xs font-semibold text-slate-500 bg-white border border-slate-200 rounded-lg px-3 py-1 shadow-sm">
+                          {record.date}
+                        </span>
+                      </div>
+
+                      {isNewFormat && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4 text-[10px]">
+                          {[
+                            ["Days bonus", record.daysBonus ?? 0],
+                            ["Overtime", record.overtime ?? 0],
+                            ["Deduction", record.deduction ?? 0],
+                          ].map(([label, val]) => (
+                            <div key={label} className="rounded-lg border border-slate-100 bg-white/80 px-2 py-1.5">
+                              <span className="font-bold text-slate-400 uppercase tracking-tighter block">{label}</span>
+                              <span className="font-bold text-slate-800">{val}</span>
+                            </div>
+                          ))}
+                          {[
+                            ["Commitment", record.commitment],
+                            ["Attitude", record.attitude],
+                            ["Quality", record.quality],
+                          ].map(([label, val]) =>
+                            val != null ? (
+                              <div key={label} className="rounded-lg border border-slate-100 bg-white/80 px-2 py-1.5">
+                                <span className="font-bold text-slate-400 uppercase tracking-tighter block">{label}</span>
+                                <span className="font-bold text-amber-700">{val}/5</span>
+                              </div>
+                            ) : null,
+                          )}
+                        </div>
+                      )}
+
+                      {record.notesPrevious?.trim?.() ? (
+                        <div className="mb-3 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Notes / previous</p>
+                          <p className="text-xs text-slate-600 whitespace-pre-wrap">{record.notesPrevious}</p>
+                        </div>
+                      ) : null}
+                      
+                      <div className="bg-white/60 p-4 rounded-xl border border-slate-100 mb-4">
+                         <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Feedback</p>
+                         <p className="text-sm text-slate-700 italic">"{record.feedback}"</p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-amber-100/50 pt-3">
+                         <div className="flex items-center gap-2">
+                           <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] uppercase font-bold text-slate-500">
+                             {record.evaluatorId?.fullName?.[0] || "?"}
+                           </div>
+                           <div>
+                             <p className="text-[10px] text-slate-400">Evaluated by</p>
+                             <p className="text-[10px] font-bold text-slate-600">{record.evaluatorId?.fullName || "A Manager"} ({record.evaluatorId?.position || "Management"})</p>
+                           </div>
+                         </div>
+                         {record.getThebounes && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-emerald-100">
+                              <Gift size={12} /> Bonus Recommended
+                            </span>
+                         )}
+                      </div>
+                    </div>
+                  </li>
+                  );
+                })}
+              </ol>
+            </div>
+          )}
+        </div>
+      )}
+
       {showTransferModal && (
         <TransferModal
           employee={employee}
@@ -1406,6 +1702,18 @@ export function EmployeeProfilePage() {
           employee={employee}
           onClose={() => setShowTerminateModal(false)}
           onSubmit={handleTerminate}
+        />
+      )}
+
+      {showAssessmentModal && (
+        <SubmitAssessmentModal
+          employee={employee}
+          onClose={() => setShowAssessmentModal(false)}
+          onSuccess={() => {
+             // Refresh data
+             setAssessmentsRefreshKey(prev => prev + 1);
+             setActiveTab("assessments");
+          }}
         />
       )}
     </div>

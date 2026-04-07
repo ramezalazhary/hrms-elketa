@@ -1,16 +1,10 @@
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
 import { API_URL } from "@/shared/api/apiBase";
-
-function handleResponse(response) {
-  if (!response.ok) {
-    return response.json().then((error) => Promise.reject(error));
-  }
-  return response.json();
-}
+import { handleApiResponse } from "@/shared/api/handleApiResponse";
 
 export const getDepartmentsApi = async () => {
   const response = await fetchWithAuth(`${API_URL}/departments`);
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const createDepartmentApi = async (department) => {
@@ -19,7 +13,7 @@ export const createDepartmentApi = async (department) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(department),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const deleteDepartmentApi = async (departmentId) => {
@@ -27,7 +21,7 @@ export const deleteDepartmentApi = async (departmentId) => {
     `${API_URL}/departments/${departmentId}`,
     { method: "DELETE" },
   );
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const updateDepartmentApi = async (department) => {
@@ -39,5 +33,5 @@ export const updateDepartmentApi = async (department) => {
       body: JSON.stringify(department),
     },
   );
-  return handleResponse(response);
+  return handleApiResponse(response);
 };

@@ -7,15 +7,12 @@ import { Department } from "../models/Department.js";
 import { Employee } from "../models/Employee.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { strictLimiter } from "../middleware/security.js";
+import { isAdminRole } from "../utils/roles.js";
 
 const router = Router();
 
-/**
- * @param {{ role: string|number }} user `req.user`
- * @returns {boolean} True for numeric 3 or `"ADMIN"` string.
- */
 function isAdmin(user) {
-  return user.role === 3 || user.role === "ADMIN";
+  return isAdminRole(user.role);
 }
 
 // GET /teams - List all teams (with optional filtering)
@@ -275,7 +272,9 @@ router.put(
         }
       }
 
-      // Update fields
+      // Update fields — save old name BEFORE mutating for sync queries below
+      const oldTeamName = team.name;
+
       if (name !== undefined) {
         if (!name.trim()) {
           return res.status(400).json({ error: "Team name cannot be empty" });
@@ -316,8 +315,9 @@ router.put(
       await team.save();
 
       // Also update the nested team in Department.teams for dual-location consistency
+      // Use OLD name to find the embedded team (it hasn't been renamed there yet)
       await Department.updateOne(
-        { _id: team.departmentId, "teams.name": team.name },
+        { _id: team.departmentId, "teams.name": oldTeamName },
         {
           $set: {
             "teams.$.name": team.name,
@@ -331,6 +331,14 @@ router.put(
           },
         },
       );
+
+      // If team was renamed, cascade to Employee.team (string field)
+      if (team.name !== oldTeamName) {
+        await Employee.updateMany(
+          { teamId: team._id },
+          { $set: { team: team.name } },
+        );
+      }
 
       await Team.populate(team, { path: "departmentId", select: "name" });
 

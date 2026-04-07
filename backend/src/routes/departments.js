@@ -5,6 +5,9 @@ import { Router } from "express";
 import { Department } from "../models/Department.js";
 import { Employee } from "../models/Employee.js";
 import { Team } from "../models/Team.js";
+import { Position } from "../models/Position.js";
+import { ManagementRequest } from "../models/ManagementRequest.js";
+import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   validateDepartmentCreation,
@@ -50,10 +53,15 @@ router.get("/", requireAuth, async (req, res) => {
     const allTeams = await Team.find({ status: "ACTIVE" });
     const departmentsWithTeams = departments.map(dept => {
       const deptObj = dept.toObject();
-      // If dept already has teams or hasMigratedTeams is false, we might still have standalone teams
       const standalone = allTeams.filter(t => t.departmentId.toString() === deptObj.id);
       if (standalone.length > 0) {
-        deptObj.teams = [...(deptObj.teams || []), ...standalone];
+        // Deduplicate: remove embedded teams that exist as standalone (by _id match)
+        const standaloneIds = new Set(standalone.map(t => t._id.toString()));
+        const embeddedOnly = (deptObj.teams || []).filter(t => {
+          const tid = t._id?.toString?.();
+          return !tid || !standaloneIds.has(tid);
+        });
+        deptObj.teams = [...embeddedOnly, ...standalone];
       }
       return deptObj;
     });
@@ -91,7 +99,13 @@ router.get("/:id", requireAuth, async (req, res) => {
     const standaloneTeams = await Team.find({ departmentId: department._id, status: "ACTIVE" });
     const deptObj = department.toObject();
     if (standaloneTeams.length > 0) {
-      deptObj.teams = [...(deptObj.teams || []), ...standaloneTeams];
+      // Deduplicate: remove embedded teams that exist as standalone (by _id match)
+      const standaloneIds = new Set(standaloneTeams.map(t => t._id.toString()));
+      const embeddedOnly = (deptObj.teams || []).filter(t => {
+        const tid = t._id?.toString?.();
+        return !tid || !standaloneIds.has(tid);
+      });
+      deptObj.teams = [...embeddedOnly, ...standaloneTeams];
     }
 
     res.json(deptObj);
@@ -357,6 +371,19 @@ router.put(
           },
           { $set: { department: name } },
         );
+
+        // Cascade rename to ManagementRequest
+        await ManagementRequest.updateMany(
+          { departmentId: department._id },
+          { $set: { departmentName: name } },
+        );
+
+        // Cascade rename to OrganizationPolicy salary rules that target by name
+        await OrganizationPolicy.updateMany(
+          { "salaryIncreaseRules.type": "DEPARTMENT", "salaryIncreaseRules.target": oldName },
+          { $set: { "salaryIncreaseRules.$[rule].target": name } },
+          { arrayFilters: [{ "rule.type": "DEPARTMENT", "rule.target": oldName }] },
+        );
       }
 
       try {
@@ -413,7 +440,10 @@ router.delete(
       // 2. Delete associated teams in the standalone Team collection
       await Team.deleteMany({ departmentId: departmentId });
 
-      // 3. Finally delete the department
+      // 3. Delete associated positions
+      await Position.deleteMany({ departmentId: departmentId });
+
+      // 4. Finally delete the department
       await Department.findByIdAndDelete(departmentId);
 
       res.json({

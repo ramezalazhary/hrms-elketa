@@ -1,14 +1,7 @@
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
 import { API_URL } from "@/shared/api/apiBase";
+import { handleApiResponse } from "@/shared/api/handleApiResponse";
 import { buildAttendanceQueryParams } from "./utils";
-
-async function handleResponse(response) {
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    return Promise.reject(error);
-  }
-  return response.json();
-}
 
 /**
  * @param {{ startDate?: string, endDate?: string, employeeCode?: string }} params
@@ -18,8 +11,25 @@ export const getAttendanceApi = async (params = {}) => {
   const query = buildAttendanceQueryParams(params);
   const url = query ? `${API_URL}/attendance?${query}` : `${API_URL}/attendance`;
   const response = await fetchWithAuth(url);
-  const data = await handleResponse(response);
+  const data = await handleApiResponse(response);
   return Array.isArray(data) ? data : [];
+};
+
+/**
+ * @param {string} employeeId
+ * @returns {Promise<Array>}
+ */
+export const getEmployeeAttendanceApi = async (employeeId) => {
+  const response = await fetchWithAuth(`${API_URL}/attendance/employee/${employeeId}`);
+  return handleApiResponse(response);
+};
+
+/**
+ * @returns {Promise<Array>}
+ */
+export const getTodayAttendanceApi = async () => {
+  const response = await fetchWithAuth(`${API_URL}/attendance?todayOnly=true`);
+  return handleApiResponse(response);
 };
 
 export const createAttendanceApi = async (data) => {
@@ -28,7 +38,7 @@ export const createAttendanceApi = async (data) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const updateAttendanceApi = async (id, data) => {
@@ -37,14 +47,14 @@ export const updateAttendanceApi = async (id, data) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const deleteAttendanceApi = async (id) => {
   const response = await fetchWithAuth(`${API_URL}/attendance/${id}`, {
     method: "DELETE",
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const deleteAttendanceBulkApi = async (ids) => {
@@ -53,7 +63,7 @@ export const deleteAttendanceBulkApi = async (ids) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids }),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 export const importAttendanceApi = async (file, overwrite = false) => {
@@ -65,7 +75,7 @@ export const importAttendanceApi = async (file, overwrite = false) => {
     method: "POST",
     body: formData,
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 };
 
 /**
@@ -73,7 +83,9 @@ export const importAttendanceApi = async (file, overwrite = false) => {
  */
 export const downloadAttendanceTemplateApi = async () => {
   const response = await fetchWithAuth(`${API_URL}/attendance/template`);
-  if (!response.ok) throw new Error("Failed to download template");
+  if (!response.ok) {
+    throw new Error("Failed to download template");
+  }
   
   const blob = await response.blob();
   const url = window.URL.createObjectURL(blob);

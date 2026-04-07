@@ -20,6 +20,7 @@ import {
 // Correction: I saw it in modules/departments/api.js
 import { getDepartmentsApi as fetchDepts } from "../../departments/api";
 import { getDocumentRequirementsApi as fetchPolicy } from "../../organization/api";
+import { policyBranchDisplayName } from "@/shared/utils/policyWorkLocationBranches";
 
 export function OnboardingApprovalsPage() {
   const { showToast } = useToast();
@@ -505,7 +506,8 @@ export function OnboardingApprovalsPage() {
                           { city: "Alexandria", branches: ["Janakless", "Saba Basha", "Gleem"] },
                           { city: "Desouk", branches: ["Location 1", "Location 2"] }
                         ];
-                        const branches = (policy?.workLocations || []).find(l => l.city === city)?.branches || defaults.find(d => d.city === city)?.branches || [];
+                        const raw = (policy?.workLocations || []).find(l => l.city === city)?.branches || defaults.find(d => d.city === city)?.branches || [];
+                        const branches = raw.map(policyBranchDisplayName).filter(Boolean);
                         return branches.map((b, i) => <option key={i} value={b}>{b}</option>);
                       })()}
                     </select>

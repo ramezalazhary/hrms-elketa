@@ -151,7 +151,17 @@ export function TimeOffPage() {
         </p>
         {r.approvals?.length > 0 && (
           <p className="text-[11px] text-slate-400 mt-1">
-            Steps: {r.approvals.map((a) => `${a.role}:${a.status}`).join(" → ")}
+            Steps:{" "}
+            {r.approvals
+              .map((a) =>
+                `${a.role === "MANAGEMENT" ? "Mgmt" : a.role}:${a.status}`,
+              )
+              .join(" → ")}
+          </p>
+        )}
+        {r.preEligibility && (
+          <p className="text-[11px] text-amber-700 mt-1 font-medium">
+            Pre-eligibility: does not use leave balance if approved.
           </p>
         )}
       </div>
@@ -170,7 +180,7 @@ export function TimeOffPage() {
   return (
     <Layout
       title="Time off"
-      description="Submit vacation or excuse requests. Eligibility can depend on your date of hire and organization policy (min. days after hire). Approvers make the final decision on balance."
+      description="Submit vacation or excuse requests. HR reviews first; manager or team leader completes approval. Policy hire rules are shown to HR — you can still submit before you are eligible."
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {canBulkCredit && (
@@ -212,6 +222,12 @@ export function TimeOffPage() {
                     {fmtDays(balance.vacation.baseEntitlementDays)} d)
                   </p>
                 )}
+                {balance.vacation?.entitlementVariesByYear &&
+                  balance.vacation?.firstVacationYear && (
+                    <p className="text-xs text-teal-800 mt-2 font-medium">
+                      First year since hire — using first-year entitlement from policy.
+                    </p>
+                  )}
               </div>
               <div className="rounded-xl bg-white/80 border border-teal-100/80 px-3 py-2">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Excuses (monthly cap)</p>
@@ -223,6 +239,11 @@ export function TimeOffPage() {
                   cap {fmtMins(balance.excuse?.entitlementMinutes)} · used {fmtMins(balance.excuse?.approvedMinutes)} ·
                   pending {fmtMins(balance.excuse?.pendingMinutes)}
                 </p>
+                {Number(balance.excuse?.companyMonthStartDay) > 1 && (
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Company month starts on day {balance.excuse.companyMonthStartDay} (UTC); monthly cap applies to this period.
+                  </p>
+                )}
               </div>
             </div>
             {balance.vacation?.credits?.length > 0 && (

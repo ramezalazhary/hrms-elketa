@@ -1,0 +1,89 @@
+# Data Relations Analysis & Map
+
+Based on your organization rules and the updated models, here is a detailed analysis and map of the data entity relationships within the HRMS application.
+
+## 1. Core Data Connection Map
+
+This diagram illustrates how the models are linked via `ObjectId` references in the MongoDB database. 
+
+```mermaid
+erDiagram
+    Branch ||--o{ Employee : "has assigned (branchId)"
+    Branch |o--o| Employee : "managed by (managerId)"
+    
+    Department ||--o{ Team : "contains (departmentId)"
+    Department ||--o{ Position : "defines (departmentId)"
+    Department ||--o{ Employee : "has members (departmentId)"
+    Department |o--o| Employee : "headed by (headId/head)"
+    Department |o--o| Department : "parent of (parentDepartmentId)"
+
+    Team ||--o{ Position : "can define (teamId)"
+    Team ||--o{ Employee : "has members (teamId/memberIds)"
+    Team |o--o| Employee : "led by (leaderId/leaderEmail)"
+
+    Position ||--o{ Employee : "assigned to (positionId)"
+
+    Employee |o--o| Employee : "reports to (managerId)"
+    Employee |o--o| Employee : "led by (teamLeaderId)"
+```
+
+---
+
+## 2. Entity Details & Schema Architecture
+
+The database architecture is currently in a **transitional state** moving from legacy string-based mapping (caching) to proper NoSQL normalized data mapping (`ObjectId` references).
+
+### 🏢 Branch (`Branch.js`)
+*Represents the physical work location where employees are based.*
+- **Core Fields**: `name`, `code`, `location`
+- **Relations**: 
+  - `managerId`: References an `Employee` as the branch manager.
+- **Rule Enforcement**: A `Branch` must be explicitly created first before any `Employee` can be assigned to it via the `branchId` field. 
+
+### 👥 Employee (`Employee.js`)
+*The central entity connecting almost all organizational structures.*
+- **Key Incoming Relations**:
+  - `branchId` -> `Branch` (+ auto-syncs `workLocation` string)
+  - `departmentId` -> `Department` (+ auto-syncs `department` string)
+  - `teamId` -> `Team` (+ auto-syncs `team` string)
+  - `positionId` -> `Position` (+ auto-syncs `position` string)
+- **Hierarchy Relations (Self-Referencing)**:
+  - `managerId` -> Direct manager (`Employee`)
+  - `teamLeaderId` -> Immediate team lead (`Employee`)
+- **Note**: The schema maintains string versions of these references (e.g. `department`, `team`, `position`) for legacy compatibility, which are automatically synced when the IDs change.
+
+### 🏛️ Department (`Department.js`)
+*The top-level organizational unit.*
+- **Relations**:
+  - `headId` (Normalized) / `head` (Legacy string) -> Refers to the `Employee` running the department.
+  - `parentDepartmentId` -> Allows for nesting/matrix structures containing an overarching parent `Department`.
+- *Migration Note*: Historically, Teams and Positions were embedded as arrays inside the Department document. The `hasMigratedTeams: true` flag denotes that this structure now correctly relies on standalone `Team` and `Position` collections.
+
+### 🛡️ Team (`Team.js`)
+*A subset or specialized group within a Department.*
+- **Relations**:
+  - `departmentId` -> Mandatory reference tying the team to its parent `Department`.
+  - `leaderId` (Normalized) / `leaderEmail` (Legacy) -> The `Employee` leading the team.
+  - `memberIds` -> Array of `Employee` objects explicitly placed into this team.
+
+### 💼 Position (`Position.js`)
+*A specific job title/role configuration.*
+- **Relations**:
+  - `departmentId` -> Mandatory link to the `Department` offering this role.
+  - `teamId` -> Optional link if the position is team-specific.
+
+---
+
+## 3. Creating an Employee: Resolution Flow
+
+When a new user submits the **Create Employee** form, the backend routes dynamically resolve the raw strings sent from the form into robust relations before saving the actual `Employee` document in MongoDB.
+
+Here is what the controller (`routes/employees.js`) does sequentially:
+
+1. **Department Resolution**: Looks up `Department` by the string `"name"` payload. Retrieves the actual underlying `Department._id` and saves it as `departmentId`.
+2. **Auto-Code Generation**: Generates the `employeeCode` using the `Department.code` prefix (e.g. `#ENG-005`). 
+3. **Team Resolution**: Looks up the `Team` by string `"name"` *under* that specific resolved `departmentId`. Saves it as `teamId`.
+4. **Position Resolution**: Looks up the `Position` by string `"title"` *under* that specific resolved `departmentId`. Saves it as `positionId`.
+5. **Branch Resolution**: Directly takes the `branchId` dropdown value, verifies the `Branch` exists, and caches the branch name mapping to the `workLocation` string field.
+
+By using both standard `ObjectId` mappings and cached literal string mappings simultaneously, the system ensures strong relational integrity while preventing old UI parts (relying heavily on flat strings) from breaking during your architectural migration.

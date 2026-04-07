@@ -1,4 +1,5 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
+import { getErrorMessage } from "@/shared/api/handleApiResponse";
 import { assignEmploymentApi, getEmployeeAssignmentsApi, unassignEmploymentApi } from './api'
 
 const initialState = { 
@@ -14,7 +15,7 @@ export const assignEmploymentThunk = createAsyncThunk(
     try {
       return await assignEmploymentApi(payload);
     } catch (error) {
-      return rejectWithValue(error.message || 'Failed to assign employment');
+      return rejectWithValue(getErrorMessage(error, 'Failed to assign employment'));
     }
   },
 )
@@ -25,7 +26,7 @@ export const fetchEmployeeAssignmentsThunk = createAsyncThunk(
     try {
       return await getEmployeeAssignmentsApi(employeeId);
     } catch (error) {
-      return rejectWithValue(error.message || 'Failed to fetch assignments');
+      return rejectWithValue(getErrorMessage(error, 'Failed to fetch assignments'));
     }
   },
 )
@@ -36,7 +37,7 @@ export const unassignEmploymentThunk = createAsyncThunk(
     try {
       return await unassignEmploymentApi(employeeId, departmentId);
     } catch (error) {
-      return rejectWithValue(error.message || 'Failed to unassign employment');
+      return rejectWithValue(getErrorMessage(error, 'Failed to unassign employment'));
     }
   },
 )
@@ -47,6 +48,9 @@ const employmentsSlice = createSlice({
   reducers: {
     clearSelectedAssignments: (state) => {
       state.selectedAssignments = [];
+    },
+    clearEmploymentsError: (state) => {
+      state.error = null;
     },
   },
   extraReducers: (builder) => {
@@ -92,5 +96,5 @@ const employmentsSlice = createSlice({
   },
 })
 
-export const { clearSelectedAssignments } = employmentsSlice.actions;
+export const { clearSelectedAssignments, clearEmploymentsError } = employmentsSlice.actions;
 export const employmentsReducer = employmentsSlice.reducer

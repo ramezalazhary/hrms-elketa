@@ -7,9 +7,17 @@ import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { updateEmployeeThunk, processSalaryIncreaseThunk, fetchEmployeesThunk } from "../store";
 import { resolveBranchesFromPolicy } from "@/shared/utils/workLocations";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
+import { getBranchesApi } from "@/modules/branches/api";
+import { getTeamsApi } from "@/modules/teams/api";
 import { getDocumentRequirementsApi } from "@/modules/organization/api";
-import { API_URL } from "@/shared/api/apiBase";
 import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
+import { skillsFromCommaText } from "@/shared/utils/skillsFromText";
+import { languagesFromText, languagesToFormString } from "@/shared/utils/employeeFormLanguages";
+import {
+  policyBranchDisplayName,
+  policyBranchMatchKeys,
+  branchRecordLocationText,
+} from "@/shared/utils/policyWorkLocationBranches";
 import { ArrowLeft, Clock, Save, ArrowRightLeft, KeyRound, Settings, Briefcase, TrendingUp, CloudCog } from "lucide-react";
 import { TransferModal } from "../components/TransferModal";
 import { SalaryIncreaseModal } from "../components/SalaryIncreaseModal";
@@ -35,8 +43,12 @@ export function EditEmployeePage() {
   const [selectedCity, setSelectedCity] = useState("");
   const [socialInsuranceStatus, setSocialInsuranceStatus] = useState("NOT_INSURED");
   const [hasMedicalInsurance, setHasMedicalInsurance] = useState("NO");
-  const [policyLocations, setPolicyLocations] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [orgPolicy, setOrgPolicy] = useState(null);
+  const [selectedWorkLocation, setSelectedWorkLocation] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [standaloneTeams, setStandaloneTeams] = useState([]);
+  const [employmentStatus, setEmploymentStatus] = useState("ACTIVE");
 
   const employee = useMemo(
     () => {
@@ -56,19 +68,47 @@ export function EditEmployeePage() {
       setSelectedCity(employee.city || "");
       setSocialInsuranceStatus(employee.socialInsurance?.status || "NOT_INSURED");
       setHasMedicalInsurance(employee.insurance?.provider ? "YES" : "NO");
+      setSelectedDepartment(employee.department || "");
+      setEmploymentStatus(employee.status || "ACTIVE");
     }
   }, [employee]);
+
+  useEffect(() => {
+    if (!employee || !orgPolicy) return;
+    const locations = orgPolicy.workLocations || [];
+    const branchName = (employee.branchId?.name || employee.workLocation || "").trim().toLowerCase();
+    const branchCode = (employee.branchId?.code || "").trim().toLowerCase();
+    const empCity = (employee.branchId?.city || "").trim().toLowerCase();
+    if (!branchName && !branchCode && !empCity) return;
+
+    const matchIdx = locations.findIndex((loc) => {
+      const keys = (loc.branches || []).flatMap(policyBranchMatchKeys);
+      if (branchName && keys.includes(branchName)) return true;
+      if (branchCode && keys.includes(branchCode)) return true;
+      if (empCity && loc.city.trim().toLowerCase() === empCity) return true;
+      return false;
+    });
+    if (matchIdx >= 0) setSelectedWorkLocation(String(matchIdx));
+  }, [employee, orgPolicy]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const data = await getDocumentRequirementsApi();
+        const [policyData, branchesWrap] = await Promise.all([
+          getDocumentRequirementsApi().catch(() => null),
+          getBranchesApi()
+            .then((data) => ({ ok: true, data }))
+            .catch(() => ({ ok: false, data: [] })),
+        ]);
         if (cancelled) return;
-        setOrgPolicy(data);
-        setPolicyLocations(Array.isArray(data.workLocations) ? data.workLocations : []);
+
+        if (policyData) setOrgPolicy(policyData);
+        if (branchesWrap.ok && Array.isArray(branchesWrap.data)) {
+          setBranches(branchesWrap.data);
+        }
       } catch (err) {
-        console.error("Failed to load organization policy:", err);
+        console.error("Failed to load policy/branches:", err);
       }
     })();
     return () => {
@@ -99,9 +139,106 @@ export function EditEmployeePage() {
     return getCitiesForGovernorate(selectedGovernorate).map((c) => ({ label: c, value: c }));
   }, [selectedGovernorate]);
 
-  const selectedBranches = useMemo(() => {
-    return resolveBranchesFromPolicy(policyLocations, selectedGovernorate, selectedCity);
-  }, [policyLocations, selectedGovernorate, selectedCity]);
+  useEffect(() => {
+    if (!selectedDepartment) {
+      setStandaloneTeams([]);
+      return;
+    }
+    const dept = departments.find((d) => d.name === selectedDepartment);
+    if (!dept?._id && !dept?.id) return;
+    let cancelled = false;
+    getTeamsApi({ departmentId: dept._id || dept.id })
+      .then((data) => {
+        if (!cancelled) setStandaloneTeams(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setStandaloneTeams([]);
+      });
+    return () => { cancelled = true; };
+  }, [selectedDepartment, departments]);
+
+  const teamOptions = useMemo(() => {
+    if (!selectedDepartment) return [{ label: "— Select a department first —", value: "" }];
+    const dept = departments.find((d) => d.name === selectedDepartment);
+    const nameSet = new Set();
+    const options = [];
+
+    for (const t of dept?.teams || []) {
+      if (t.name && !nameSet.has(t.name)) {
+        nameSet.add(t.name);
+        options.push({ label: t.name, value: t.name });
+      }
+    }
+    for (const t of standaloneTeams) {
+      if (t.name && !nameSet.has(t.name)) {
+        nameSet.add(t.name);
+        options.push({ label: t.name, value: t.name });
+      }
+    }
+    if (options.length === 0) return [{ label: "— No teams in this department —", value: "" }];
+    return options;
+  }, [selectedDepartment, departments, standaloneTeams]);
+
+  const workLocationOptions = useMemo(() => {
+    const locations = orgPolicy?.workLocations || [];
+    if (locations.length === 0) return [{ label: "— No locations configured in org policy —", value: "" }];
+    return locations.map((loc, idx) => ({
+      label: `${loc.city} (${loc.governorate})`,
+      value: String(idx),
+    }));
+  }, [orgPolicy]);
+
+  const branchOptions = useMemo(() => {
+    if (!selectedWorkLocation) return [{ label: "— Select a work location first —", value: "" }];
+    const locations = orgPolicy?.workLocations || [];
+    const loc = locations[Number(selectedWorkLocation)];
+    if (!loc) return [{ label: "— Select a work location first —", value: "" }];
+
+    const policyEntries = loc.branches || [];
+    const allBranches = Array.isArray(branches) ? branches : [];
+    const locCity = (loc.city || "").trim().toLowerCase();
+    const locGov = (loc.governorate || "").trim().toLowerCase();
+
+    const matched = allBranches.filter((b) => {
+      const bName = (b.name || "").trim().toLowerCase();
+      const bCode = (b.code || "").trim().toLowerCase();
+      const bCity = (b.city || "").trim().toLowerCase();
+      const bLocation = branchRecordLocationText(b);
+      for (const entry of policyEntries) {
+        const keys = policyBranchMatchKeys(entry);
+        if (keys.length && (keys.includes(bName) || (bCode && keys.includes(bCode)))) return true;
+      }
+      if (locCity && bCity && bCity === locCity) return true;
+      if (locCity && bLocation && bLocation.includes(locCity)) return true;
+      if (locGov && bCity && bCity.includes(locGov)) return true;
+      return false;
+    });
+
+    if (matched.length > 0) {
+      return matched.map((b) => ({
+        label: `${b.name} (${b.code})${b.city ? ` - ${b.city}` : ""}`,
+        value: b.id,
+      }));
+    }
+
+    const policyLabels = policyEntries.map(policyBranchDisplayName).filter(Boolean);
+    if (policyLabels.length > 0) {
+      return policyLabels.map((name) => ({
+        label: name,
+        value: name,
+      }));
+    }
+
+    // Fallback: show all branches if any exist
+    if (allBranches.length > 0) {
+      return allBranches.map((b) => ({
+        label: `${b.name} (${b.code})${b.city ? ` - ${b.city}` : ""}`,
+        value: b.id,
+      }));
+    }
+
+    return [{ label: "— No branches at this location —", value: "" }];
+  }, [selectedWorkLocation, orgPolicy, branches]);
 
   const roleFieldOptions = useMemo(() => {
     const cr = currentUser?.role;
@@ -120,10 +257,6 @@ export function EditEmployeePage() {
       { label: "Manager (Department head)", value: "MANAGER" },
     ];
   }, [currentUser?.role]);
-
-  const branchOptions = selectedBranches.length > 0 
-      ? selectedBranches.map((b) => ({ label: b, value: b }))
-      : [{ label: "— Select city or register branches in Policy —", value: "" }];
 
   const handleResetPassword = async (values) => {
     try {
@@ -370,14 +503,23 @@ export function EditEmployeePage() {
         <>
           <FormBuilder
             onCancel={() => navigate("/employees")}
-            onChange={(name, value) => {
+            onChange={(name, value, setFormValues) => {
               if (name === "governorate") {
                 setSelectedGovernorate(value);
                 setSelectedCity("");
               }
               if (name === "city") setSelectedCity(value);
+              if (name === "department") {
+                setSelectedDepartment(value);
+                setFormValues?.((prev) => ({ ...prev, team: "" }));
+              }
+              if (name === "workLocation") {
+                setSelectedWorkLocation(value);
+                setFormValues?.((prev) => ({ ...prev, branchId: "" }));
+              }
               if (name === "socialInsuranceStatus") setSocialInsuranceStatus(value);
               if (name === "hasMedicalInsurance") setHasMedicalInsurance(value);
+              if (name === "status") setEmploymentStatus(value);
               if (name === "reportingMode") setReportingMode(value);
             }}
             fields={[
@@ -412,6 +554,7 @@ export function EditEmployeePage() {
               { name: "nationality", label: "Nationality", type: "text" },
               { name: "idNumber", label: "National ID Number", type: "text" },
               { name: "nationalIdExpiryDate", label: "National ID Expiry Date", type: "date" },
+              { name: "profilePicture", label: "Profile picture (URL)", type: "text", fullWidth: true, placeholder: "https://... or leave blank" },
 
               { type: "section", label: "2. Contact Information" },
               { name: "email", label: "Personal Email", type: "email", required: true },
@@ -433,6 +576,8 @@ export function EditEmployeePage() {
                   ? cityOptions
                   : [{ label: "— Select governorate first —", value: "" }],
               },
+              { name: "additionalWhatsapp", label: "WhatsApp", type: "text", placeholder: "Optional" },
+              { name: "additionalSkype", label: "Skype", type: "text", placeholder: "Optional" },
 
               { type: "section", label: "3. Job & Administrative (Use 'Manage' for Structural Changes)" },
               ...(canAdmin
@@ -460,11 +605,17 @@ export function EditEmployeePage() {
                 label: "Team / Unit",
                 type: "select",
                 disabled: true,
-                options: departments.flatMap(d => (d.teams || []).map(t => ({ label: `${t.name} (${d.name})`, value: t.name })))
+                options: teamOptions,
               },
               {
                 name: "workLocation",
-                label: "Work Location / Branch (from Organization Policy)",
+                label: "Work Location",
+                type: "select",
+                options: workLocationOptions,
+              },
+              {
+                name: "branchId",
+                label: "Branch",
                 type: "select",
                 options: branchOptions,
               },
@@ -496,10 +647,56 @@ export function EditEmployeePage() {
                   { label: "Terminated", value: "TERMINATED" },
                 ]
               },
+              ...(employmentStatus === "RESIGNED" || employmentStatus === "TERMINATED"
+                ? [
+                    { name: "terminationDate", label: "Termination date", type: "date" },
+                    {
+                      name: "terminationReason",
+                      label: "Termination reason",
+                      type: "textarea",
+                      fullWidth: true,
+                      placeholder: "Brief reason (optional)",
+                    },
+                  ]
+                : []),
+
+              { type: "section", label: "4. Education & Skills" },
+              { name: "educationDegree", label: "Degree / qualification", type: "text", placeholder: "e.g. B.Sc. Computer Science" },
+              { name: "educationInstitution", label: "School / institution", type: "text", placeholder: "e.g. Cairo University" },
+              { name: "educationYear", label: "Graduation year", type: "text", placeholder: "e.g. 2014" },
+              { name: "educationGraduationDate", label: "Graduation date", type: "date" },
+              {
+                name: "skillsTechnical",
+                label: "Technical skills",
+                type: "textarea",
+                fullWidth: true,
+                placeholder: "Separate with commas — e.g. React, Node.js, SQL",
+              },
+              {
+                name: "skillsSoft",
+                label: "Soft skills",
+                type: "textarea",
+                fullWidth: true,
+                placeholder: "e.g. Communication, Leadership, Teamwork",
+              },
+              {
+                name: "trainingCoursesText",
+                label: "Training courses",
+                type: "textarea",
+                fullWidth: true,
+                placeholder: "Comma-separated — e.g. AWS Cloud Practitioner, Scrum Master",
+              },
+              {
+                name: "languagesText",
+                label: "Languages",
+                type: "textarea",
+                fullWidth: true,
+                placeholder: "e.g. English (ADVANCED), Arabic — optional level in parentheses",
+              },
 
               ...reportingFields,
 
-              { type: "section", label: "4. Benefits & Compensation (Use 'Manage' -> 'Increase Salary' to change Base Salary)" },
+              { type: "section", label: "5. Benefits & Compensation (Use 'Manage' -> 'Increase Salary' to change Base Salary)" },
               { name: "baseSalary", label: "Base Salary", type: "number", disabled: true },
               {
                  name: "paymentMethod",
@@ -514,8 +711,10 @@ export function EditEmployeePage() {
               },
               { name: "bankAccount", label: "Bank Account Number", type: "text" },
               { name: "currency", label: "Currency", type: "text", placeholder: "EGP" },
+              { name: "financialAllowances", label: "Allowances (amount)", type: "number" },
+              { name: "financialSocialSecurity", label: "Payroll / social security ref.", type: "text", placeholder: "Reference or note" },
 
-              { type: "section", label: "5. Social Insurance & Health" },
+              { type: "section", label: "6. Social Insurance & Health" },
               {
                  name: "hasMedicalInsurance",
                  label: "Has Medical Insurance?",
@@ -540,6 +739,7 @@ export function EditEmployeePage() {
                       { label: "Comprehensive", value: "COMPREHENSIVE" },
                    ]
                 },
+                { name: "insuranceValidUntil", label: "Policy valid until", type: "date" },
                 { name: "medicalCondition", label: "Medical Condition / Disease Type", type: "text" },
               ] : []),
               {
@@ -571,16 +771,22 @@ export function EditEmployeePage() {
               governorate: employee.governorate || '',
               city: employee.city || '',
               emergencyPhone: employee.emergencyPhone || '',
+              additionalWhatsapp: employee.additionalContact?.whatsapp || '',
+              additionalSkype: employee.additionalContact?.skype || '',
               subLocation: employee.subLocation || '',
               fullNameArabic: employee.fullNameArabic || '',
+              profilePicture: employee.profilePicture || '',
               hasMedicalInsurance: employee.insurance?.provider ? "YES" : "NO",
               insuranceProvider: employee.insurance?.provider || '',
               insurancePolicy: employee.insurance?.policyNumber || '',
               insuranceCoverage: employee.insurance?.coverageType || 'HEALTH',
+              insuranceValidUntil: employee.insurance?.validUntil ? new Date(employee.insurance.validUntil).toISOString().split('T')[0] : '',
               baseSalary: employee.financial?.baseSalary || '',
               paymentMethod: employee.financial?.paymentMethod || 'BANK_TRANSFER',
               bankAccount: employee.financial?.bankAccount || '',
               currency: employee.financial?.currency || 'EGP',
+              financialAllowances: employee.financial?.allowances ?? '',
+              financialSocialSecurity: employee.financial?.socialSecurity || '',
               socialInsuranceStatus: employee.socialInsurance?.status || 'NOT_INSURED',
               insuranceDate: employee.socialInsurance?.insuranceDate ? new Date(employee.socialInsurance.insuranceDate).toISOString().split('T')[0] : '',
               subscriptionWage: employee.socialInsurance?.subscriptionWage || '',
@@ -594,30 +800,82 @@ export function EditEmployeePage() {
               reportingMode: employee.useDefaultReporting !== false ? "default" : "custom",
               managerId: employee.managerId?.id ?? employee.managerId ?? "",
               teamLeaderId: employee.teamLeaderId?.id ?? employee.teamLeaderId ?? "",
+              workLocation: selectedWorkLocation,
+              branchId: employee.branchId?.id ?? employee.branchId ?? employee.workLocation ?? "",
+              educationDegree: employee.education?.[0]?.degree || "",
+              educationGraduationDate: employee.education?.[0]?.graduationDate
+                ? new Date(employee.education[0].graduationDate).toISOString().split("T")[0]
+                : "",
+              educationInstitution: employee.education?.[0]?.institution || "",
+              educationYear: employee.education?.[0]?.year || "",
+              skillsTechnical: (employee.skills?.technical || []).join(", "),
+              skillsSoft: (employee.skills?.soft || []).join(", "),
+              trainingCoursesText: (employee.trainingCourses || []).join(", "),
+              languagesText: languagesToFormString(employee.languages),
+              terminationDate: employee.terminationDate ? new Date(employee.terminationDate).toISOString().split("T")[0] : "",
+              terminationReason: employee.terminationReason || "",
             }}
             submitLabel="Save Changes"
             onSubmit={async (values) => {
               try {
                 const payload = { ...values };
+                // Resolve workLocation from policy index to actual label
+                const locIdx = Number(payload.workLocation);
+                const policyLocs = orgPolicy?.workLocations || [];
+                if (!isNaN(locIdx) && policyLocs[locIdx]) {
+                  const loc = policyLocs[locIdx];
+                  payload.workLocation = `${loc.city}, ${loc.governorate}`;
+                } else {
+                  delete payload.workLocation;
+                }
+                if (!payload.profilePicture || String(payload.profilePicture).trim() === "") {
+                  delete payload.profilePicture;
+                }
+                for (const k of ["insuranceValidUntil", "terminationDate"]) {
+                  if (payload[k] === "") delete payload[k];
+                }
+
+                const wa = (values.additionalWhatsapp || "").trim();
+                const sk = (values.additionalSkype || "").trim();
+                payload.additionalContact = { whatsapp: wa, skype: sk };
+
                 if (values.hasMedicalInsurance === "YES") {
                   payload.insurance = {
-                    provider: values.insuranceProvider,
-                    policyNumber: values.insurancePolicy,
-                    coverageType: values.insuranceCoverage
+                    ...(employee.insurance || {}),
+                    provider: values.insuranceProvider || undefined,
+                    policyNumber: values.insurancePolicy || undefined,
+                    coverageType: values.insuranceCoverage || "HEALTH",
+                    validUntil: values.insuranceValidUntil || null,
                   };
                   payload.medicalCondition = values.medicalCondition || undefined;
                 } else {
-                  payload.insurance = { provider: "", policyNumber: "", coverageType: "HEALTH" };
-                  payload.medicalCondition = ""; // Clear if no health insurance
+                  payload.insurance = {
+                    provider: "",
+                    policyNumber: "",
+                    coverageType: "HEALTH",
+                    validUntil: null,
+                  };
+                  payload.medicalCondition = "";
                 }
-                
+
                 payload.financial = {
-                  baseSalary: values.baseSalary ? Number(values.baseSalary) : undefined,
+                  ...(employee.financial || {}),
+                  baseSalary: values.baseSalary ? Number(values.baseSalary) : employee.financial?.baseSalary,
                   paymentMethod: values.paymentMethod || "BANK_TRANSFER",
                   bankAccount: values.bankAccount || undefined,
-                  currency: values.currency || 'EGP'
+                  currency: values.currency || "EGP",
+                  allowances:
+                    values.financialAllowances !== "" && values.financialAllowances != null
+                      ? Number(values.financialAllowances)
+                      : employee.financial?.allowances,
+                  socialSecurity:
+                    (values.financialSocialSecurity || "").trim() !== ""
+                      ? (values.financialSocialSecurity || "").trim()
+                      : employee.financial?.socialSecurity,
                 };
+
                 payload.socialInsurance = {
+                  ...(employee.socialInsurance || {}),
                   status: values.socialInsuranceStatus || "NOT_INSURED",
                   insuranceDate: values.insuranceDate || undefined,
                   subscriptionWage: values.subscriptionWage ? Number(values.subscriptionWage) : undefined,
@@ -637,6 +895,12 @@ export function EditEmployeePage() {
                     payload.managerId = values.managerId || null;
                     payload.teamLeaderId = values.teamLeaderId || null;
                   }
+                }
+                payload.branchId = values.branchId || null;
+                // If branchId is a name string (from policy) rather than an ObjectId, store it in workLocation
+                if (payload.branchId && !/^[a-f\d]{24}$/i.test(payload.branchId)) {
+                  payload.workLocation = payload.branchId;
+                  payload.branchId = null;
                 }
                 delete payload.reportingMode;
 
@@ -658,6 +922,55 @@ export function EditEmployeePage() {
                 delete payload.jobType;
                 delete payload.form6Date;
                 delete payload.insuranceNumber;
+                delete payload.insuranceValidUntil;
+                delete payload.financialAllowances;
+                delete payload.financialSocialSecurity;
+                delete payload.additionalWhatsapp;
+                delete payload.additionalSkype;
+
+                if (values.status === "RESIGNED" || values.status === "TERMINATED") {
+                  if (values.terminationDate) payload.terminationDate = values.terminationDate;
+                  else delete payload.terminationDate;
+                  payload.terminationReason = (values.terminationReason || "").trim() || null;
+                } else {
+                  payload.terminationDate = null;
+                  payload.terminationReason = null;
+                }
+
+                const degreeTrim = (values.educationDegree || "").trim();
+                const instTrim = (values.educationInstitution || "").trim();
+                const yearTrim = (values.educationYear || "").trim();
+                const gradDate = values.educationGraduationDate || "";
+                const eduTail = employee.education?.slice(1) || [];
+                if (degreeTrim || gradDate || instTrim || yearTrim) {
+                  payload.education = [
+                    {
+                      degree: degreeTrim || "",
+                      institution: instTrim || employee.education?.[0]?.institution || "",
+                      year: yearTrim || (gradDate ? gradDate.slice(0, 4) : (employee.education?.[0]?.year || "")),
+                      graduationDate: gradDate ? gradDate : null,
+                    },
+                    ...eduTail,
+                  ];
+                } else {
+                  payload.education = eduTail;
+                }
+                delete payload.educationDegree;
+                delete payload.educationGraduationDate;
+                delete payload.educationInstitution;
+                delete payload.educationYear;
+
+                payload.trainingCourses = skillsFromCommaText(values.trainingCoursesText);
+                payload.languages = languagesFromText(values.languagesText);
+                delete payload.trainingCoursesText;
+                delete payload.languagesText;
+
+                payload.skills = {
+                  technical: skillsFromCommaText(values.skillsTechnical),
+                  soft: skillsFromCommaText(values.skillsSoft),
+                };
+                delete payload.skillsTechnical;
+                delete payload.skillsSoft;
 
                 const newHireDate = new Date(payload.dateOfHire);
                 const oldHireDate = new Date(employee.dateOfHire);

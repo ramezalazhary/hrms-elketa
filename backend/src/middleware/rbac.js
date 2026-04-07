@@ -1,63 +1,62 @@
 import { Department } from "../models/Department.js";
+import { Employee } from "../models/Employee.js";
+import { isAdminRole } from "../utils/roles.js";
 
 const HR_DEPARTMENT_NAME = process.env.HR_DEPARTMENT_NAME || "HR";
 
 /**
- * Checks whether `email` is configured as head of the HR department.
+ * Checks whether a user is head of the HR department by email **or** ObjectId.
  *
- * @param {string | undefined} email Authenticated user’s email.
- * @returns {Promise<boolean>} `true` if a department named HR exists with `head === email`.
- *
- * Data flow: `Department.findOne({ name: HR, head: email })` → truthy `_id` → boolean.
+ * @param {string | undefined} email Authenticated user's email.
+ * @param {string | undefined} userId Authenticated user's id (from JWT).
+ * @returns {Promise<boolean>}
  */
-export async function isHrDepartmentHead(email) {
-  if (!email) return false;
+export async function isHrDepartmentHead(email, userId) {
+  if (!email && !userId) return false;
+
+  const conditions = [];
+  if (email) conditions.push({ head: email });
+  if (userId) {
+    const actor = await Employee.findById(userId).select("_id").lean();
+    if (actor) conditions.push({ headId: actor._id });
+  }
+  if (conditions.length === 0) return false;
+
   const dep = await Department.findOne({
     name: HR_DEPARTMENT_NAME,
-    head: email,
+    $or: conditions,
   }).select("_id");
   return Boolean(dep);
 }
 
 /**
  * Express middleware: only users with system Admin role may proceed.
- *
- * @param {import("express").Request} req Must have `req.user` from `requireAuth` (`role` string or legacy `3`).
- * @param {import("express").Response} res
- * @param {import("express").NextFunction} next
- * @returns {void} Calls `next()` or sends 401/403 JSON.
- *
- * Data flow: no `req.user` → 401; role not ADMIN/3 → 403; else `next()`.
  */
 export function requireSystemAdmin(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  if (req.user.role === "ADMIN" || req.user.role === 3) {
+  if (isAdminRole(req.user.role)) {
     return next();
   }
   return res.status(403).json({ error: "Forbidden" });
 }
 
 /**
- * Express middleware: Admin **or** Head of HR may proceed (e.g. user list, permission edits scoped in route).
- *
- * @param {import("express").Request} req
- * @param {import("express").Response} res
- * @param {import("express").NextFunction} next
- * @returns {Promise<void>} Calls `next()` or sends 401/403 JSON.
- *
- * Data flow: no user → 401; ADMIN/3 → `next()`; `HR_STAFF` + `isHrDepartmentHead` → `next()`; else 403.
+ * Express middleware: Admin **or** HR_MANAGER **or** Head of HR may proceed.
  */
 export async function requireAdminOrHrHead(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  if (req.user.role === "ADMIN" || req.user.role === 3) {
+  if (isAdminRole(req.user.role)) {
+    return next();
+  }
+  if (req.user.role === "HR_MANAGER") {
     return next();
   }
   if (req.user.role === "HR_STAFF") {
-    const ok = await isHrDepartmentHead(req.user.email);
+    const ok = await isHrDepartmentHead(req.user.email, req.user.id);
     if (ok) return next();
   }
   return res.status(403).json({ error: "Forbidden" });

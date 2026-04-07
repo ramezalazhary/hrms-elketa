@@ -33,6 +33,34 @@ function fmtDate(d) {
   });
 }
 
+function stepLabel(role) {
+  if (role === "MANAGEMENT") return "Manager or team leader (either)";
+  if (role === "HR") return "HR";
+  return role || "—";
+}
+
+function eligibilityBlock(r) {
+  const e = r.eligibility;
+  if (!e || e.eligible) return null;
+  return (
+    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-950">
+      <p className="font-semibold">Policy eligibility: not met yet</p>
+      <p className="mt-0.5 text-amber-900/90">{e.reason || "Does not meet hire-date rules yet."}</p>
+      {e.eligibleAfterDate != null && (
+        <p className="mt-1">Eligible from approximately {fmtDate(e.eligibleAfterDate)}</p>
+      )}
+      {e.daysUntilEligible != null && e.daysUntilEligible > 0 && (
+        <p>About {e.daysUntilEligible} calendar day(s) short of policy minimum after hire.</p>
+      )}
+      {r.preEligibility && (
+        <p className="mt-2 font-medium text-amber-900 border-t border-amber-200/80 pt-2">
+          If approved, this is recorded but does not deduct from leave balance (pre-eligibility).
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function LeaveApprovalsPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -98,7 +126,7 @@ export function LeaveApprovalsPage() {
   const nextStep = (r) => {
     const a = r.approvals || [];
     const p = a.find((x) => x.status === "PENDING");
-    return p?.role || "—";
+    return stepLabel(p?.role);
   };
 
   const balanceLines = (r) => {
@@ -172,7 +200,7 @@ export function LeaveApprovalsPage() {
   return (
     <Layout
       title="Leave approvals"
-      description="Requests waiting for your step in the chain (team leader → manager → HR)."
+      description="HR first, then manager or team leader (either can approve). Your queue shows only requests waiting for your step."
     >
       <div className="max-w-4xl space-y-4">
         {rejectId && (
@@ -226,7 +254,8 @@ export function LeaveApprovalsPage() {
                         ? `${r.leaveType || "ANNUAL"} · ${fmtDate(r.startDate)} – ${fmtDate(r.endDate)}`
                         : `Excuse · ${fmtDate(r.excuseDate)} ${r.startTime}–${r.endTime}`}
                     </p>
-                    <p className="text-xs text-teal-700 font-medium mt-1">Next step: {nextStep(r)}</p>
+                    <p className="text-xs text-teal-700 font-medium mt-1">Waiting for: {nextStep(r)}</p>
+                    {eligibilityBlock(r)}
                     {balanceLines(r)}
                   </div>
                   <div className="flex gap-2 shrink-0">

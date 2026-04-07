@@ -6,21 +6,29 @@ import { Router } from "express";
 import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
 import { Team } from "../models/Team.js";
+import { Branch } from "../models/Branch.js";
 import { Position } from "../models/Position.js";
 import { UserPermission } from "../models/Permission.js";
 import { Attendance } from "../models/Attendance.js";
 import { Alert } from "../models/Alert.js";
 import { ManagementRequest } from "../models/ManagementRequest.js";
+import { LeaveRequest } from "../models/LeaveRequest.js";
 import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
 import { requireAuth } from "../middleware/auth.js";
 import { hashPassword } from "../middleware/auth.js";
 import { resolveEmployeeAccess } from "../services/accessService.js";
+import { isEmployeeRole, isHrOrAdmin } from "../utils/roles.js";
 import { createAuditLog, detectChanges } from "../services/auditService.js";
 import { syncEmployeeLeadershipAfterSave } from "../services/employeeOrgSync.js";
 import {
   enrichEmployeesForResponse,
   enrichEmployeeForResponse,
 } from "../services/orgResolutionService.js";
+import {
+  sanitizeEnrichedEmployeeList,
+  sanitizeEmployeeApiPayload,
+  stripEmployeeSecrets,
+} from "../utils/employeePrivacySanitizer.js";
 
 const router = Router();
 
@@ -29,15 +37,18 @@ async function respondWithEnrichedEmployees(
   employees,
   isPaginated,
   pagination,
+  viewer,
+  access,
 ) {
   const enriched = await enrichEmployeesForResponse(employees);
+  const sanitized = sanitizeEnrichedEmployeeList(enriched, viewer, access);
   if (isPaginated) {
     return res.json({
-      employees: enriched,
+      employees: sanitized,
       pagination,
     });
   }
-  return res.json(enriched);
+  return res.json(sanitized);
 }
 
 /** Empty strings from JSON must not be cast to Date (Mongoose CastError). */
@@ -60,10 +71,23 @@ function addOneYear(anchorDate) {
 }
 
 async function checkScopeDepartment(userEmail, targetDepartment) {
-  const employeeRecord = await Employee.findOne({ email: userEmail });
-  let deptNames = await Department.find({ head: userEmail }).distinct("name");
-  if (employeeRecord) deptNames.push(employeeRecord.department);
-  return deptNames.includes(targetDepartment);
+  const actor = await Employee.findOne({ email: userEmail })
+    .select("_id department departmentId")
+    .lean();
+  const namesFromHead = await Department.find({ head: userEmail }).distinct("name");
+  const allowed = new Set((namesFromHead || []).filter(Boolean));
+  if (actor?._id) {
+    const fromHeadId = await Department.find({ headId: actor._id }).distinct("name");
+    for (const n of fromHeadId || []) if (n) allowed.add(n);
+  }
+  if (actor?.department) allowed.add(actor.department);
+  if (actor?.departmentId && targetDepartment) {
+    const targetDoc = await Department.findOne({ name: targetDepartment }).select("_id").lean();
+    if (targetDoc && String(targetDoc._id) === String(actor.departmentId)) {
+      return true;
+    }
+  }
+  return allowed.has(targetDepartment);
 }
 
 /** ANDs an existing `query.department` (string or `{ $in }`) with allowed scope names. */
@@ -149,8 +173,10 @@ router.get("/", requireAuth, async (req, res) => {
               totalCount: 0,
               limit: limitNum,
             },
+            req.user,
+            access,
           )
-        : respondWithEnrichedEmployees(res, [], false);
+        : respondWithEnrichedEmployees(res, [], false, undefined, req.user, access);
     }
     query.department = { $in: inDepts };
   } else if (department) {
@@ -209,7 +235,7 @@ router.get("/", requireAuth, async (req, res) => {
 
   if (access.scope === "all") {
     const employees = await Employee.find(query)
-      .populate("managerId teamLeaderId")
+      .populate("managerId teamLeaderId branchId")
       .sort({ fullName: 1 })
       .skip(skip)
       .limit(limitNum);
@@ -226,6 +252,8 @@ router.get("/", requireAuth, async (req, res) => {
             limit: limitNum,
           }
         : undefined,
+      req.user,
+      access,
     );
   }
 
@@ -242,7 +270,7 @@ router.get("/", requireAuth, async (req, res) => {
       : 0;
 
     const employees = await Employee.find(deptQuery)
-      .populate("managerId teamLeaderId")
+      .populate("managerId teamLeaderId branchId")
       .sort({ fullName: 1 })
       .skip(skip)
       .limit(limitNum);
@@ -259,6 +287,8 @@ router.get("/", requireAuth, async (req, res) => {
             limit: limitNum,
           }
         : undefined,
+      req.user,
+      access,
     );
   }
 
@@ -279,7 +309,7 @@ router.get("/", requireAuth, async (req, res) => {
       ? await Employee.countDocuments(finalQuery)
       : 0;
     const employees = await Employee.find(finalQuery)
-      .populate("managerId teamLeaderId")
+      .populate("managerId teamLeaderId branchId")
       .sort({ fullName: 1 })
       .skip(skip)
       .limit(limitNum);
@@ -296,6 +326,8 @@ router.get("/", requireAuth, async (req, res) => {
             limit: limitNum,
           }
         : undefined,
+      req.user,
+      access,
     );
   }
 
@@ -322,10 +354,12 @@ router.get("/", requireAuth, async (req, res) => {
             limit: limitNum,
           }
         : undefined,
+      req.user,
+      access,
     );
   }
 
-  return respondWithEnrichedEmployees(res, [], false);
+  return respondWithEnrichedEmployees(res, [], false, undefined, req.user, access);
 });
 
 router.get("/:id", requireAuth, async (req, res) => {
@@ -340,7 +374,11 @@ router.get("/:id", requireAuth, async (req, res) => {
 
   const send = async () => {
     const enriched = await enrichEmployeeForResponse(employee);
-    return res.json(enriched);
+    const sanitized = sanitizeEmployeeApiPayload(enriched, {
+      viewer: req.user,
+      access,
+    });
+    return res.json(sanitized);
   };
 
   if (access.scope === "all") return send();
@@ -418,6 +456,7 @@ router.post("/", requireAuth, async (req, res) => {
     medicalCondition,
     socialInsurance,
     useDefaultReporting,
+    branchId,
   } = req.body;
 
   if (!fullName || !email || !department || !position) {
@@ -511,7 +550,10 @@ router.post("/", requireAuth, async (req, res) => {
       additionalContact,
       dateOfHire: hire,
       nextReviewDate,
-      workLocation,
+      branchId: branchId && /^[a-f\d]{24}$/i.test(branchId) ? branchId : undefined,
+      workLocation: branchId && /^[a-f\d]{24}$/i.test(branchId)
+        ? (await Branch.findById(branchId))?.name || workLocation
+        : workLocation || branchId || undefined,
       subLocation,
       onlineStorageLink,
       education,
@@ -613,6 +655,7 @@ router.put("/:id", requireAuth, async (req, res) => {
     nationalIdExpiryDate,
     governorate,
     city,
+    branchId,
     emergencyPhone,
     subLocation,
     insurances,
@@ -795,6 +838,13 @@ router.put("/:id", requireAuth, async (req, res) => {
     employee.nextReviewDate =
       nextReviewDate === null ? null : optionalDate(nextReviewDate);
   }
+  if (branchId !== undefined) {
+    if (branchId === null || branchId === "") {
+        employee.branchId = null;
+    } else if (/^[a-f\d]{24}$/i.test(branchId)) {
+        employee.branchId = branchId;
+    }
+  }
   if (workLocation !== undefined) employee.workLocation = workLocation;
   if (onlineStorageLink !== undefined)
     employee.onlineStorageLink = onlineStorageLink;
@@ -948,6 +998,15 @@ router.put("/:id", requireAuth, async (req, res) => {
           { $addToSet: { members: employee.email } },
         );
       }
+      // Cascade to operational entities
+      await LeaveRequest.updateMany(
+        { employeeEmail: oldEmail },
+        { $set: { employeeEmail: employee.email } },
+      );
+      await ManagementRequest.updateMany(
+        { senderEmail: oldEmail },
+        { $set: { senderEmail: employee.email } },
+      );
     } catch (err) {
       console.error("Employee email cascade to org structure:", err);
     }
@@ -974,7 +1033,7 @@ router.put("/:id", requireAuth, async (req, res) => {
 
   await employee.populate("managerId teamLeaderId");
   const [updatedEnriched] = await enrichEmployeesForResponse([employee]);
-  return res.json(updatedEnriched);
+  return res.json(stripEmployeeSecrets(updatedEnriched));
 });
 
 /**
@@ -1063,9 +1122,25 @@ router.post("/:id/transfer", requireAuth, async (req, res) => {
   if (!employee.transferHistory) employee.transferHistory = [];
   employee.transferHistory.push(transferRecord);
 
+  // Clear old team/position refs — employee is new to this department
+  const oldTeamId = employee.teamId;
   employee.department = toDepartment;
   employee.departmentId = toDeptDoc._id;
+  employee.team = null;
+  employee.teamId = null;
+  employee.positionId = null;
+  employee.managerId = null;
+  employee.teamLeaderId = null;
   if (newPosition) employee.position = newPosition;
+  else employee.position = null;
+
+  // Remove employee from old team roster
+  if (oldTeamId) {
+    await Team.updateOne(
+      { _id: oldTeamId },
+      { $pull: { members: employee.email } },
+    );
+  }
   if (newSalary !== undefined && newSalary !== employee.financial?.baseSalary) {
     const previousSalary = previousBaseSalary;
 
@@ -1141,7 +1216,7 @@ router.delete("/:id", requireAuth, async (req, res) => {
   if (!access.actions.includes("delete"))
     return res.status(403).json({ error: "Forbidden" });
 
-  if (req.user.role === "EMPLOYEE" || req.user.role === 1) {
+  if (isEmployeeRole(req.user.role)) {
     return res.status(403).json({
       error: "Policy Restriction: Only Managers and Admins can delete data.",
     });
@@ -1215,8 +1290,9 @@ router.delete("/:id", requireAuth, async (req, res) => {
   // Delete all dependent records
   await Employee.findByIdAndDelete(req.params.id);
   await UserPermission.deleteMany({ userId: employee_id });
-  await Attendance.deleteMany({ employeeId: employee_id });
-  await Alert.deleteMany({ employeeId: employee_id });
+  await Attendance.deleteMany({ employeeId: employee._id });
+  await Alert.deleteMany({ employeeId: employee._id });
+  await LeaveRequest.deleteMany({ employeeId: employee._id });
   await ManagementRequest.deleteMany({ senderEmail: employee.email });
 
   // Clear manager references from other employees
@@ -1252,7 +1328,7 @@ router.delete("/:id", requireAuth, async (req, res) => {
 router.post("/:id/process-increase", requireAuth, async (req, res) => {
   const { role, email } = req.user;
   // HR roles may process increases for any employee company-wide (no department/team scope).
-  if (!["ADMIN", "HR_MANAGER", "HR_STAFF"].includes(role)) {
+  if (!isHrOrAdmin(req.user)) {
     return res
       .status(403)
       .json({ error: "Unauthorized to process salary increases" });

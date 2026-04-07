@@ -4,11 +4,18 @@ import path from "path";
 import { fileURLToPath } from "url";
 import * as XLSX from "xlsx";
 import { Attendance } from "../models/Attendance.js";
+import { LeaveRequest } from "../models/LeaveRequest.js";
 import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
+import { Team } from "../models/Team.js";
 import { requireAuth } from "../middleware/auth.js";
 import mongoose from "mongoose";
 import { createAuditLog } from "../services/auditService.js";
+import { isAdminRole, isHrOrAdmin } from "../utils/roles.js";
+import {
+  parseTimeToMinutes,
+  excuseCoversLateCheckIn,
+} from "../utils/excuseAttendance.js";
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -106,16 +113,64 @@ const calculateStatus = (
   };
 };
 
+/**
+ * If status would be LATE, an approved excuse on that day may clear lateness.
+ * @returns {Promise<import("mongoose").Types.ObjectId | null>}
+ */
+async function findApprovedExcuseCoveringLate(
+  employeeId,
+  normalizedDate,
+  checkInStr,
+  policy,
+) {
+  const shiftStartMin = parseTimeToMinutes(
+    policy.standardStartTime || "09:00",
+  );
+  const grace = policy.gracePeriod ?? 15;
+  const checkInMin = parseTimeToMinutes(checkInStr);
+  if (shiftStartMin == null || checkInMin == null) return null;
+
+  const dayStart = new Date(normalizedDate);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+  const excuses = await LeaveRequest.find({
+    employeeId,
+    kind: "EXCUSE",
+    status: "APPROVED",
+    excuseDate: { $gte: dayStart, $lt: dayEnd },
+  }).lean();
+
+  for (const ex of excuses) {
+    const es = parseTimeToMinutes(ex.startTime);
+    const ee = parseTimeToMinutes(ex.endTime);
+    if (es == null || ee == null) continue;
+    if (
+      excuseCoversLateCheckIn(
+        checkInMin,
+        es,
+        ee,
+        shiftStartMin,
+        grace,
+      )
+    ) {
+      return ex._id;
+    }
+  }
+  return null;
+}
+
 async function resolveAttendanceAccess(user) {
-  if (user.role === "ADMIN" || user.role === 3) {
+  if (isHrOrAdmin(user)) {
     return {
       scope: "all",
       actions: ["view", "create", "edit", "delete", "import"],
     };
   }
 
-  // HR Head check
-  const hrDept = await Department.findOne({ name: "HR" });
+  // HR Head check — use code first, fallback to name
+  const hrDept = await Department.findOne({ code: "HR" })
+    || await Department.findOne({ name: "HR" });
   if (hrDept && hrDept.head === user.email) {
     return {
       scope: "all",
@@ -123,21 +178,27 @@ async function resolveAttendanceAccess(user) {
     };
   }
 
-  // Team Leader check (via Department.teams members)
-  const leadsTeams = await Department.find({ "teams.leaderEmail": user.email });
-  if (leadsTeams.length > 0 || user.role === "TEAM_LEADER") {
-    return { scope: "team", actions: ["view"] };
-  }
-
-  // Manager check
-  if (user.role === "MANAGER" || user.role === 2) {
-    return { scope: "subordinates", actions: ["view", "edit"] };
-  }
-
   // Department Head check
   const isDeptHead = await Department.findOne({ head: user.email });
-  if (isDeptHead) {
+  if (isDeptHead || user.role === "MANAGER" || user.role === 2) {
     return { scope: "department", actions: ["view", "edit"] };
+  }
+
+  // Team Leader check — search BOTH embedded AND standalone Team collection
+  const managedTeamNames = [];
+  const deptsWithTeams = await Department.find({ "teams.leaderEmail": user.email });
+  deptsWithTeams.forEach((d) => {
+    d.teams.forEach((t) => {
+      if (t.leaderEmail === user.email) managedTeamNames.push(t.name);
+    });
+  });
+  const standaloneTeams = await Team.find({ leaderEmail: user.email, status: "ACTIVE" });
+  standaloneTeams.forEach((t) => {
+    if (!managedTeamNames.includes(t.name)) managedTeamNames.push(t.name);
+  });
+
+  if (user.role === "TEAM_LEADER" || managedTeamNames.length > 0) {
+    return { scope: "team", actions: ["view"], teams: managedTeamNames };
   }
 
   return { scope: "self", actions: ["view"] };
@@ -164,16 +225,23 @@ router.get("/", requireAuth, async (req, res) => {
       }).distinct("_id");
       filter.employeeId = { $in: subordinateIds };
     } else if (access.scope === "team") {
-      // Team Members for Team Leaders
-      const departments = await Department.find({
-        "teams.leaderEmail": req.user.email,
-      });
+      // Team Members for Team Leaders — search BOTH embedded AND standalone teams
       const memberEmails = [];
+
+      // 1. Embedded teams in Department.teams[]
+      const departments = await Department.find({ "teams.leaderEmail": req.user.email });
       departments.forEach((d) => {
         d.teams
           .filter((t) => t.leaderEmail === req.user.email)
           .forEach((t) => memberEmails.push(...t.members));
       });
+
+      // 2. Standalone Team collection
+      const standaloneTeams = await Team.find({ leaderEmail: req.user.email, status: "ACTIVE" });
+      standaloneTeams.forEach((t) => {
+        t.members.forEach((m) => { if (!memberEmails.includes(m)) memberEmails.push(m); });
+      });
+
       const memberIds = await Employee.find({
         email: { $in: memberEmails },
       }).distinct("_id");
@@ -316,16 +384,37 @@ router.post("/", requireAuth, async (req, res) => {
 
     const calc = calculateStatus(checkIn, checkOut, policy);
 
+    let recordStatus = manualStatus || calc.status;
+    let excuseLeaveRequestId;
+    if (!manualStatus && recordStatus === "LATE" && calc.checkInStr) {
+      const exId = await findApprovedExcuseCoveringLate(
+        employeeId,
+        normalizedDate,
+        calc.checkInStr,
+        policy,
+      );
+      if (exId) {
+        recordStatus = "EXCUSED";
+        excuseLeaveRequestId = exId;
+      }
+    }
+
     const newRecord = new Attendance({
       employeeId,
       employeeCode: employee.employeeCode,
       date: normalizedDate,
       checkIn: calc.checkInStr,
       checkOut: calc.checkOutStr,
-      status: manualStatus || calc.status,
+      status: recordStatus,
       totalHours: calc.totalHours,
       remarks,
       lastManagedBy: req.user.id,
+      ...(excuseLeaveRequestId
+        ? {
+            excuseLeaveRequestId,
+            excuseCovered: true,
+          }
+        : {}),
     });
 
     await newRecord.save();
@@ -378,19 +467,49 @@ router.put("/:id", requireAuth, async (req, res) => {
 
     const calc = calculateStatus(checkIn, checkOut, policy);
 
+    let dateForExcuse = existing.date;
+    if (date) {
+      const nd = new Date(date);
+      nd.setUTCHours(0, 0, 0, 0);
+      dateForExcuse = nd;
+    }
+
+    let recordStatus = manualStatus || calc.status;
+    let excuseLeaveRequestId = existing.excuseLeaveRequestId;
+    if (!manualStatus && recordStatus === "LATE" && calc.checkInStr) {
+      const exId = await findApprovedExcuseCoveringLate(
+        existing.employeeId,
+        dateForExcuse,
+        calc.checkInStr,
+        policy,
+      );
+      if (exId) {
+        recordStatus = "EXCUSED";
+        excuseLeaveRequestId = exId;
+      } else {
+        excuseLeaveRequestId = undefined;
+      }
+    } else if (manualStatus) {
+      if (recordStatus !== "EXCUSED") {
+        excuseLeaveRequestId = undefined;
+      }
+    } else if (recordStatus !== "LATE" && recordStatus !== "EXCUSED") {
+      excuseLeaveRequestId = undefined;
+    }
+
     const updateData = {
       checkIn: calc.checkInStr,
       checkOut: calc.checkOutStr,
       totalHours: calc.totalHours,
-      status: manualStatus || calc.status,
+      status: recordStatus,
       remarks,
       lastManagedBy: req.user.id,
+      excuseLeaveRequestId: excuseLeaveRequestId || null,
+      excuseCovered: Boolean(excuseLeaveRequestId),
     };
 
     if (date) {
-      const normalizedDate = new Date(date);
-      normalizedDate.setUTCHours(0, 0, 0, 0);
-      updateData.date = normalizedDate;
+      updateData.date = dateForExcuse;
     }
 
     const updated = await Attendance.findByIdAndUpdate(
@@ -403,7 +522,7 @@ router.put("/:id", requireAuth, async (req, res) => {
     res.json(updated);
   } catch (error) {
     console.error("PUT /attendance/:id error:", error.message, error.stack);
-    res.status(500).json({ error: `Internal Server Error: ${error.message}` });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -421,7 +540,7 @@ router.delete("/bulk", requireAuth, async (req, res) => {
     }
 
     // Role check (Admin/HR only)
-    if (!["ADMIN", "HR_STAFF", 3].includes(req.user.role)) {
+    if (!isHrOrAdmin(req.user)) {
       return res
         .status(403)
         .json({ error: "Forbidden: Only Admin/HR can bulk delete." });
@@ -720,6 +839,21 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
         continue;
       }
 
+      let impStatus = calc.status;
+      let impExcuseId;
+      if (impStatus === "LATE" && calc.checkInStr) {
+        const exId = await findApprovedExcuseCoveringLate(
+          employee._id,
+          date,
+          calc.checkInStr,
+          policy,
+        );
+        if (exId) {
+          impStatus = "EXCUSED";
+          impExcuseId = exId;
+        }
+      }
+
       try {
         await Attendance.findOneAndUpdate(
           { employeeId: employee._id, date },
@@ -729,20 +863,23 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
             date,
             checkIn: calc.checkInStr,
             checkOut: calc.checkOutStr,
-            status: calc.status,
+            status: impStatus,
             totalHours: calc.totalHours,
             lastManagedBy: req.user.id,
+            ...(impExcuseId
+              ? { excuseLeaveRequestId: impExcuseId, excuseCovered: true }
+              : { excuseLeaveRequestId: null, excuseCovered: false }),
           },
           { upsert: true },
         );
         logs.push({
           code,
           date: date.toDateString(),
-          status: calc.status,
+          status: impStatus,
           hours: calc.totalHours,
         });
         console.log(
-          `[IMPORT] ✓ Row ${i + 2}: ${code} - ${calc.status} (${calc.totalHours}h)`,
+          `[IMPORT] ✓ Row ${i + 2}: ${code} - ${impStatus} (${calc.totalHours}h)`,
         );
       } catch (dbErr) {
         errors.push(

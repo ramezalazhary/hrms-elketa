@@ -8,16 +8,9 @@ import { Team } from "../models/Team.js";
 import { Employee } from "../models/Employee.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { strictLimiter } from "../middleware/security.js";
+import { canManagePositions } from "../utils/roles.js";
 
 const router = Router();
-
-/**
- * @param {{ role: string|number }} user
- * @returns {boolean}
- */
-function canManagePositions(user) {
-  return user.role === 3 || user.role === "ADMIN" || user.role === "HR_STAFF";
-}
 
 // GET /positions - List all positions (with optional filtering)
 router.get("/", requireAuth, async (req, res) => {
@@ -84,7 +77,7 @@ router.get("/:id", requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching position:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -158,7 +151,7 @@ router.post("/", requireAuth, strictLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error("Position creation error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

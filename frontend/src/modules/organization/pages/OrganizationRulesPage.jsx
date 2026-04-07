@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Trash2,
   Save,
@@ -11,11 +12,19 @@ import {
   Building2,
   User,
   Plane,
+  Network,
 } from "lucide-react";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { getDocumentRequirementsApi, updateDocumentRequirementsApi } from "../api";
+import { getDepartmentsApi } from "@/modules/departments/api";
+import { getEmployeesApi } from "@/modules/employees/api";
 import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
+import {
+  normalizeWorkLocationsForEditor,
+  workLocationsToApiPayload,
+  emptyPolicyBranchRow,
+} from "@/shared/utils/policyWorkLocationBranches";
 
 function SkeletonBlock() {
   return (
@@ -52,7 +61,14 @@ export function OrganizationRulesPage() {
   const [workLocations, setWorkLocations] = useState([]);
   const [salaryIncreaseRules, setSalaryIncreaseRules] = useState([]);
   const [companyTimezone, setCompanyTimezone] = useState("Africa/Cairo");
+  const [companyMonthStartDay, setCompanyMonthStartDay] = useState(1);
+  const [chiefExecutiveEmployeeId, setChiefExecutiveEmployeeId] = useState("");
+  const [chiefExecutiveTitle, setChiefExecutiveTitle] = useState(
+    "Chief Executive Officer",
+  );
   const [leavePolicies, setLeavePolicies] = useState([]);
+  const [departmentRows, setDepartmentRows] = useState([]);
+  const [employeeOptions, setEmployeeOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
@@ -62,10 +78,38 @@ export function OrganizationRulesPage() {
       try {
         const data = await getDocumentRequirementsApi();
         setRequiredDocs(data.documentRequirements || []);
-        setWorkLocations(data.workLocations || []);
+        setWorkLocations(normalizeWorkLocationsForEditor(data.workLocations || []));
         setSalaryIncreaseRules(data.salaryIncreaseRules || []);
         setCompanyTimezone(data.companyTimezone || "Africa/Cairo");
+        setCompanyMonthStartDay(
+          Math.min(31, Math.max(1, Number(data.companyMonthStartDay) || 1)),
+        );
+        const ceo = data.chiefExecutiveEmployeeId;
+        if (ceo && typeof ceo === "object" && ceo._id != null) {
+          setChiefExecutiveEmployeeId(String(ceo._id));
+        } else if (ceo) {
+          setChiefExecutiveEmployeeId(String(ceo));
+        } else {
+          setChiefExecutiveEmployeeId("");
+        }
+        setChiefExecutiveTitle(
+          data.chiefExecutiveTitle?.trim() || "Chief Executive Officer",
+        );
         setLeavePolicies(Array.isArray(data.leavePolicies) ? data.leavePolicies : []);
+
+        try {
+          const deps = await getDepartmentsApi();
+          setDepartmentRows(Array.isArray(deps) ? deps : []);
+        } catch {
+          setDepartmentRows([]);
+        }
+        try {
+          const emRes = await getEmployeesApi({ page: "1", limit: "500" });
+          const list = emRes?.employees ?? emRes;
+          setEmployeeOptions(Array.isArray(list) ? list : []);
+        } catch {
+          setEmployeeOptions([]);
+        }
       } catch (error) {
         showToast(error.message, "error");
       } finally {
@@ -90,7 +134,7 @@ export function OrganizationRulesPage() {
   };
 
   const addLocation = () => {
-    setWorkLocations([...workLocations, { governorate: "", city: "", branches: [""] }]);
+    setWorkLocations([...workLocations, { governorate: "", city: "", branches: [emptyPolicyBranchRow()] }]);
   };
 
   const updateLocation = (index, field, value) => {
@@ -106,13 +150,17 @@ export function OrganizationRulesPage() {
 
   const addBranch = (cityIndex) => {
     const newLocs = [...workLocations];
-    newLocs[cityIndex].branches.push("");
+    const parentCity = newLocs[cityIndex].city || "";
+    newLocs[cityIndex].branches.push(emptyPolicyBranchRow(parentCity));
     setWorkLocations(newLocs);
   };
 
-  const updateBranchName = (cityIndex, branchIndex, name) => {
+  const updateBranchField = (cityIndex, branchIndex, field, value) => {
     const newLocs = [...workLocations];
-    newLocs[cityIndex].branches[branchIndex] = name;
+    newLocs[cityIndex].branches[branchIndex] = {
+      ...newLocs[cityIndex].branches[branchIndex],
+      [field]: value,
+    };
     setWorkLocations(newLocs);
   };
 
@@ -151,6 +199,9 @@ export function OrganizationRulesPage() {
           annualDays: 21,
           maxConsecutiveDays: 365,
           minDaysAfterHire: 0,
+          entitlementVariesByYear: false,
+          firstYearDays: 15,
+          afterFirstYearDays: 21,
         },
         excuseRules: {
           maxHoursPerExcuse: 8,
@@ -187,11 +238,17 @@ export function OrganizationRulesPage() {
     try {
       await updateDocumentRequirementsApi({
         documentRequirements: requiredDocs.filter((d) => d.name),
-        workLocations: workLocations.filter((loc) => loc.governorate && loc.city),
+        workLocations: workLocationsToApiPayload(workLocations),
         salaryIncreaseRules: salaryIncreaseRules.filter((r) =>
           r.type === "DEFAULT" ? true : r.target,
         ),
         companyTimezone: companyTimezone.trim() || "Africa/Cairo",
+        companyMonthStartDay: Math.min(
+          31,
+          Math.max(1, Math.floor(Number(companyMonthStartDay)) || 1),
+        ),
+        chiefExecutiveTitle: chiefExecutiveTitle.trim() || "Chief Executive Officer",
+        chiefExecutiveEmployeeId: chiefExecutiveEmployeeId.trim() || null,
         leavePolicies: leavePolicies.map((p) => ({
           version: Number(p.version) || 1,
           vacationRules: p.vacationRules || {},
@@ -209,7 +266,12 @@ export function OrganizationRulesPage() {
   const stats = useMemo(() => {
     const filledDocs = requiredDocs.filter((d) => d.name?.trim()).length;
     const filledLocs = workLocations.filter((l) => l.governorate && l.city).length;
-    const branchCount = workLocations.reduce((n, l) => n + (l.branches?.filter(Boolean).length || 0), 0);
+    const branchCount = workLocations.reduce(
+      (n, l) =>
+        n +
+        (l.branches || []).filter((b) => (b.name || "").trim() || (b.code || "").trim()).length,
+      0,
+    );
     const validRules = salaryIncreaseRules.filter((r) => (r.type === "DEFAULT" ? true : r.target)).length;
     return { filledDocs, filledLocs, branchCount, validRules };
   }, [requiredDocs, workLocations, salaryIncreaseRules]);
@@ -257,6 +319,136 @@ export function OrganizationRulesPage() {
               </p>
             </div>
           </div>
+        )}
+
+        {!loading && (
+          <section className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-sm">
+            <div className="flex flex-col gap-4 border-b border-zinc-100 bg-zinc-50/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <div className="flex gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+                  <Network className="h-5 w-5 text-teal-600" aria-hidden />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-zinc-900">
+                    Company month &amp; organizational hierarchy
+                  </h2>
+                  <p className="mt-0.5 max-w-2xl text-sm text-zinc-500">
+                    Set the first day of your company&apos;s monthly cycle (for excuse limits and balances, UTC).
+                    Name the chief executive; department managers are the heads of each department.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="p-5 sm:p-6 space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-500">
+                    Month starts on calendar day (1–31)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    className="w-full max-w-xs rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                    value={companyMonthStartDay}
+                    onChange={(e) =>
+                      setCompanyMonthStartDay(
+                        Math.min(31, Math.max(1, Number(e.target.value) || 1)),
+                      )
+                    }
+                  />
+                  <p className="mt-1 text-[11px] text-zinc-500 leading-snug">
+                    <strong className="font-medium text-zinc-600">1</strong> = standard calendar month.
+                    Example: <strong className="font-medium text-zinc-600">26</strong> = one period from the 26th through the 25th of the next month (per UTC dates on requests).
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-500">
+                    Chief executive title
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                    value={chiefExecutiveTitle}
+                    onChange={(e) => setChiefExecutiveTitle(e.target.value)}
+                    placeholder="e.g. Chief Executive Officer, Managing Director"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-zinc-500">
+                    Chief executive (employee record)
+                  </label>
+                  <select
+                    className="w-full max-w-xl rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                    value={chiefExecutiveEmployeeId}
+                    onChange={(e) => setChiefExecutiveEmployeeId(e.target.value)}
+                  >
+                    <option value="">Not set</option>
+                    {employeeOptions.map((emp) => (
+                      <option key={emp.id || emp._id} value={emp.id || emp._id}>
+                        {emp.fullName || emp.email}{" "}
+                        {emp.employeeCode ? `(${emp.employeeCode})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-800">
+                  Department managers (heads)
+                </h3>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Reporting managers for each department. Update names and emails in{" "}
+                  <Link
+                    to="/departments"
+                    className="font-medium text-teal-700 underline underline-offset-2 hover:text-teal-900"
+                  >
+                    Departments
+                  </Link>
+                  .
+                </p>
+                {departmentRows.length === 0 ? (
+                  <p className="mt-3 text-sm text-zinc-500">No departments loaded or you lack access.</p>
+                ) : (
+                  <div className="mt-3 overflow-x-auto rounded-xl border border-zinc-200/90">
+                    <table className="min-w-full divide-y divide-zinc-200 text-sm">
+                      <thead className="bg-zinc-50 text-left text-xs font-medium text-zinc-500">
+                        <tr>
+                          <th className="px-4 py-2">Department</th>
+                          <th className="px-4 py-2">Code</th>
+                          <th className="px-4 py-2">Manager (head email)</th>
+                          <th className="px-4 py-2 w-28" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100 bg-white">
+                        {departmentRows.map((d) => {
+                          const did = d.id || d._id;
+                          return (
+                            <tr key={did}>
+                              <td className="px-4 py-2 font-medium text-zinc-900">{d.name}</td>
+                              <td className="px-4 py-2 text-zinc-600">{d.code || "—"}</td>
+                              <td className="px-4 py-2 text-zinc-700">
+                                {d.head?.trim() ? d.head : "—"}
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                <Link
+                                  to={`/departments/${did}/edit`}
+                                  className="text-xs font-medium text-teal-700 hover:underline"
+                                >
+                                  Edit
+                                </Link>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
         )}
 
         {/* Documents */}
@@ -378,7 +570,8 @@ export function OrganizationRulesPage() {
               <div>
                 <h2 className="text-base font-semibold text-zinc-900">Workplaces & branches</h2>
                 <p className="mt-0.5 max-w-xl text-sm text-zinc-500">
-                  Governorates and cities power onboarding workplace pickers; branches are the selectable offices.
+                  Governorates and cities power workplace pickers. Each branch matches the Branch record shape (name,
+                  code, insurance number, location lines, city, country, status).
                 </p>
               </div>
             </div>
@@ -398,7 +591,9 @@ export function OrganizationRulesPage() {
             ) : (
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                 {workLocations.map((loc, cityIndex) => {
-                  const filledBranches = (loc.branches || []).filter(Boolean).length;
+                  const filledBranches = (loc.branches || []).filter(
+                    (b) => (b.name || "").trim() || (b.code || "").trim(),
+                  ).length;
                   return (
                     <div
                       key={cityIndex}
@@ -413,7 +608,7 @@ export function OrganizationRulesPage() {
                               : "New location — select governorate & city"}
                           </p>
                           {filledBranches > 0 && (
-                            <p className="mt-1 text-xs text-zinc-500">{filledBranches} branch label(s)</p>
+                            <p className="mt-1 text-xs text-zinc-500">{filledBranches} branch(es) defined</p>
                           )}
                         </div>
                         <button
@@ -472,29 +667,128 @@ export function OrganizationRulesPage() {
                             + Add branch
                           </button>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-4">
                           {loc.branches.map((branch, branchIndex) => (
-                            <div key={branchIndex} className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
-                                placeholder="Branch or site name"
-                                value={branch}
-                                onChange={(e) => updateBranchName(cityIndex, branchIndex, e.target.value)}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => removeBranch(cityIndex, branchIndex)}
-                                className="shrink-0 rounded-lg p-2 text-zinc-400 hover:bg-red-50 hover:text-red-600"
-                                aria-label="Remove branch"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                            <div
+                              key={branchIndex}
+                              className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm space-y-3"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-semibold text-zinc-600">
+                                  Branch {branchIndex + 1}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeBranch(cityIndex, branchIndex)}
+                                  className="shrink-0 rounded-lg p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-600"
+                                  aria-label="Remove branch"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <div>
+                                  <label className="mb-1 block text-[11px] font-medium text-zinc-500">Name</label>
+                                  <input
+                                    type="text"
+                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                                    placeholder="e.g. Gleem Office"
+                                    value={branch.name ?? ""}
+                                    onChange={(e) =>
+                                      updateBranchField(cityIndex, branchIndex, "name", e.target.value)
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="mb-1 block text-[11px] font-medium text-zinc-500">Code</label>
+                                  <input
+                                    type="text"
+                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm uppercase outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                                    placeholder="e.g. GLM-01"
+                                    value={branch.code ?? ""}
+                                    onChange={(e) =>
+                                      updateBranchField(cityIndex, branchIndex, "code", e.target.value)
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="mb-1 block text-[11px] font-medium text-zinc-500">
+                                    Insurance number
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                                    placeholder="Optional"
+                                    value={branch.insuranceNumber ?? ""}
+                                    onChange={(e) =>
+                                      updateBranchField(cityIndex, branchIndex, "insuranceNumber", e.target.value)
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="mb-1 block text-[11px] font-medium text-zinc-500">City</label>
+                                  <input
+                                    type="text"
+                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                                    placeholder={loc.city || "Defaults to area city if empty"}
+                                    value={branch.city ?? ""}
+                                    onChange={(e) =>
+                                      updateBranchField(cityIndex, branchIndex, "city", e.target.value)
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="mb-1 block text-[11px] font-medium text-zinc-500">Country</label>
+                                  <input
+                                    type="text"
+                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                                    value={branch.country ?? "Egypt"}
+                                    onChange={(e) =>
+                                      updateBranchField(cityIndex, branchIndex, "country", e.target.value)
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="mb-1 block text-[11px] font-medium text-zinc-500">Status</label>
+                                  <select
+                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                                    value={branch.status ?? "ACTIVE"}
+                                    onChange={(e) =>
+                                      updateBranchField(cityIndex, branchIndex, "status", e.target.value)
+                                    }
+                                  >
+                                    <option value="ACTIVE">Active</option>
+                                    <option value="INACTIVE">Inactive</option>
+                                    <option value="CLOSED">Closed</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-[11px] font-medium text-zinc-500">
+                                  Location (one line per address line, or comma-separated)
+                                </label>
+                                <textarea
+                                  rows={2}
+                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-400/20"
+                                  placeholder={"e.g. 12 Main St\nFloor 3"}
+                                  value={branch.locationText ?? ""}
+                                  onChange={(e) =>
+                                    updateBranchField(cityIndex, branchIndex, "locationText", e.target.value)
+                                  }
+                                />
+                              </div>
+                              <p className="text-[11px] text-zinc-400">
+                                At least one of <strong className="font-medium text-zinc-500">name</strong> or{" "}
+                                <strong className="font-medium text-zinc-500">code</strong> is required to save this
+                                branch.
+                              </p>
                             </div>
                           ))}
                         </div>
                         {loc.branches.length === 0 && (
-                          <p className="py-3 text-center text-xs text-zinc-400">No branches — add at least one label.</p>
+                          <p className="py-3 text-center text-xs text-zinc-400">
+                            No branches — use &quot;Add branch&quot; to define sites (optional until you save).
+                          </p>
                         )}
                       </div>
                     </div>
@@ -590,20 +884,73 @@ export function OrganizationRulesPage() {
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="rounded-lg border border-zinc-200 bg-white p-3 space-y-2">
                         <p className="text-xs font-semibold text-zinc-700">Vacation</p>
-                        <label className="text-xs text-zinc-500">Annual days</label>
-                        <input
-                          type="number"
-                          className="w-full rounded border border-zinc-200 px-2 py-1 text-sm"
-                          value={p.vacationRules?.annualDays ?? 21}
-                          onChange={(e) =>
-                            updateLeavePolicyNested(
-                              idx,
-                              "vacationRules",
-                              "annualDays",
-                              Number(e.target.value),
-                            )
-                          }
-                        />
+                        <label className="flex items-center gap-2 text-xs text-zinc-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-zinc-300"
+                            checked={Boolean(p.vacationRules?.entitlementVariesByYear)}
+                            onChange={(e) =>
+                              updateLeavePolicyNested(
+                                idx,
+                                "vacationRules",
+                                "entitlementVariesByYear",
+                                e.target.checked,
+                              )
+                            }
+                          />
+                          Entitlement differs after first year (from hire date)
+                        </label>
+                        {p.vacationRules?.entitlementVariesByYear ? (
+                          <>
+                            <label className="text-xs text-zinc-500">First year (days)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              className="w-full rounded border border-zinc-200 px-2 py-1 text-sm"
+                              value={p.vacationRules?.firstYearDays ?? 15}
+                              onChange={(e) =>
+                                updateLeavePolicyNested(
+                                  idx,
+                                  "vacationRules",
+                                  "firstYearDays",
+                                  Number(e.target.value),
+                                )
+                              }
+                            />
+                            <label className="text-xs text-zinc-500">After first year (days)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              className="w-full rounded border border-zinc-200 px-2 py-1 text-sm"
+                              value={p.vacationRules?.afterFirstYearDays ?? 21}
+                              onChange={(e) =>
+                                updateLeavePolicyNested(
+                                  idx,
+                                  "vacationRules",
+                                  "afterFirstYearDays",
+                                  Number(e.target.value),
+                                )
+                              }
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <label className="text-xs text-zinc-500">Annual days (everyone)</label>
+                            <input
+                              type="number"
+                              className="w-full rounded border border-zinc-200 px-2 py-1 text-sm"
+                              value={p.vacationRules?.annualDays ?? 21}
+                              onChange={(e) =>
+                                updateLeavePolicyNested(
+                                  idx,
+                                  "vacationRules",
+                                  "annualDays",
+                                  Number(e.target.value),
+                                )
+                              }
+                            />
+                          </>
+                        )}
                         <label className="text-xs text-zinc-500">Max consecutive days</label>
                         <input
                           type="number"

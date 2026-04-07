@@ -28,6 +28,7 @@ import {
 import { PasswordResetRequest } from "../models/PasswordResetRequest.js";
 import { Department } from "../models/Department.js";
 import { Team } from "../models/Team.js";
+import { isAdminRole } from "../utils/roles.js";
 
 const router = Router();
 
@@ -415,7 +416,7 @@ router.put("/:id/status", async (req, res) => {
       return res.status(401).json({ error: "Invalid or expired token" });
     }
 
-    if (!decoded || decoded.role !== "ADMIN") {
+    if (!decoded || !isAdminRole(decoded.role)) {
       return res
         .status(403)
         .json({ error: "Only admins can change user status" });

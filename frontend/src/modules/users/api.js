@@ -1,16 +1,10 @@
 import { fetchWithAuth } from "@/shared/api/fetchWithAuth";
 import { API_URL } from "@/shared/api/apiBase";
-
-function handleResponse(response) {
-  if (!response.ok) {
-    return response.json().then((error) => Promise.reject(error));
-  }
-  return response.json();
-}
+import { handleApiResponse } from "@/shared/api/handleApiResponse";
 
 export async function getUsersApi() {
   const response = await fetchWithAuth(`${API_URL}/users`);
-  return handleResponse(response);
+  return handleApiResponse(response);
 }
 
 export async function updateUserRoleApi(userId, role) {
@@ -19,7 +13,7 @@ export async function updateUserRoleApi(userId, role) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ role }),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 }
 
 export async function createUserApi(payload) {
@@ -28,12 +22,12 @@ export async function createUserApi(payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 }
 
 export async function getPasswordRequestsApi() {
   const response = await fetchWithAuth(`${API_URL}/auth/password-requests`);
-  return handleResponse(response);
+  return handleApiResponse(response);
 }
 
 export async function forceResetPasswordApi(email, newPassword) {
@@ -42,5 +36,5 @@ export async function forceResetPasswordApi(email, newPassword) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ targetEmail: email, newPassword }),
   });
-  return handleResponse(response);
+  return handleApiResponse(response);
 }

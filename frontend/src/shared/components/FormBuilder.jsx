@@ -9,7 +9,7 @@ export function FormBuilder({
   error,
   disabled,
   onCancel,
-  /** Called whenever any field value changes: (fieldName, newValue) => void */
+  /** Called whenever any field value changes: (fieldName, newValue, setValues) => void */
   onChange,
   /** Dev only: `{ getValues, label?, afterFill? }` — button merges returned fields; `afterFill(patch)` runs after apply. */
   devDemoFill,
@@ -80,7 +80,7 @@ export function FormBuilder({
                     const v = event.target.value;
                     setValues((prev) => ({ ...prev, [field.name]: v }));
                     field.onChange?.(v);
-                    onChange?.(field.name, v);
+                    onChange?.(field.name, v, setValues);
                   }}
                 >
                   <option value="">Select...</option>
@@ -107,7 +107,7 @@ export function FormBuilder({
                   onChange={(v) => {
                     setValues((prev) => ({ ...prev, [field.name]: v }));
                     field.onChange?.(v);
-                    onChange?.(field.name, v);
+                    onChange?.(field.name, v, setValues);
                   }}
                 />
               ) : field.type === "radio" ? (
@@ -122,7 +122,7 @@ export function FormBuilder({
                         onChange={(event) => {
                           const v = event.target.value;
                           setValues((prev) => ({ ...prev, [field.name]: v }));
-                          onChange?.(field.name, v);
+                          onChange?.(field.name, v, setValues);
                         }}
                         className="h-4 w-4 border-zinc-300 text-zinc-900 focus:ring-zinc-900"
                         disabled={disabled || field.disabled}
@@ -141,7 +141,7 @@ export function FormBuilder({
                   onChange={(event) => {
                     const v = event.target.value;
                     setValues((prev) => ({ ...prev, [field.name]: v }));
-                    onChange?.(field.name, v);
+                    onChange?.(field.name, v, setValues);
                   }}
                 />
               ) : (
@@ -154,7 +154,7 @@ export function FormBuilder({
                   onChange={(event) => {
                     const v = event.target.value;
                     setValues((prev) => ({ ...prev, [field.name]: v }));
-                    onChange?.(field.name, v);
+                    onChange?.(field.name, v, setValues);
                   }}
                 />
               )}

@@ -1,4 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import { getErrorMessage } from "@/shared/api/handleApiResponse";
 import {
   getTeamsApi,
   getTeamApi,
@@ -16,33 +17,60 @@ const initialState = {
 
 export const fetchTeamsThunk = createAsyncThunk(
   "teams/fetch",
-  async (filters = {}) => getTeamsApi(filters),
+  async (filters = {}, { rejectWithValue }) => {
+    try {
+      return await getTeamsApi(filters);
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, "Failed to load teams"));
+    }
+  },
 );
 
 export const fetchTeamThunk = createAsyncThunk(
   "teams/fetchOne",
-  async (teamId) => getTeamApi(teamId),
+  async (teamId, { rejectWithValue }) => {
+    try {
+      return await getTeamApi(teamId);
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, "Failed to load team"));
+    }
+  },
 );
 
 export const createTeamThunk = createAsyncThunk(
   "teams/create",
-  async (payload) => {
-    const response = await createTeamApi(payload);
-    return response.team || response;
+  async (payload, { rejectWithValue }) => {
+    try {
+      const response = await createTeamApi(payload);
+      return response.team || response;
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, "Failed to create team"));
+    }
   },
 );
 
 export const updateTeamThunk = createAsyncThunk(
   "teams/update",
-  async (payload) => {
-    const response = await updateTeamApi(payload);
-    return response.team || response;
+  async (payload, { rejectWithValue }) => {
+    try {
+      const response = await updateTeamApi(payload);
+      return response.team || response;
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, "Failed to update team"));
+    }
   },
 );
 
 export const deleteTeamThunk = createAsyncThunk(
   "teams/delete",
-  async (teamId) => deleteTeamApi(teamId),
+  async (teamId, { rejectWithValue }) => {
+    try {
+      await deleteTeamApi(teamId);
+      return teamId;
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, "Failed to delete team"));
+    }
+  },
 );
 
 const teamsSlice = createSlice({
@@ -51,6 +79,9 @@ const teamsSlice = createSlice({
   reducers: {
     clearSelectedTeam: (state) => {
       state.selectedTeam = null;
+    },
+    clearTeamsError: (state) => {
+      state.error = null;
     },
   },
   extraReducers: (builder) => {
@@ -65,7 +96,7 @@ const teamsSlice = createSlice({
       })
       .addCase(fetchTeamsThunk.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.error.message;
+        state.error = action.payload || action.error.message;
       })
       .addCase(fetchTeamThunk.pending, (state) => {
         state.isLoading = true;
@@ -74,8 +105,15 @@ const teamsSlice = createSlice({
         state.selectedTeam = action.payload;
         state.isLoading = false;
       })
+      .addCase(fetchTeamThunk.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload || action.error.message;
+      })
       .addCase(createTeamThunk.fulfilled, (state, action) => {
         state.items.unshift(action.payload);
+      })
+      .addCase(createTeamThunk.rejected, (state, action) => {
+        state.error = action.payload || action.error.message;
       })
       .addCase(updateTeamThunk.fulfilled, (state, action) => {
         state.items = state.items.map((item) =>
@@ -83,11 +121,17 @@ const teamsSlice = createSlice({
         );
         state.selectedTeam = action.payload;
       })
+      .addCase(updateTeamThunk.rejected, (state, action) => {
+        state.error = action.payload || action.error.message;
+      })
       .addCase(deleteTeamThunk.fulfilled, (state, action) => {
-        state.items = state.items.filter((item) => item.id !== action.meta.arg);
+        state.items = state.items.filter((item) => item.id !== action.payload);
+      })
+      .addCase(deleteTeamThunk.rejected, (state, action) => {
+        state.error = action.payload || action.error.message;
       });
   },
 });
 
-export const { clearSelectedTeam } = teamsSlice.actions;
+export const { clearSelectedTeam, clearTeamsError } = teamsSlice.actions;
 export const teamsReducer = teamsSlice.reducer;
