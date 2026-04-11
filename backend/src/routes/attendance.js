@@ -11,18 +11,22 @@ import { Team } from "../models/Team.js";
 import { requireAuth } from "../middleware/auth.js";
 import mongoose from "mongoose";
 import { createAuditLog } from "../services/auditService.js";
-import { isAdminRole, isHrOrAdmin } from "../utils/roles.js";
+import { normalizeRole, ROLE } from "../utils/roles.js";
 import {
   parseTimeToMinutes,
   excuseCoversLateCheckIn,
+  computeMidDayExcuseCredit,
 } from "../utils/excuseAttendance.js";
+import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
+import { computeMonthlyAnalysis } from "../services/attendanceAnalysisService.js";
+import { mapSummaryForMonthlyReportApi } from "../utils/monthlyReportPublicDto.js";
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const upload = multer({ storage: multer.memoryStorage() });
 
 /**
- * Helper to parse various time formats (String "HH:mm", "HH:mm:ss", "HH:mm AM/PM", or Date object).
+ ** Helper to parse various time formats (String "HH:mm", "HH:mm:ss", "HH:mm AM/PM", or Date object).
  */
 const parseTime = (timeStr) => {
   if (timeStr === undefined || timeStr === null || timeStr === "") return null;
@@ -61,34 +65,46 @@ const parseTime = (timeStr) => {
 };
 
 /**
- * Calculates total work hours and attendance status based on times and department policy.
- * @param {string} checkIn - "HH:mm" or "HH:mm:ss"
- * @param {string} checkOut - "HH:mm" or "HH:mm:ss"
- * @param {Object} policy - { standardStartTime: "HH:mm", gracePeriod: Number }
+ * Calculates total work hours and attendance status based on times and policy.
+ * @param {string} checkIn
+ * @param {string} checkOut
+ * @param {Object} policy - { standardStartTime, standardEndTime, gracePeriod }
  */
 const calculateStatus = (
   checkIn,
   checkOut,
-  policy = { standardStartTime: "09:00", gracePeriod: 15 },
+  policy = { standardStartTime: "09:00", standardEndTime: "17:00", gracePeriod: 15 },
 ) => {
   const t1 = parseTime(checkIn);
   const t2 = parseTime(checkOut);
   const shiftStart = parseTime(policy.standardStartTime || "09:00");
+  const shiftEnd = parseTime(policy.standardEndTime || "17:00");
   const graceMinutes = policy.gracePeriod ?? 15;
+
+  const format24h = (t) => {
+    if (!t) return null;
+    return `${t.h.toString().padStart(2, "0")}:${t.m.toString().padStart(2, "0")}:${t.s.toString().padStart(2, "0")}`;
+  };
+
+  if (t1 && !t2) {
+    return {
+      t1, t2: null, totalHours: 0, status: "INCOMPLETE",
+      checkInStr: format24h(t1), checkOutStr: null,
+    };
+  }
 
   const totalHours =
     t1 && t2
       ? parseFloat(
           (
-            t2.h +
-            t2.m / 60 +
-            t2.s / 3600 -
+            t2.h + t2.m / 60 + t2.s / 3600 -
             (t1.h + t1.m / 60 + t1.s / 3600)
           ).toFixed(2),
         )
       : 0;
 
   let status = "PRESENT";
+
   if (t1 && shiftStart) {
     const checkInMinutes = t1.h * 60 + t1.m;
     const limitMinutes = shiftStart.h * 60 + shiftStart.m + graceMinutes;
@@ -97,19 +113,17 @@ const calculateStatus = (
     }
   }
 
-  // Format to 24-hour HH:MM:SS
-  const format24h = (t) => {
-    if (!t) return null;
-    return `${t.h.toString().padStart(2, "0")}:${t.m.toString().padStart(2, "0")}:${t.s.toString().padStart(2, "0")}`;
-  };
+  if (status === "PRESENT" && t2 && shiftEnd) {
+    const checkOutMinutes = t2.h * 60 + t2.m;
+    const endMinutes = shiftEnd.h * 60 + shiftEnd.m;
+    if (checkOutMinutes < endMinutes) {
+      status = "EARLY_DEPARTURE";
+    }
+  }
 
   return {
-    t1,
-    t2,
-    totalHours,
-    status,
-    checkInStr: format24h(t1),
-    checkOutStr: format24h(t2),
+    t1, t2, totalHours, status,
+    checkInStr: format24h(t1), checkOutStr: format24h(t2),
   };
 };
 
@@ -145,30 +159,113 @@ async function findApprovedExcuseCoveringLate(
     const es = parseTimeToMinutes(ex.startTime);
     const ee = parseTimeToMinutes(ex.endTime);
     if (es == null || ee == null) continue;
-    if (
-      excuseCoversLateCheckIn(
-        checkInMin,
-        es,
-        ee,
-        shiftStartMin,
-        grace,
-      )
-    ) {
-      return ex._id;
+    const coversCheckIn = excuseCoversLateCheckIn(checkInMin, es, ee, shiftStartMin, grace);
+    const coversShiftStart = ee > shiftStartMin;
+    if (coversCheckIn || coversShiftStart) {
+      return ex;
     }
   }
   return null;
 }
 
+/**
+ * For a specific day, resolve approved absence coverage:
+ * - Approved VACATION covering that day => ON_LEAVE
+ * - Approved EXCUSE on that day without time window => EXCUSED (full-day excuse)
+ */
+async function findApprovedLeaveCoverage(employeeId, normalizedDate) {
+  const dayStart = new Date(normalizedDate);
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+  const vacation = await LeaveRequest.findOne({
+    employeeId,
+    kind: "VACATION",
+    status: "APPROVED",
+    startDate: { $lt: dayEnd },
+    endDate: { $gte: dayStart },
+  })
+    .select("_id")
+    .lean();
+  if (vacation?._id) {
+    return { status: "ON_LEAVE", leaveRequestId: vacation._id };
+  }
+
+  const excuse = await LeaveRequest.findOne({
+    employeeId,
+    kind: "EXCUSE",
+    status: "APPROVED",
+    excuseDate: { $gte: dayStart, $lt: dayEnd },
+  })
+    .select("_id startTime endTime")
+    .lean();
+  if (excuse?._id && !excuse.startTime && !excuse.endTime) {
+    return { status: "EXCUSED", leaveRequestId: excuse._id };
+  }
+
+  return null;
+}
+
+/**
+ * Resolve global attendance policy from OrganizationPolicy,
+ * falling back to system defaults.
+ */
+async function resolveAttendancePolicy() {
+  try {
+    const orgPolicy = await OrganizationPolicy.findOne({ name: "default" }).lean();
+    const ar = orgPolicy?.attendanceRules;
+    if (ar && ar.standardStartTime) {
+      return {
+        standardStartTime: ar.standardStartTime,
+        standardEndTime: ar.standardEndTime || "17:00",
+        gracePeriod: ar.gracePeriodMinutes ?? 15,
+      };
+    }
+  } catch (_) { /* fall through to system defaults */ }
+  return {
+    standardStartTime: "09:00",
+    standardEndTime: "17:00",
+    gracePeriod: 15,
+  };
+}
+
+/**
+ * Find approved mid-day excuses for a date and compute credited minutes.
+ * Also returns whether the excuse covers through end of day.
+ */
+async function resolveMidDayExcuseCredit(employeeId, normalizedDate, policy) {
+  const shiftStartMin = parseTimeToMinutes(policy.standardStartTime || "09:00");
+  const shiftEndMin = parseTimeToMinutes(policy.standardEndTime || "17:00");
+  const grace = policy.gracePeriod ?? 15;
+  if (shiftStartMin == null || shiftEndMin == null) {
+    return { creditMinutes: 0, coversEndOfDay: false };
+  }
+
+  const dayStart = new Date(normalizedDate);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+  const excuses = await LeaveRequest.find({
+    employeeId,
+    kind: "EXCUSE",
+    status: "APPROVED",
+    excuseDate: { $gte: dayStart, $lt: dayEnd },
+  }).lean();
+
+  if (excuses.length === 0) return { creditMinutes: 0, coversEndOfDay: false };
+  return computeMidDayExcuseCredit(excuses, shiftStartMin, shiftEndMin, grace);
+}
+
 async function resolveAttendanceAccess(user) {
-  if (isHrOrAdmin(user)) {
+  const role = normalizeRole(user.role);
+  if (role === ROLE.ADMIN || role === ROLE.HR_MANAGER || role === ROLE.HR_STAFF) {
     return {
       scope: "all",
       actions: ["view", "create", "edit", "delete", "import"],
     };
   }
 
-  // HR Head check — use code first, fallback to name
   const hrDept = await Department.findOne({ code: "HR" })
     || await Department.findOne({ name: "HR" });
   if (hrDept && hrDept.head === user.email) {
@@ -178,9 +275,8 @@ async function resolveAttendanceAccess(user) {
     };
   }
 
-  // Department Head check
   const isDeptHead = await Department.findOne({ head: user.email });
-  if (isDeptHead || user.role === "MANAGER" || user.role === 2) {
+  if (isDeptHead || role === ROLE.MANAGER) {
     return { scope: "department", actions: ["view", "edit"] };
   }
 
@@ -202,6 +298,43 @@ async function resolveAttendanceAccess(user) {
   }
 
   return { scope: "self", actions: ["view"] };
+}
+
+function validateReportPeriodParams(req, res) {
+  const now = new Date();
+  const rawYear = req.query.year;
+  const rawMonth = req.query.month;
+
+  const year =
+    rawYear === undefined ? now.getUTCFullYear() : Number.parseInt(rawYear, 10);
+  const month =
+    rawMonth === undefined
+      ? now.getUTCMonth() + 1
+      : Number.parseInt(rawMonth, 10);
+
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    res
+      .status(400)
+      .json({ error: "Invalid year. Expected an integer between 2000 and 2100." });
+    return null;
+  }
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    res
+      .status(400)
+      .json({ error: "Invalid month. Expected an integer between 1 and 12." });
+    return null;
+  }
+
+  return { year, month };
+}
+
+function canAccessMonthlyAttendanceReport(user) {
+  const role = normalizeRole(user?.role);
+  return (
+    role === ROLE.ADMIN ||
+    role === ROLE.HR_STAFF ||
+    role === ROLE.HR_MANAGER
+  );
 }
 
 router.get("/", requireAuth, async (req, res) => {
@@ -268,7 +401,21 @@ router.get("/", requireAuth, async (req, res) => {
         filter.date = latestDate;
       }
     }
-    if (employeeId) filter.employeeId = employeeId;
+    if (employeeId) {
+      if (access.scope === "self" && String(employeeId) !== String(req.user.id)) {
+        return res.status(403).json({ error: "Forbidden: Cannot view other employees" });
+      }
+      if (access.scope !== "all") {
+        const scopedIds = filter.employeeId?.$in;
+        if (scopedIds) {
+          const allowed = scopedIds.some((id) => String(id) === String(employeeId));
+          if (!allowed) {
+            return res.status(403).json({ error: "Forbidden: Employee not in your scope" });
+          }
+        }
+      }
+      filter.employeeId = employeeId;
+    }
     if (employeeCode) {
       filter.employeeCode = { $regex: employeeCode, $options: "i" };
     }
@@ -346,7 +493,7 @@ router.post("/", requireAuth, async (req, res) => {
   try {
     const access = await resolveAttendanceAccess(req.user);
     if (!access.actions.includes("create"))
-      return res.status(403).json({ error: "Forbidden" });
+      return res.status(403).json({ error: "Cannot create attendance" });
 
     const {
       employeeId,
@@ -355,7 +502,8 @@ router.post("/", requireAuth, async (req, res) => {
       checkOut,
       status: manualStatus,
       remarks,
-    } = req.body;
+    } = req.body || {};
+
     if (!employeeId || !date)
       return res.status(400).json({ error: "Employee and Date are required" });
 
@@ -375,27 +523,51 @@ router.post("/", requireAuth, async (req, res) => {
       await Employee.findById(employeeId).populate("departmentId");
     if (!employee) return res.status(404).json({ error: "Employee not found" });
 
-    // Policy lookup
-    const dept = employee.departmentId;
-    const policy = {
-      standardStartTime: dept?.standardStartTime || "09:00",
-      gracePeriod: dept?.gracePeriod ?? 15,
-    };
-
+    const policy = await resolveAttendancePolicy();
     const calc = calculateStatus(checkIn, checkOut, policy);
 
     let recordStatus = manualStatus || calc.status;
     let excuseLeaveRequestId;
-    if (!manualStatus && recordStatus === "LATE" && calc.checkInStr) {
-      const exId = await findApprovedExcuseCoveringLate(
-        employeeId,
-        normalizedDate,
-        calc.checkInStr,
-        policy,
+    let leaveRequestId;
+    let onApprovedLeave = false;
+    let originalStatus;
+    let excusedMinutes = 0;
+    let excessExcuse = false;
+    let excessExcuseFraction = 0;
+
+    if (recordStatus === "LATE" && calc.checkInStr) {
+      const excuseDoc = await findApprovedExcuseCoveringLate(
+        employeeId, normalizedDate, calc.checkInStr, policy,
       );
-      if (exId) {
+      if (excuseDoc) {
+        originalStatus = recordStatus;
         recordStatus = "EXCUSED";
-        excuseLeaveRequestId = exId;
+        excuseLeaveRequestId = excuseDoc._id;
+        excusedMinutes = excuseDoc.computed?.minutes || 0;
+        if (excuseDoc.quotaExceeded && excuseDoc.excessDeductionMethod === "SALARY") {
+          excessExcuse = true;
+          const hoursPerDay = 8;
+          excessExcuseFraction = excuseDoc.excessDeductionAmount
+            || (excusedMinutes / (hoursPerDay * 60));
+        }
+      }
+    }
+
+    const midDay = await resolveMidDayExcuseCredit(employeeId, normalizedDate, policy);
+    if (midDay.creditMinutes > 0 && !excuseLeaveRequestId) {
+      excusedMinutes = midDay.creditMinutes;
+    }
+    if (recordStatus === "EARLY_DEPARTURE" && midDay.coversEndOfDay) {
+      recordStatus = "PRESENT";
+    }
+
+    if (recordStatus === "ABSENT") {
+      const covered = await findApprovedLeaveCoverage(employeeId, normalizedDate);
+      if (covered) {
+        originalStatus = recordStatus;
+        recordStatus = covered.status;
+        leaveRequestId = covered.leaveRequestId;
+        onApprovedLeave = true;
       }
     }
 
@@ -407,19 +579,23 @@ router.post("/", requireAuth, async (req, res) => {
       checkOut: calc.checkOutStr,
       status: recordStatus,
       totalHours: calc.totalHours,
+      excusedMinutes,
+      leaveRequestId: leaveRequestId || null,
+      onApprovedLeave,
+      originalStatus: originalStatus || undefined,
       remarks,
       lastManagedBy: req.user.id,
+      excessExcuse,
+      excessExcuseFraction,
       ...(excuseLeaveRequestId
-        ? {
-            excuseLeaveRequestId,
-            excuseCovered: true,
-          }
+        ? { excuseLeaveRequestId, excuseCovered: true }
         : {}),
     });
 
     await newRecord.save();
     res.status(201).json(newRecord);
   } catch (error) {
+    console.error("POST /attendance create error:", error);
     res.status(500).json({ error: "Failed to create attendance" });
   }
 });
@@ -437,6 +613,130 @@ router.get("/template", requireAuth, (req, res) => {
   }
 });
 
+// ─── Monthly Analysis & Report (must be before /:id to avoid param capture) ──
+
+/** Full computeMonthlyAnalysis payload (includes salary-style fields). Prefer `/monthly-report` for HR UI exports without EGP. */
+router.get("/monthly-analysis", requireAuth, async (req, res) => {
+  try {
+    if (!canAccessMonthlyAttendanceReport(req.user)) {
+      return res
+        .status(403)
+        .json({ error: "Forbidden: monthly report is available for HR/Admin only" });
+    }
+    const parsed = validateReportPeriodParams(req, res);
+    if (!parsed) return;
+    const { year, month } = parsed;
+    const departmentId = req.query.departmentId || undefined;
+    const result = await computeMonthlyAnalysis(year, month, departmentId, {
+      includeDetails: true,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error("GET /attendance/monthly-analysis error:", error.message);
+    res.status(500).json({ error: "Failed to compute monthly analysis" });
+  }
+});
+
+/** Attendance-focused summary: deduction amounts in days only; `approvedOvertimeUnits` from assessments; no net salary. */
+router.get("/monthly-report", requireAuth, async (req, res) => {
+  try {
+    if (!canAccessMonthlyAttendanceReport(req.user)) {
+      return res
+        .status(403)
+        .json({ error: "Forbidden: monthly report is available for HR/Admin only" });
+    }
+    const parsed = validateReportPeriodParams(req, res);
+    if (!parsed) return;
+    const { year, month } = parsed;
+    const departmentId = req.query.departmentId || undefined;
+    const includeDetail = req.query.detail === "true";
+    const result = await computeMonthlyAnalysis(year, month, departmentId, {
+      includeDetails: includeDetail,
+    });
+    const payload = {
+      period: result.period,
+      policySnapshot: result.policySnapshot,
+      summary: result.summary.map(mapSummaryForMonthlyReportApi),
+    };
+    if (includeDetail) payload.details = result.details;
+    res.json(payload);
+  } catch (error) {
+    console.error("GET /attendance/monthly-report error:", error.message);
+    res.status(500).json({ error: "Failed to generate monthly report" });
+  }
+});
+
+router.get("/monthly-report/export", requireAuth, async (req, res) => {
+  try {
+    if (!canAccessMonthlyAttendanceReport(req.user)) {
+      return res
+        .status(403)
+        .json({ error: "Forbidden: monthly report is available for HR/Admin only" });
+    }
+    const parsed = validateReportPeriodParams(req, res);
+    if (!parsed) return;
+    const { year, month } = parsed;
+    const departmentId = req.query.departmentId || undefined;
+    const result = await computeMonthlyAnalysis(year, month, departmentId, {
+      includeDetails: true,
+    });
+
+    const summaryRows = result.summary.map((s) => ({
+      "Employee Code": s.employeeCode,
+      "Full Name": s.fullName,
+      "Department": s.department,
+      "Working Days": s.workingDays,
+      "Present": s.presentDays,
+      "Late": s.lateDays,
+      "Absent": s.absentDays,
+      "On Leave": s.onLeaveDays,
+      "Paid Leave": s.paidLeaveDays,
+      "Unpaid Leave": s.unpaidLeaveDays,
+      "Excused": s.excusedDays,
+      "Early Departure": s.earlyDepartureDays,
+      "Incomplete": s.incompleteDays,
+      "Total Hours": s.totalHoursWorked,
+      "Avg Daily Hours": s.avgDailyHours,
+      "Late Deduction (Days)": s.deductions.lateDays,
+      "Absence Deduction (Days)": s.deductions.absenceDays,
+      "Unpaid Leave Deduction (Days)": s.deductions.unpaidLeaveDays,
+      "Early Dept Deduction (Days)": s.deductions.earlyDepartureDays,
+      "Incomplete Deduction (Days)": s.deductions.incompleteDays,
+      "Total Deduction (Days)": s.deductions.totalDeductionDays,
+      "Net Effective Days": s.netEffectiveDays,
+      "Approved overtime (units)": s.assessmentApprovedOvertimeUnits ?? 0,
+    }));
+
+    const detailRows = [];
+    for (const emp of result.details) {
+      for (const day of emp.days) {
+        detailRows.push({
+          "Employee Code": emp.employeeCode, "Full Name": emp.fullName,
+          "Department": emp.department, "Date": day.date, "Status": day.status,
+          "Check In": day.checkIn || "", "Check Out": day.checkOut || "",
+          "Raw Hours": day.rawHours, "Excused Min": day.excusedMinutes,
+          "Effective Hours": Math.round(day.effectiveHours * 100) / 100,
+          "Deduction": day.deduction, "Notes": day.notes.join("; "),
+        });
+      }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Summary");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailRows), "Daily Detail");
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const filename = `Attendance_Report_${year}-${String(month).padStart(2, "0")}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(Buffer.from(buf));
+  } catch (error) {
+    console.error("GET /attendance/monthly-report/export error:", error.message);
+    res.status(500).json({ error: "Failed to export report" });
+  }
+});
+
+// ─── CRUD with :id param ─────────────────────────────────────────────────────
+
 router.put("/:id", requireAuth, async (req, res) => {
   try {
     const access = await resolveAttendanceAccess(req.user);
@@ -449,22 +749,7 @@ router.put("/:id", requireAuth, async (req, res) => {
     if (!existing)
       return res.status(404).json({ error: "Record not found" });
 
-    let policy = { standardStartTime: "09:00", gracePeriod: 15 };
-    try {
-      const emp = await Employee.findById(existing.employeeId).populate(
-        "departmentId",
-      );
-      const dept = emp?.departmentId;
-      if (dept) {
-        policy = {
-          standardStartTime: dept.standardStartTime || "09:00",
-          gracePeriod: dept.gracePeriod ?? 15,
-        };
-      }
-    } catch (_) {
-      /* keep defaults */
-    }
-
+    const policy = await resolveAttendancePolicy();
     const calc = calculateStatus(checkIn, checkOut, policy);
 
     let dateForExcuse = existing.date;
@@ -476,25 +761,66 @@ router.put("/:id", requireAuth, async (req, res) => {
 
     let recordStatus = manualStatus || calc.status;
     let excuseLeaveRequestId = existing.excuseLeaveRequestId;
-    if (!manualStatus && recordStatus === "LATE" && calc.checkInStr) {
-      const exId = await findApprovedExcuseCoveringLate(
-        existing.employeeId,
-        dateForExcuse,
-        calc.checkInStr,
-        policy,
+    let leaveRequestId = existing.leaveRequestId;
+    let onApprovedLeave = Boolean(existing.onApprovedLeave);
+    let originalStatus = existing.originalStatus;
+    let excusedMinutes = 0;
+    let excessExcuse = Boolean(existing.excessExcuse);
+    let excessExcuseFraction = existing.excessExcuseFraction || 0;
+
+    if (recordStatus === "LATE" && calc.checkInStr) {
+      const excuseDoc = await findApprovedExcuseCoveringLate(
+        existing.employeeId, dateForExcuse, calc.checkInStr, policy,
       );
-      if (exId) {
+      if (excuseDoc) {
+        originalStatus = recordStatus;
         recordStatus = "EXCUSED";
-        excuseLeaveRequestId = exId;
+        excuseLeaveRequestId = excuseDoc._id;
+        excusedMinutes = excuseDoc.computed?.minutes || 0;
+        if (excuseDoc.quotaExceeded && excuseDoc.excessDeductionMethod === "SALARY") {
+          excessExcuse = true;
+          const hoursPerDay = 8;
+          excessExcuseFraction = excuseDoc.excessDeductionAmount
+            || (excusedMinutes / (hoursPerDay * 60));
+        } else {
+          excessExcuse = false;
+          excessExcuseFraction = 0;
+        }
       } else {
         excuseLeaveRequestId = undefined;
-      }
-    } else if (manualStatus) {
-      if (recordStatus !== "EXCUSED") {
-        excuseLeaveRequestId = undefined;
+        excessExcuse = false;
+        excessExcuseFraction = 0;
       }
     } else if (recordStatus !== "LATE" && recordStatus !== "EXCUSED") {
       excuseLeaveRequestId = undefined;
+      excessExcuse = false;
+      excessExcuseFraction = 0;
+    }
+
+    const midDay = await resolveMidDayExcuseCredit(existing.employeeId, dateForExcuse, policy);
+    if (midDay.creditMinutes > 0 && !excuseLeaveRequestId) {
+      excusedMinutes = midDay.creditMinutes;
+    }
+    if (recordStatus === "EARLY_DEPARTURE" && midDay.coversEndOfDay) {
+      recordStatus = "PRESENT";
+    }
+
+    if (recordStatus === "ABSENT") {
+      const covered = await findApprovedLeaveCoverage(existing.employeeId, dateForExcuse);
+      if (covered) {
+        originalStatus = "ABSENT";
+        recordStatus = covered.status;
+        leaveRequestId = covered.leaveRequestId;
+        onApprovedLeave = true;
+      } else {
+        leaveRequestId = null;
+        onApprovedLeave = false;
+        originalStatus = undefined;
+      }
+    } else if (recordStatus !== "ON_LEAVE" && recordStatus !== "EXCUSED") {
+      leaveRequestId = null;
+      onApprovedLeave = false;
+      originalStatus = undefined;
     }
 
     const updateData = {
@@ -502,10 +828,16 @@ router.put("/:id", requireAuth, async (req, res) => {
       checkOut: calc.checkOutStr,
       totalHours: calc.totalHours,
       status: recordStatus,
+      excusedMinutes,
       remarks,
       lastManagedBy: req.user.id,
       excuseLeaveRequestId: excuseLeaveRequestId || null,
       excuseCovered: Boolean(excuseLeaveRequestId),
+      leaveRequestId: leaveRequestId || null,
+      onApprovedLeave,
+      originalStatus: originalStatus || undefined,
+      excessExcuse,
+      excessExcuseFraction,
     };
 
     if (date) {
@@ -539,8 +871,8 @@ router.delete("/bulk", requireAuth, async (req, res) => {
         .json({ error: "No IDs provided for bulk deletion" });
     }
 
-    // Role check (Admin/HR only)
-    if (!isHrOrAdmin(req.user)) {
+    const bulkRole = normalizeRole(req.user.role);
+    if (bulkRole !== ROLE.ADMIN && bulkRole !== ROLE.HR_MANAGER && bulkRole !== ROLE.HR_STAFF) {
       return res
         .status(403)
         .json({ error: "Forbidden: Only Admin/HR can bulk delete." });
@@ -737,173 +1069,257 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
     console.log(`[IMPORT] Starting import - Overwrite: ${overwrite}`);
     console.log(`[IMPORT] Processing ${data.length} rows...`);
 
+    // --- Phase 0b: pre-group rows by (code + date) to merge multiple punches ---
+    const parseCode = (raw) => {
+      let code = (raw ?? "").toString().trim();
+      if (code && code.includes("-")) {
+        const m = code.match(/^(#[A-Z0-9]+)/i);
+        if (m) code = m[1];
+      } else if (code && code.startsWith("#")) {
+        code = code.split(" ")[0];
+      }
+      return code;
+    };
+
+    const parseExcelDate = (rawDate) => {
+      if (rawDate == null || rawDate === "") return null;
+      let d;
+      if (typeof rawDate === "number") {
+        d = new Date((rawDate - 25569) * 86400 * 1000);
+      } else {
+        d = new Date(rawDate);
+      }
+      if (isNaN(d.getTime())) return null;
+      d.setUTCHours(0, 0, 0, 0);
+      return d;
+    };
+
+    const timeToMinutes = (t) => {
+      const p = parseTime(t);
+      if (!p) return null;
+      return p.h * 60 + p.m + p.s / 60;
+    };
+
+    /** Grouped rows: key = "code|dateISO", value = { code, date, punches[] } */
+    const grouped = new Map();
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
-      let code = row[codeHeader]?.toString().trim();
+      const code = parseCode(row[codeHeader]);
       const rawDate = row[dateHeader];
-      const checkInStr = row[checkInHeader];
-      const checkOutStr = row[checkOutHeader];
+      const cin = row[checkInHeader];
+      const cout = row[checkOutHeader];
 
-      // Real Data parsing: If code contains a hyphen (e.g. #CODE-Name), extract only the code
-      if (code && code.includes("-")) {
-        const match = code.match(/^(#[A-Z0-9]+)/i);
-        if (match) code = match[1];
-      } else if (code && code.startsWith("#")) {
-        code = code.split(" ")[0]; // Handle "#CODE Name"
-      }
+      if (!code) { errors.push(`Row ${i + 2}: Employee Code is empty`); skipped++; continue; }
+      if (!rawDate) { errors.push(`Row ${i + 2}: Date is empty for ${code}`); skipped++; continue; }
 
-      // Validate required fields
-      if (!code) {
-        errors.push(`Row ${i + 2}: Employee Code is empty`);
-        skipped++;
-        continue;
-      }
-      if (!rawDate) {
-        errors.push(`Row ${i + 2}: Date is empty for employee ${code}`);
-        skipped++;
-        continue;
-      }
-      if (!checkInStr) {
-        errors.push(`Row ${i + 2}: Check In time is empty for ${code}`);
-        skipped++;
-        continue;
-      }
-      if (!checkOutStr) {
-        errors.push(`Row ${i + 2}: Check Out time is empty for ${code}`);
+      const date = parseExcelDate(rawDate);
+      if (!date) {
+        errors.push(`Row ${i + 2}: Invalid date "${rawDate}" for ${code}`);
         skipped++;
         continue;
       }
 
-      // Parse date - handle both Excel date serial and text formats
-      let date;
-      if (typeof rawDate === "number") {
-        // Excel serial date (number of days since Jan 1, 1900)
-        date = new Date((rawDate - 25569) * 86400 * 1000);
-      } else {
-        date = new Date(rawDate);
-      }
-
-      if (isNaN(date.getTime())) {
-        errors.push(
-          `Row ${i + 2}: Invalid date format "${rawDate}" for employee ${code}. Use YYYY-MM-DD`,
-        );
+      if (!cin && !cout) {
+        errors.push(`Row ${i + 2}: Both check-in and check-out are empty for ${code}`);
         skipped++;
         continue;
       }
 
-      // Normalize date to UTC midnight
-      date.setUTCHours(0, 0, 0, 0);
+      const key = `${code}|${date.toISOString()}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, { code, date, punches: [] });
+      }
+      grouped.get(key).punches.push({ cin, cout, rowNum: i + 2 });
+    }
 
-      // Find employee with department
-      const employee = await Employee.findOne({
+    // Employee cache to avoid repeated DB lookups
+    const empCache = new Map();
+    async function resolveEmployee(code) {
+      if (empCache.has(code)) return empCache.get(code);
+      let emp = await Employee.findOne({
         $or: [{ employeeCode: code }, { email: code }],
       }).populate("departmentId");
+      // Phase 0d: fallback to transfer history if current code not found
+      if (!emp) {
+        emp = await Employee.findOne({
+          "transferHistory.previousEmployeeCode": code,
+        }).populate("departmentId");
+        if (emp) {
+          console.log(`[IMPORT] Resolved old code ${code} -> current ${emp.employeeCode}`);
+        }
+      }
+      empCache.set(code, emp || null);
+      return emp || null;
+    }
 
+    for (const [, group] of grouped) {
+      const { code, date, punches } = group;
+
+      const employee = await resolveEmployee(code);
       if (!employee) {
-        errors.push(
-          `Row ${i + 2}: Employee with code/email "${code}" not found in database`,
-        );
-        skipped++;
+        errors.push(`${code}: Employee not found in database`);
+        skipped += punches.length;
         continue;
       }
 
-      // Check existing record if not overwriting
       if (!overwrite) {
-        const existing = await Attendance.findOne({
-          employeeId: employee._id,
-          date,
-        });
+        const existing = await Attendance.findOne({ employeeId: employee._id, date });
         if (existing) {
-          errors.push(
-            `Row ${i + 2}: Record already exists for ${code} on ${date.toDateString()}`,
-          );
-          skipped++;
+          errors.push(`${code} on ${date.toDateString()}: Record already exists`);
+          skipped += punches.length;
           continue;
         }
       }
 
-      // Policy lookup
-      const dept = employee.departmentId;
-      const policy = {
-        standardStartTime: dept?.standardStartTime || "09:00",
-        gracePeriod: dept?.gracePeriod ?? 15,
-      };
+      // Merge multiple punches: earliest check-in, latest check-out
+      let earliestIn = null;
+      let latestOut = null;
+      for (const p of punches) {
+        const cinMin = p.cin ? timeToMinutes(p.cin) : null;
+        const coutMin = p.cout ? timeToMinutes(p.cout) : null;
+        if (cinMin != null && (earliestIn == null || cinMin < earliestIn.min)) {
+          earliestIn = { min: cinMin, raw: p.cin };
+        }
+        if (coutMin != null && (latestOut == null || coutMin > latestOut.min)) {
+          latestOut = { min: coutMin, raw: p.cout };
+        }
+      }
 
-      // Calculate status
-      const calc = calculateStatus(checkInStr, checkOutStr, policy);
-      if (!calc.checkInStr || !calc.checkOutStr) {
-        errors.push(
-          `Row ${i + 2}: Invalid time format. Expected HH:MM format for ${code}`,
-        );
-        skipped++;
+      const mergedCheckIn = earliestIn?.raw ?? null;
+      const mergedCheckOut = latestOut?.raw ?? null;
+
+      if (!mergedCheckIn && !mergedCheckOut) {
+        errors.push(`${code} on ${date.toDateString()}: No valid times after merge`);
+        skipped += punches.length;
+        continue;
+      }
+
+      const policy = await resolveAttendancePolicy();
+      const calc = calculateStatus(mergedCheckIn, mergedCheckOut, policy);
+
+      if (!calc.checkInStr) {
+        errors.push(`${code} on ${date.toDateString()}: Invalid check-in time`);
+        skipped += punches.length;
         continue;
       }
 
       let impStatus = calc.status;
       let impExcuseId;
+      let impLeaveRequestId = null;
+      let impOnApprovedLeave = false;
+      let impOriginalStatus;
+      let excusedMinutes = 0;
+      let impExcessExcuse = false;
+      let impExcessExcuseFraction = 0;
+
       if (impStatus === "LATE" && calc.checkInStr) {
-        const exId = await findApprovedExcuseCoveringLate(
-          employee._id,
-          date,
-          calc.checkInStr,
-          policy,
+        const excuseDoc = await findApprovedExcuseCoveringLate(
+          employee._id, date, calc.checkInStr, policy,
         );
-        if (exId) {
+        if (excuseDoc) {
+          impOriginalStatus = impStatus;
           impStatus = "EXCUSED";
-          impExcuseId = exId;
+          impExcuseId = excuseDoc._id;
+          excusedMinutes = excuseDoc.computed?.minutes || 0;
+          if (excuseDoc.quotaExceeded && excuseDoc.excessDeductionMethod === "SALARY") {
+            impExcessExcuse = true;
+            impExcessExcuseFraction = excuseDoc.excessDeductionAmount
+              || (excusedMinutes / (8 * 60));
+          }
+        }
+      }
+
+      const midDay = await resolveMidDayExcuseCredit(employee._id, date, policy);
+      if (midDay.creditMinutes > 0 && !impExcuseId) {
+        excusedMinutes = midDay.creditMinutes;
+      }
+      if (impStatus === "EARLY_DEPARTURE" && midDay.coversEndOfDay) {
+        impStatus = "PRESENT";
+      }
+
+      if (impStatus === "ABSENT") {
+        const covered = await findApprovedLeaveCoverage(employee._id, date);
+        if (covered) {
+          impOriginalStatus = "ABSENT";
+          impStatus = covered.status;
+          impLeaveRequestId = covered.leaveRequestId;
+          impOnApprovedLeave = true;
         }
       }
 
       try {
+        const existingProtectedRow = await Attendance.findOne({
+          employeeId: employee._id,
+          date,
+          $or: [
+            { leaveRequestId: { $ne: null }, status: "ON_LEAVE" },
+            { excuseLeaveRequestId: { $ne: null }, status: "EXCUSED" },
+          ],
+        }).select("_id status").lean();
+        if (existingProtectedRow) {
+          skipped += punches.length;
+          logs.push({ code: employee.employeeCode, date: date.toDateString(), status: "SKIPPED", note: `Preserved leave-synced ${existingProtectedRow.status} row` });
+          continue;
+        }
+
         await Attendance.findOneAndUpdate(
           { employeeId: employee._id, date },
           {
             employeeId: employee._id,
-            employeeCode: code,
+            employeeCode: employee.employeeCode,
             date,
             checkIn: calc.checkInStr,
             checkOut: calc.checkOutStr,
             status: impStatus,
             totalHours: calc.totalHours,
+            excusedMinutes,
+            rawPunches: punches.length,
             lastManagedBy: req.user.id,
+            excessExcuse: impExcessExcuse,
+            excessExcuseFraction: impExcessExcuseFraction,
             ...(impExcuseId
               ? { excuseLeaveRequestId: impExcuseId, excuseCovered: true }
               : { excuseLeaveRequestId: null, excuseCovered: false }),
+            leaveRequestId: impLeaveRequestId,
+            onApprovedLeave: impOnApprovedLeave,
+            originalStatus: impOriginalStatus || undefined,
           },
           { upsert: true },
         );
+        const mergeNote = punches.length > 1 ? ` (merged ${punches.length} rows)` : "";
         logs.push({
-          code,
+          code: employee.employeeCode,
           date: date.toDateString(),
           status: impStatus,
           hours: calc.totalHours,
+          merged: punches.length,
         });
         console.log(
-          `[IMPORT] ✓ Row ${i + 2}: ${code} - ${impStatus} (${calc.totalHours}h)`,
+          `[IMPORT] OK ${employee.employeeCode} - ${impStatus} (${calc.totalHours}h)${mergeNote}`,
         );
       } catch (dbErr) {
-        errors.push(
-          `Row ${i + 2}: Database error for ${code}: ${dbErr.message}`,
-        );
-        skipped++;
+        errors.push(`${code} on ${date.toDateString()}: DB error: ${dbErr.message}`);
+        skipped += punches.length;
       }
     }
 
+    const mergedCount = [...grouped.values()].filter((g) => g.punches.length > 1).length;
     console.log(
-      `[IMPORT] Complete: ${logs.length} succeeded, ${skipped} failed`,
+      `[IMPORT] Complete: ${logs.length} succeeded, ${skipped} failed, ${mergedCount} merged`,
     );
 
     res.json({
-      message: `✓ Import complete. ${logs.length} records processed successfully.`,
+      message: `Import complete. ${logs.length} records processed${mergedCount ? `, ${mergedCount} multi-punch days merged` : ""}.`,
       summary: {
         total: data.length,
         success: logs.length,
         failed: errors.length,
         skipped,
+        merged: mergedCount,
       },
-      records: logs.length > 0 ? logs.slice(0, 10) : undefined, // Show first 10 for verification
-      errors: errors.length > 0 ? errors.slice(0, 20) : undefined, // Show first 20 errors
-      allErrorsCount: errors.length > 20 ? errors.length - 20 : 0, // Indicate if there are more
+      records: logs.length > 0 ? logs.slice(0, 10) : undefined,
+      errors: errors.length > 0 ? errors.slice(0, 20) : undefined,
+      allErrorsCount: errors.length > 20 ? errors.length - 20 : 0,
     });
   } catch (error) {
     console.error("[IMPORT] Error:", error);

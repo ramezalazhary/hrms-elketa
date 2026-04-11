@@ -8,7 +8,7 @@ export const departmentsRoutes = [
   { 
     path: "/departments", 
     element: (
-      <RequireRole roles={[3, "ADMIN", "HR_STAFF"]}>
+      <RequireRole roles={[3, "ADMIN", "HR_STAFF", "HR_MANAGER"]}>
         <DepartmentsListPage />
       </RequireRole>
     ) 
@@ -24,7 +24,7 @@ export const departmentsRoutes = [
   {
     path: "/departments/:departmentId",
     element: (
-      <RequireRole roles={[2, 3, "MANAGER", "ADMIN", "HR_STAFF"]}>
+      <RequireRole roles={[2, 3, "MANAGER", "ADMIN", "HR_STAFF", "HR_MANAGER"]}>
         <DepartmentStructurePage />
       </RequireRole>
     ),

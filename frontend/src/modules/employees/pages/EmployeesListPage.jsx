@@ -14,7 +14,7 @@ import {
   Users, UserPlus, TrendingUp, AlertCircle, AlertTriangle,
   UserX, CalendarX2, RotateCcw, Search, Eye, Pencil,
   ArrowUpDown, ChevronDown, Filter, X, Briefcase, Building2,
-  Clock, CreditCard, CalendarDays, MoreHorizontal, UserCheck, UserMinus, Star,
+  Clock, CreditCard, CalendarDays, MoreHorizontal, UserCheck, UserMinus, Star, Trash2,
 } from "lucide-react";
 import { FormBuilder } from "@/shared/components/FormBuilder";
 import { getDocumentRequirementsApi } from "../../organization/api";
@@ -60,6 +60,19 @@ export function EmployeesListPage() {
   const isLoading = useAppSelector((s) => s.employees.isLoading);
   const role = useAppSelector((s) => s.identity.currentUser?.role);
   const currentUser = useAppSelector((s) => s.identity.currentUser);
+  const currentUserEmployee = useMemo(
+    () =>
+      employees.find(
+        (e) =>
+          (currentUser?.id != null &&
+            String(e.id ?? e._id ?? "") === String(currentUser.id)) ||
+          (!!currentUser?.email &&
+            !!e.email &&
+            String(e.email).trim().toLowerCase() ===
+              String(currentUser.email).trim().toLowerCase()),
+      ),
+    [employees, currentUser?.id, currentUser?.email],
+  );
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [increaseModalTarget, setIncreaseModalTarget] = useState(null);
@@ -205,6 +218,7 @@ export function EmployeesListPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
   const canModify = ["ADMIN", "HR_STAFF", "HR_MANAGER"].includes(role);
+  const isDevMode = import.meta.env.DEV;
 
   // Close action dropdown on outside click
   useEffect(() => {
@@ -255,6 +269,18 @@ export function EmployeesListPage() {
       showToast(`${emp.fullName} reactivated`, "success");
     } catch (err) { showToast(getErrorMessage(err, "Failed to reactivate"), "error"); }
 
+  };
+
+  const handleDeleteEmployee = async (emp) => {
+    if (!isDevMode) return;
+    if (!window.confirm(`Delete ${emp.fullName}? This action cannot be undone.`)) return;
+    try {
+      await dispatch(deleteEmployeeThunk(emp.id || emp._id)).unwrap();
+      showToast(`${emp.fullName} deleted`, "success");
+      setOpenActions(null);
+    } catch (err) {
+      showToast(getErrorMessage(err, "Failed to delete employee"), "error");
+    }
   };
 
   const activeFiltersCount = [departmentFilter !== "all", idExpiringSoon, recentTransfers, increasePeriod !== "all"].filter(Boolean).length;
@@ -573,6 +599,7 @@ export function EmployeesListPage() {
                         departments,
                         teamsByDepartmentId,
                         allOrgTeams,
+                        evaluatorEmployee: currentUserEmployee,
                       }) && (
                         <button
                           type="button"
@@ -603,6 +630,15 @@ export function EmployeesListPage() {
                                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50">
                                 <UserX className="h-3.5 w-3.5" /> Terminate
                               </button>
+                              {isDevMode && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteEmployee(emp)}
+                                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" /> Delete (Dev only)
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -634,6 +670,15 @@ export function EmployeesListPage() {
                         <button onClick={() => handleReactivate(emp)}
                           className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 transition hover:bg-emerald-100">
                           <RotateCcw className="h-3 w-3" /> Reactivate
+                        </button>
+                      )}
+                      {canModify && isDevMode && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEmployee(emp)}
+                          className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-700 transition hover:bg-red-100"
+                        >
+                          <Trash2 className="h-3 w-3" /> Delete
                         </button>
                       )}
                     </div>

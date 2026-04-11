@@ -28,6 +28,9 @@ import dashboardRouter from "./routes/dashboard.js";
 import bulkRouter from "./routes/bulk.js";
 import branchesRouter from "./routes/branches.js";
 import assessmentsRouter from "./routes/assessments.js";
+import payrollRouter from "./routes/payroll.js";
+import advancesRouter from "./routes/advances.js";
+import holidaysRouter from "./routes/holidays.js";
 import { securityHeaders, apiLimiter } from "./middleware/security.js";
 import { errorMiddleware } from "./middleware/errorMiddleware.js";
 import { NotFoundError } from "./utils/ApiError.js";
@@ -81,6 +84,9 @@ app.use("/api/leave-requests", leaveRequestsRouter);
 app.use("/api/bulk", bulkRouter);
 app.use("/api/branches", branchesRouter);
 app.use("/api/assessments", assessmentsRouter);
+app.use("/api/payroll", payrollRouter);
+app.use("/api/advances", advancesRouter);
+app.use("/api/holidays", holidaysRouter);
 
 /** Unmatched `/api/*` paths → 404 via the error middleware. */
 app.use("/api/*", (req, _res, next) => {

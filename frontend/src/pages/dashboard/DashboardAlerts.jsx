@@ -10,52 +10,57 @@ export function DashboardAlerts({ alerts }) {
 
   if (!hasAlerts) {
     return (
-      <div className="mb-8 p-6 rounded-xl border border-emerald-100 bg-emerald-50/30 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="h-10 w-10 rounded-full bg-emerald-500 flex items-center justify-center text-white shadow-sm">
-            <ShieldCheck size={20} />
+      <div className="mb-10 p-8 rounded-3xl border border-white/20 glass-premium shadow-premium flex items-center justify-between relative overflow-hidden group">
+        <div className="absolute top-0 right-0 -mr-8 -mt-8 h-32 w-32 rounded-full bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/10 transition-colors" />
+        <div className="flex items-center gap-6 relative z-10">
+          <div className="h-14 w-14 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200 transition-transform group-hover:scale-110">
+            <ShieldCheck size={28} />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-emerald-900">System Fully Compliant</h3>
-            <p className="text-xs text-emerald-700/70 mt-0.5">All personnel records are up to date. Continuous monitoring active.</p>
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">System Fully Compliant</h3>
+            <p className="text-sm text-slate-500 font-medium mt-0.5">All personnel records are up to date. Continuous monitoring active.</p>
           </div>
+        </div>
+        <div className="hidden md:block px-4 py-2 bg-emerald-50 rounded-full border border-emerald-100">
+           <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Verified</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="mb-10 space-y-4">
-      <div className="flex items-center gap-2 px-1">
-        <div className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
-        <h2 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Operational Alerts</h2>
+    <div className="mb-12 space-y-5">
+      <div className="flex items-center gap-3 px-1">
+        <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+        <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Institutional Operational Alerts</h2>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         {/* CRITICAL: Expired IDs */}
         {idExpiredCount > 0 && (
-          <div className="group relative overflow-hidden rounded-xl border border-zinc-200 border-l-[6px] border-l-rose-500 bg-white p-5 shadow-sm transition-all hover:shadow-md">
-            <div className="flex items-start justify-between">
+          <div className="group relative overflow-hidden rounded-3xl border border-white/20 glass-premium p-6 shadow-premium hover-lift transition-all hover:border-rose-100">
+            <div className="absolute top-0 right-0 -mr-6 -mt-6 h-16 w-16 rounded-full bg-rose-500/5 blur-xl group-hover:bg-rose-500/10 transition-colors" />
+            <div className="flex items-start justify-between relative z-10">
               <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600">
-                  <AlertTriangle size={18} />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-lg shadow-rose-200 group-hover:scale-110 transition-transform">
+                  <AlertTriangle size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-zinc-900 tracking-tight">Identity Compliance</h3>
-                  <p className="mt-1 text-xs text-zinc-500 font-medium">Expired documents detected.</p>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight">Identity Compliance</h3>
+                  <p className="mt-1 text-xs text-slate-500 font-semibold">Expired documents detected.</p>
                   <Link 
                     to="/employees?idExpired=true" 
-                    className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 hover:text-rose-700 transition-colors"
+                    className="mt-6 inline-flex items-center gap-2 px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition-colors"
                   >
-                    Fix Issues <ArrowRight size={14} />
+                    Fix Issues <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </div>
               </div>
               <div className="text-right">
-                <span className="text-2xl font-black text-rose-600 tabular-nums leading-none tracking-tighter">
+                <span className="text-3xl font-black text-rose-600 tabular-nums leading-none tracking-tighter">
                   {idExpiredCount}
                 </span>
-                <p className="text-[8px] font-black uppercase tracking-tighter text-rose-300 mt-1">Overdue</p>
+                <p className="text-[8px] font-black uppercase tracking-widest text-rose-400 mt-2">Overdue</p>
               </div>
             </div>
           </div>
@@ -63,28 +68,29 @@ export function DashboardAlerts({ alerts }) {
 
         {/* WARNING: Expiring Soon */}
         {idExpirySoon > 0 && (
-          <div className="group relative overflow-hidden rounded-xl border border-zinc-200 border-l-[6px] border-l-amber-500 bg-white p-5 shadow-sm transition-all hover:shadow-md">
-            <div className="flex items-start justify-between">
+          <div className="group relative overflow-hidden rounded-3xl border border-white/20 glass-premium p-6 shadow-premium hover-lift transition-all hover:border-amber-100">
+            <div className="absolute top-0 right-0 -mr-6 -mt-6 h-16 w-16 rounded-full bg-amber-500/5 blur-xl group-hover:bg-amber-500/10 transition-colors" />
+            <div className="flex items-start justify-between relative z-10">
               <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
-                  <AlertCircle size={18} />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-lg shadow-amber-200 group-hover:scale-110 transition-transform">
+                  <AlertCircle size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-zinc-900 tracking-tight">Renewal Notification</h3>
-                  <p className="mt-1 text-xs text-zinc-500 font-medium">Expiring within 60 days.</p>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight">Renewal Notification</h3>
+                  <p className="mt-1 text-xs text-slate-500 font-semibold">Expiring within 60 days.</p>
                   <Link 
                     to="/employees?idExpiringSoon=true" 
-                    className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-amber-600 hover:text-amber-700 transition-colors"
+                    className="mt-6 inline-flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-amber-100 transition-colors"
                   >
-                    Review <ArrowRight size={14} />
+                    Review <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </div>
               </div>
               <div className="text-right">
-                <span className="text-2xl font-black text-amber-600 tabular-nums leading-none tracking-tighter">
+                <span className="text-3xl font-black text-amber-600 tabular-nums leading-none tracking-tighter">
                   {idExpirySoon}
                 </span>
-                <p className="text-[8px] font-black uppercase tracking-tighter text-amber-300 mt-1">Pending</p>
+                <p className="text-[8px] font-black uppercase tracking-widest text-amber-400 mt-2">Pending</p>
               </div>
             </div>
           </div>
@@ -92,28 +98,29 @@ export function DashboardAlerts({ alerts }) {
 
         {/* INFO: Salary Cycle */}
         {salaryIncreaseSoon > 0 && (
-          <div className="group relative overflow-hidden rounded-xl border border-zinc-200 border-l-[6px] border-l-indigo-500 bg-white p-5 shadow-sm transition-all hover:shadow-md">
-            <div className="flex items-start justify-between">
+          <div className="group relative overflow-hidden rounded-3xl border border-white/20 glass-premium p-6 shadow-premium hover-lift transition-all hover:border-indigo-100">
+            <div className="absolute top-0 right-0 -mr-6 -mt-6 h-16 w-16 rounded-full bg-indigo-500/5 blur-xl group-hover:bg-indigo-500/10 transition-colors" />
+            <div className="flex items-start justify-between relative z-10">
               <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
-                  <TrendingUp size={18} />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 group-hover:scale-110 transition-transform">
+                  <TrendingUp size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-zinc-900 tracking-tight">Compensation Cycle</h3>
-                  <p className="mt-1 text-xs text-zinc-500 font-medium">Annual adjustment window.</p>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight">Compensation Cycle</h3>
+                  <p className="mt-1 text-xs text-slate-500 font-semibold">Annual adjustment window.</p>
                   <Link 
                     to="/employees?salaryIncreaseFrom=today" 
-                    className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+                    className="mt-6 inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-colors"
                   >
-                    Process <ArrowRight size={14} />
+                    Process <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </div>
               </div>
               <div className="text-right">
-                <span className="text-2xl font-black text-indigo-600 tabular-nums leading-none tracking-tighter">
+                <span className="text-3xl font-black text-indigo-600 tabular-nums leading-none tracking-tighter">
                   {salaryIncreaseSoon}
                 </span>
-                <p className="text-[8px] font-black uppercase tracking-tighter text-indigo-300 mt-1">Available</p>
+                <p className="text-[8px] font-black uppercase tracking-widest text-indigo-400 mt-2">Available</p>
               </div>
             </div>
           </div>

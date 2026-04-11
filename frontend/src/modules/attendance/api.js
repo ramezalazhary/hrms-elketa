@@ -78,6 +78,36 @@ export const importAttendanceApi = async (file, overwrite = false) => {
   return handleApiResponse(response);
 };
 
+/** GET /attendance/monthly-report?year=&month=&detail=true — summary excludes salary/EGP; includes approvedOvertimeUnits. */
+export const getMonthlyReportApi = async ({ year, month, departmentId, detail = true }) => {
+  const params = new URLSearchParams();
+  params.set("year", String(year));
+  params.set("month", String(month));
+  if (departmentId) params.set("departmentId", departmentId);
+  if (detail) params.set("detail", "true");
+  const response = await fetchWithAuth(`${API_URL}/attendance/monthly-report?${params}`);
+  return handleApiResponse(response);
+};
+
+/** Download monthly report as .xlsx */
+export const downloadMonthlyReportExcelApi = async ({ year, month, departmentId }) => {
+  const params = new URLSearchParams();
+  params.set("year", String(year));
+  params.set("month", String(month));
+  if (departmentId) params.set("departmentId", departmentId);
+  const response = await fetchWithAuth(`${API_URL}/attendance/monthly-report/export?${params}`);
+  if (!response.ok) throw new Error("Failed to download report");
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Attendance_Report_${year}-${String(month).padStart(2, "0")}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 /**
  * Downloads the attendance import template for Excel
  */

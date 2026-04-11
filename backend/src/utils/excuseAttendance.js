@@ -30,3 +30,35 @@ export function excuseCoversLateCheckIn(
   if (excuseEndMin > shiftStartMin && checkInMin <= excuseEndMin) return true;
   return false;
 }
+
+/**
+ * Compute total credited minutes from mid-day excuses.
+ * Only counts excuse windows that are fully within the work day
+ * (i.e. excuse start > shift start + grace).
+ * @param {Array<{startTime:string, endTime:string}>} excuses - approved excuses for the day
+ * @param {number} shiftStartMin - shift start in minutes from midnight
+ * @param {number} shiftEndMin - shift end in minutes from midnight
+ * @param {number} graceMin - grace period in minutes
+ * @returns {{ creditMinutes: number, coversEndOfDay: boolean }}
+ */
+export function computeMidDayExcuseCredit(excuses, shiftStartMin, shiftEndMin, graceMin) {
+  let creditMinutes = 0;
+  let coversEndOfDay = false;
+
+  for (const ex of excuses) {
+    const es = parseTimeToMinutes(ex.startTime);
+    const ee = parseTimeToMinutes(ex.endTime);
+    if (es == null || ee == null || ee <= es) continue;
+
+    const lateThreshold = shiftStartMin + graceMin;
+    if (es <= lateThreshold) continue;
+
+    creditMinutes += (ee - es);
+
+    if (ee >= shiftEndMin) {
+      coversEndOfDay = true;
+    }
+  }
+
+  return { creditMinutes, coversEndOfDay };
+}

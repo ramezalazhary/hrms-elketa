@@ -36,15 +36,39 @@ function EditDepartmentForm({ department, departmentEmployees }) {
     mapPositionsFromDepartment(department),
   );
   const [teams, setTeams] = useState(() => mapTeamsFromDepartment(department));
+  const [removeCurrentLeader, setRemoveCurrentLeader] = useState(false);
+
+  const isManagerRole = (role ,employeeDepartment) => role === "MANAGER" ;
+  const currentHeadOption = departmentEmployees.find(
+    (emp) => emp.email === department.head,
+  );
 
   const leaderOptions = useMemo(
-    () =>
-      departmentEmployees.map((emp) => ({
-        id: emp.email,
-        label: emp.fullName,
-        sublabel: emp.position,
-      })),
-    [departmentEmployees],
+    () => {
+      const nonManagerOptions = departmentEmployees
+        .filter((emp) =>{
+          return !isManagerRole(emp.role, emp.department);
+        })
+        .map((emp) => ({
+          id: emp.email,
+          label: emp.fullName,
+          sublabel: emp.position,
+        }));
+
+      if (
+        currentHeadOption &&
+        !nonManagerOptions.some((opt) => opt.id === currentHeadOption.email)
+      ) {
+        nonManagerOptions.unshift({
+          id: currentHeadOption.email,
+          label: `${currentHeadOption.fullName} (Current Leader)`,
+          sublabel: currentHeadOption.position,
+        });
+      }
+
+      return nonManagerOptions;
+    },
+    [departmentEmployees, currentHeadOption],
   );
 
   const addTeam = () => {
@@ -147,18 +171,6 @@ function EditDepartmentForm({ department, departmentEmployees }) {
             type: "textarea",
             fullWidth: true,
           },
-          {
-            name: "standardStartTime",
-            label: "Work Start Time",
-            type: "time",
-            placeholder: "09:00",
-          },
-          {
-            name: "gracePeriod",
-            label: "Grace Period (Minutes)",
-            type: "number",
-            placeholder: "15",
-          },
         ]}
         initialValues={{
           name: department.name,
@@ -168,8 +180,6 @@ function EditDepartmentForm({ department, departmentEmployees }) {
           headResponsibility: department.headResponsibility || "",
           type: department.type || "PERMANENT",
           description: department.description || "",
-          standardStartTime: department.standardStartTime || "09:00",
-          gracePeriod: department.gracePeriod ?? 15,
         }}
         submitLabel="Update Department"
         onSubmit={async (values) => {
@@ -183,10 +193,11 @@ function EditDepartmentForm({ department, departmentEmployees }) {
             }));
 
           try {
-            const head =
+            const selectedHead =
               values.head && String(values.head).trim()
                 ? String(values.head).trim()
                 : null;
+            const head = removeCurrentLeader ? null : selectedHead;
             await dispatch(
               updateDepartmentThunk({
                 ...department,
@@ -210,6 +221,33 @@ function EditDepartmentForm({ department, departmentEmployees }) {
           }
         }}
       />
+
+      <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+        <p className="text-sm text-blue-900">
+          Selecting a department leader will automatically promote that employee
+          to manager (if needed), remove them from team leadership and team
+          membership, and assign a department-head manager position title.
+        </p>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <p className="text-sm text-amber-900">
+            {department.head
+              ? `Current leader: ${department.head}`
+              : "No leader currently assigned."}
+          </p>
+          <button
+            type="button"
+            onClick={() => setRemoveCurrentLeader((prev) => !prev)}
+            className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
+          >
+            {removeCurrentLeader
+              ? "Keep current leader"
+              : "Remove current leader"}
+          </button>
+        </div>
+      </div>
 
       <div className="mt-8 space-y-8">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -441,7 +479,7 @@ export function EditDepartmentPage() {
   if (!department) {
     return <div>Department not found</div>;
   }
-
+console.log(department , 'department data 🚪🚪🚪🚪');
   return (
     <EditDepartmentForm
       key={department.id}

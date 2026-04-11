@@ -1,14 +1,14 @@
 /**
- * @file `/api/positions` — CRUD-ish on job positions; writes allowed for Admin + `HR_STAFF` via `canManagePositions`.
+ * @file `/api/positions` — CRUD-ish on job positions; writes allowed for Admin + HR via enforcePolicy.
  */
 import { Router } from "express";
 import { Position } from "../models/Position.js";
 import { Department } from "../models/Department.js";
 import { Team } from "../models/Team.js";
 import { Employee } from "../models/Employee.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { strictLimiter } from "../middleware/security.js";
-import { canManagePositions } from "../utils/roles.js";
 
 const router = Router();
 
@@ -81,14 +81,9 @@ router.get("/:id", requireAuth, async (req, res) => {
   }
 });
 
-// POST /positions - Create new position (Admin + HR_STAFF)
-router.post("/", requireAuth, strictLimiter, async (req, res) => {
+// POST /positions - Create new position (Admin + HR)
+router.post("/", requireAuth, enforcePolicy("manage", "positions"), strictLimiter, async (req, res) => {
   try {
-    if (!canManagePositions(req.user)) {
-      return res.status(403).json({
-        error: "Forbidden: Only Admin and HR_STAFF can create positions",
-      });
-    }
 
     const { title, level, departmentId, teamId, description, status } =
       req.body;
@@ -155,14 +150,9 @@ router.post("/", requireAuth, strictLimiter, async (req, res) => {
   }
 });
 
-// PUT /positions/:id - Update position (Admin + HR_STAFF)
-router.put("/:id", requireAuth, strictLimiter, async (req, res) => {
+// PUT /positions/:id - Update position (Admin + HR)
+router.put("/:id", requireAuth, enforcePolicy("manage", "positions"), strictLimiter, async (req, res) => {
   try {
-    if (!canManagePositions(req.user)) {
-      return res.status(403).json({
-        error: "Forbidden: Only Admin and HR_STAFF can update positions",
-      });
-    }
 
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ error: "Invalid position ID format" });
@@ -240,7 +230,7 @@ router.put("/:id", requireAuth, strictLimiter, async (req, res) => {
 router.delete(
   "/:id",
   requireAuth,
-  requireRole(3), // Admin only
+  enforcePolicy("manage", "positions"),
   strictLimiter,
   async (req, res) => {
     try {

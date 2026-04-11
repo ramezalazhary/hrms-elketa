@@ -8,7 +8,7 @@ const AttendanceSchema = new mongoose.Schema(
       required: true,
     },
     employeeCode: {
-      type: String, // Redundant but good for indexing search from Excel
+      type: String,
       required: true,
     },
     date: {
@@ -16,10 +16,10 @@ const AttendanceSchema = new mongoose.Schema(
       required: true,
     },
     checkIn: {
-      type: String, // Format: "HH:mm"
+      type: String, // Format: "HH:mm" or "HH:mm:ss"
     },
     checkOut: {
-      type: String, // Format: "HH:mm"
+      type: String, // Format: "HH:mm" or "HH:mm:ss"
     },
     status: {
       type: String,
@@ -31,24 +31,42 @@ const AttendanceSchema = new mongoose.Schema(
         "ON_LEAVE",
         "OVERTIME",
         "EXCUSED",
+        "INCOMPLETE",
+        "HOLIDAY",
       ],
       default: "PRESENT",
     },
+    leaveRequestId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "LeaveRequest",
+    },
+    onApprovedLeave: { type: Boolean, default: false },
+    originalStatus: { type: String },
     excuseLeaveRequestId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "LeaveRequest",
     },
     excuseCovered: { type: Boolean, default: false },
+    /** True when ON_LEAVE but unpaid (no balance or not eligible). */
+    unpaidLeave: { type: Boolean, default: false },
+    /** True when excuse exceeds remaining quota — proportional salary deduction applies. */
+    excessExcuse: { type: Boolean, default: false },
+    /** Fraction of a working day for excess excuse deduction (e.g. 0.25 for 2h / 8h). */
+    excessExcuseFraction: { type: Number, default: 0 },
     totalHours: {
       type: Number,
       default: 0,
     },
+    /** Minutes credited from approved mid-day excuses (Phase 0c). */
+    excusedMinutes: { type: Number, default: 0 },
+    /** Number of source rows merged during import (Phase 0b). 1 = normal, >1 = merged. */
+    rawPunches: { type: Number, default: 1 },
     remarks: {
       type: String,
     },
     lastManagedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Employee", // The Admin/Manager who manually added/edited it
+      ref: "Employee",
     },
   },
   {

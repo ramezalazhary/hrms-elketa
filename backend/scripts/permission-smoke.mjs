@@ -7,6 +7,7 @@ const BASE = process.env.API_URL || "http://localhost:5000/api";
 const accounts = {
   admin: { email: "admin@hr.local", password: "admin123" },
   hrHead: { email: "hrhead@hr.local", password: "hr123" },
+  hrManager: { email: "hrmanager@hr.local", password: "hrm123" },
   manager: { email: "itmgr@hr.local", password: "it123" },
   employee: { email: "devops1@hr.local", password: "emp123" },
 };
@@ -50,9 +51,13 @@ async function main() {
   const tok = {
     admin: await login(accounts.admin.email, accounts.admin.password),
     hrHead: await login(accounts.hrHead.email, accounts.hrHead.password),
+    hrManager: null,
     manager: await login(accounts.manager.email, accounts.manager.password),
     employee: await login(accounts.employee.email, accounts.employee.password),
   };
+  try {
+    tok.hrManager = await login(accounts.hrManager.email, accounts.hrManager.password);
+  } catch {}
 
   let failed = 0;
   const run = async (n, p, r) => {
@@ -71,6 +76,13 @@ async function main() {
     await authFetch(tok.hrHead, "/users"),
     200,
   );
+  if (tok.hrManager) {
+    await run(
+      "HR Manager GET /users",
+      await authFetch(tok.hrManager, "/users"),
+      200,
+    );
+  }
   await run(
     "MANAGER GET /users (forbidden)",
     await authFetch(tok.manager, "/users"),
@@ -111,6 +123,13 @@ async function main() {
     await authFetch(tok.hrHead, `/permissions/${hrUser.id}`),
     200,
   );
+  if (tok.hrManager) {
+    await run(
+      "HR Manager GET permissions for HR user",
+      await authFetch(tok.hrManager, `/permissions/${hrUser.id}`),
+      200,
+    );
+  }
   if (itUser) {
     await run(
       "HR Head GET permissions for IT user (forbidden)",
@@ -122,6 +141,14 @@ async function main() {
     "MANAGER GET permissions (forbidden)",
     await authFetch(tok.manager, `/permissions/${hrUser.id}`),
     403,
+  );
+  await run(
+    "ADMIN POST /permissions/simulate",
+    await authFetch(tok.admin, "/permissions/simulate", {
+      method: "POST",
+      body: JSON.stringify({ role: "EMPLOYEE", action: "manage", resource: "users" }),
+    }),
+    200,
   );
 
   console.log("\n— Departments (mutations admin-only) —");

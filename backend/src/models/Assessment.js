@@ -2,7 +2,11 @@ import { Schema, model } from "mongoose";
 
 const AssessmentSubSchema = new Schema(
   {
-    date: { type: String, required: true }, // Format: dd:mm:yyyy
+    date: { type: String, required: true },
+    period: {
+      year: { type: Number },
+      month: { type: Number, min: 1, max: 12 },
+    },
     /** @deprecated use `overall`; kept for older records */
     rating: { type: Number, min: 1, max: 5 },
     feedback: { type: String, required: true },
@@ -17,6 +21,14 @@ const AssessmentSubSchema = new Schema(
     quality: { type: Number, min: 1, max: 5 },
     overall: { type: Number, min: 1, max: 5 },
     notesPrevious: { type: String, default: "" },
+    bonusStatus: {
+      type: String,
+      enum: ["NONE", "PENDING_HR", "APPROVED", "REJECTED"],
+      default: "NONE",
+    },
+    bonusApprovedBy: { type: String },
+    bonusApprovedAt: { type: Date },
+    bonusRejectionReason: { type: String },
   },
   { timestamps: true }
 );
@@ -43,6 +55,16 @@ const EmployeeAssessmentSchema = new Schema(
     assessment: [AssessmentSubSchema],
   },
   { timestamps: true }
+);
+
+EmployeeAssessmentSchema.index(
+  {
+    employeeId: 1,
+    "assessment.period.year": 1,
+    "assessment.period.month": 1,
+    "assessment.evaluatorId": 1,
+  },
+  { sparse: true }
 );
 
 EmployeeAssessmentSchema.set("toJSON", {

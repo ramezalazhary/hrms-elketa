@@ -22,7 +22,10 @@ function toDateInputValue(d) {
  *   employee: { fullName: string, vacationRecords?: Array<object> },
  *   onClose: () => void,
  *   onPersist: (list: object[]) => Promise<boolean>,
+ *   onAddAsLeaveRequest?: (payload: { startDate: string, endDate: string, type: string, notes?: string }) => Promise<boolean>,
+ *   onAddExcuseAsLeaveRequest?: (payload: { excuseDate: string, startTime: string, endTime: string, notes?: string }) => Promise<boolean>,
  *   saving: boolean,
+ *   recording?: boolean,
  *   recorderEmail?: string,
  * }} props
  */
@@ -30,7 +33,10 @@ export function ManualVacationRecordsModal({
   employee,
   onClose,
   onPersist,
+  onAddAsLeaveRequest,
+  onAddExcuseAsLeaveRequest,
   saving,
+  recording = false,
   recorderEmail,
 }) {
   const [records, setRecords] = useState(() => [
@@ -40,6 +46,9 @@ export function ManualVacationRecordsModal({
   const [newEnd, setNewEnd] = useState("");
   const [newType, setNewType] = useState("ANNUAL");
   const [newNotes, setNewNotes] = useState("");
+  const [excuseDate, setExcuseDate] = useState("");
+  const [excuseStartTime, setExcuseStartTime] = useState("");
+  const [excuseEndTime, setExcuseEndTime] = useState("");
 
   useEffect(() => {
     setRecords([...(employee.vacationRecords || [])]);
@@ -74,6 +83,43 @@ export function ManualVacationRecordsModal({
       setNewStart("");
       setNewEnd("");
       setNewType("ANNUAL");
+      setNewNotes("");
+    }
+  };
+
+  const handleAddAsLeaveRequest = async (e) => {
+    e.preventDefault();
+    if (!onAddAsLeaveRequest) return;
+    if (!newStart || !newEnd) return;
+    if (new Date(newStart) > new Date(newEnd)) return;
+    const ok = await onAddAsLeaveRequest({
+      startDate: newStart,
+      endDate: newEnd,
+      type: newType,
+      notes: newNotes.trim() || undefined,
+    });
+    if (ok) {
+      setNewStart("");
+      setNewEnd("");
+      setNewType("ANNUAL");
+      setNewNotes("");
+    }
+  };
+
+  const handleAddExcuseAsLeaveRequest = async (e) => {
+    e.preventDefault();
+    if (!onAddExcuseAsLeaveRequest) return;
+    if (!excuseDate || !excuseStartTime || !excuseEndTime) return;
+    const ok = await onAddExcuseAsLeaveRequest({
+      excuseDate,
+      startTime: excuseStartTime,
+      endTime: excuseEndTime,
+      notes: newNotes.trim() || undefined,
+    });
+    if (ok) {
+      setExcuseDate("");
+      setExcuseStartTime("");
+      setExcuseEndTime("");
       setNewNotes("");
     }
   };
@@ -167,15 +213,96 @@ export function ManualVacationRecordsModal({
                 />
               </label>
             </div>
-            <button
-              type="submit"
-              disabled={saving}
-              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-sky-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-sky-500/25 transition hover:shadow-xl hover:shadow-sky-500/35 disabled:opacity-50 disabled:pointer-events-none"
-            >
-              <Plus className="h-4 w-4" />
-              Add record
-            </button>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                type="submit"
+                disabled={saving || recording}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-sky-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-sky-500/25 transition hover:shadow-xl hover:shadow-sky-500/35 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                <Plus className="h-4 w-4" />
+                Add manual record
+              </button>
+              {onAddAsLeaveRequest && (
+                <button
+                  type="button"
+                  onClick={handleAddAsLeaveRequest}
+                  disabled={saving || recording}
+                  className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-5 py-2.5 text-sm font-bold text-teal-800 transition hover:bg-teal-100 disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Plus className="h-4 w-4" />
+                  {recording
+                    ? "Saving..."
+                    : "Save as Leave Request (Direct HR Record)"}
+                </button>
+              )}
+            </div>
           </form>
+
+          {onAddExcuseAsLeaveRequest && (
+            <form
+              onSubmit={handleAddExcuseAsLeaveRequest}
+              className="rounded-xl border border-violet-100 bg-violet-50/40 p-4"
+            >
+              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-800 mb-3 flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5" />
+                Save excuse as leave request
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="font-semibold text-slate-600">Excuse date</span>
+                  <input
+                    type="date"
+                    required
+                    value={excuseDate}
+                    onChange={(e) => setExcuseDate(e.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="font-semibold text-slate-600">Start time</span>
+                  <input
+                    type="time"
+                    required
+                    value={excuseStartTime}
+                    onChange={(e) => setExcuseStartTime(e.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="font-semibold text-slate-600">End time</span>
+                  <input
+                    type="time"
+                    required
+                    value={excuseEndTime}
+                    onChange={(e) => setExcuseEndTime(e.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs sm:col-span-2 lg:col-span-1">
+                  <span className="font-semibold text-slate-600">Notes (optional)</span>
+                  <input
+                    type="text"
+                    value={newNotes}
+                    onChange={(e) => setNewNotes(e.target.value)}
+                    placeholder="e.g. Medical appointment"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                  />
+                </label>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={saving || recording}
+                  className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-5 py-2.5 text-sm font-bold text-violet-800 transition hover:bg-violet-100 disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Plus className="h-4 w-4" />
+                  {recording
+                    ? "Saving..."
+                    : "Save Excuse as Leave Request (Direct HR Record)"}
+                </button>
+              </div>
+            </form>
+          )}
 
           {sorted.length === 0 ? (
             <div className="py-12 text-center border-2 border-dashed border-slate-100 rounded-2xl">

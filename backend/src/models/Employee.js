@@ -130,7 +130,9 @@ const EmployeeSchema = new Schema(
         default: "BANK_TRANSFER" 
       }, // طريقة الدفع
       currency: { type: String, default: "EGP" },
-      allowances: { type: Number },
+      allowances: { type: Number }, // الحوافز والبدلات
+      fixedBonus: { type: Number, default: 0 }, // حافز إضافي ثابت
+      fixedDeduction: { type: Number, default: 0 }, // خصم ثابت
       socialSecurity: { type: String },
       lastSalaryIncrease: { type: Date },
     },

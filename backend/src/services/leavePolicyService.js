@@ -157,6 +157,42 @@ export function resolveActiveLeavePolicy(leavePolicies) {
 }
 
 /**
+ * Max minutes allowed for one excuse (`maxHoursPerExcuse` wins over legacy `maxMinutesPerRequest`).
+ * @param {object} er excuseRules (merged with defaults)
+ */
+export function resolveMaxExcuseMinutesPerRequest(er) {
+  const h = Number(er?.maxHoursPerExcuse);
+  if (Number.isFinite(h) && h > 0) return Math.round(h * 60);
+  const m = Number(er?.maxMinutesPerRequest);
+  if (Number.isFinite(m) && m > 0) return m;
+  return 8 * 60;
+}
+
+/**
+ * Monthly excuse minute cap for balance UI and soft reservations.
+ * When `maxExcusesPerPeriod` &gt; 0 and `excuseLimitPeriod` is MONTH, caps at
+ * `maxExcusesPerPeriod × per-request max minutes` (e.g. 2 excuses × 2h = 4h),
+ * and never exceeds `maxMinutesPerMonth` when that is lower (stricter wins).
+ * @param {object} er excuseRules from {@link resolveActiveLeavePolicy}
+ */
+export function resolveEffectiveExcuseMonthlyEntitlementMinutes(er) {
+  const merged = { ...DEFAULT_EXCUSE_RULES, ...(er || {}) };
+  const perRequestMax = resolveMaxExcuseMinutesPerRequest(merged);
+  const rawMonthly = Number(merged.maxMinutesPerMonth);
+  const monthlyFromPolicy =
+    Number.isFinite(rawMonthly) && rawMonthly > 0 ? rawMonthly : 40 * 60;
+
+  const maxN = Math.max(0, Number(merged.maxExcusesPerPeriod) || 0);
+  const p = String(merged.excuseLimitPeriod || "MONTH").toUpperCase();
+  const period = p === "WEEK" || p === "MONTH" || p === "YEAR" ? p : "MONTH";
+
+  if (maxN > 0 && period === "MONTH") {
+    return Math.min(monthlyFromPolicy, maxN * perRequestMax);
+  }
+  return monthlyFromPolicy;
+}
+
+/**
  * Immutable snapshot: everything needed to validate, balance, and compute duration.
  * @param {import("mongoose").Document} policyDoc
  * @param {"VACATION"|"EXCUSE"} kind

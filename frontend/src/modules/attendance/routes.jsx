@@ -5,7 +5,7 @@ export const attendanceRoutes = [
   {
     path: "/attendance",
     element: (
-      <RequireRole roles={[2, 3, "MANAGER", "HR_STAFF", "ADMIN"]}>
+      <RequireRole roles={[2, 3, "MANAGER", "HR_STAFF", "HR_MANAGER", "ADMIN"]}>
         <AttendancePage />
       </RequireRole>
     ),

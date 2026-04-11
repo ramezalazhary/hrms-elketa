@@ -1,20 +1,24 @@
 /**
  * Who may submit or view another employee's performance assessments.
  *
- * R1 — HR / Admin: HR_STAFF, HR_MANAGER, ADMIN (and legacy numeric admin).
+ * R0 — ADMIN: full access (legacy numeric admin included).
+ * R0b — Upward denied for everyone except ADMIN: cannot assess your own direct manager
+ *       or your assigned team leader (applies to HR, managers, TLs, dept heads).
+ * R1 — HR: HR_STAFF, HR_MANAGER may assess anyone except upward (R0b) and not self.
  * R2 — Direct manager: target.managerId === evaluator employee id.
- * R3 — Team-leader field fallback: target.teamLeaderId === evaluator id.
+ * R3 — Team-leader field: target.teamLeaderId === evaluator id.
  * R4 — Teams the evaluator leads (roster: members, memberIds, employee.team name).
  * R5 — Department head: target on roster of any merged team in a department the evaluator heads.
  *
- * Self-assessment is denied for non-global roles.
+ * MANAGER / TEAM_LEADER must satisfy R2–R5 (no company-wide blanket).
+ * EMPLOYEE cannot assess (fails all paths).
  */
 import mongoose from "mongoose";
 import { Department } from "../models/Department.js";
 import { Team } from "../models/Team.js";
 import { Employee } from "../models/Employee.js";
 import { getMergedTeamsForDepartment } from "./orgResolutionService.js";
-import { isAdminRole, isHrOrAdmin } from "../utils/roles.js";
+import { isAdminRole, normalizeRole, ROLE } from "../utils/roles.js";
 
 function normEmail(s) {
   return String(s || "").toLowerCase().trim();
@@ -46,14 +50,34 @@ export function employeeOnTeamRoster(employee, team) {
   return false;
 }
 
+function refToIdString(ref) {
+  if (ref == null) return "";
+  if (typeof ref === "object") {
+    const id = ref._id ?? ref.id;
+    return id != null ? String(id) : "";
+  }
+  return String(ref);
+}
+
+/** True if `targetId` is the evaluator's direct manager or assigned team leader. */
+export function targetIsDirectSupervisorOfEvaluator(evaluatorEmp, targetId) {
+  if (!evaluatorEmp || !targetId) return false;
+  const tid = String(targetId);
+  const mgr = refToIdString(evaluatorEmp.managerId);
+  const tl = refToIdString(evaluatorEmp.teamLeaderId);
+  return (mgr && mgr === tid) || (tl && tl === tid);
+}
+
 async function resolveActor(evaluatorUser) {
   let actor = null;
   if (evaluatorUser.id) {
-    actor = await Employee.findById(evaluatorUser.id).select("_id email").lean();
+    actor = await Employee.findById(evaluatorUser.id)
+      .select("_id email managerId teamLeaderId")
+      .lean();
   }
   if (!actor && evaluatorUser.email) {
     actor = await Employee.findOne({ email: evaluatorUser.email })
-      .select("_id email")
+      .select("_id email managerId teamLeaderId")
       .lean();
   }
   const oid = actor?._id?.toString?.() ?? String(evaluatorUser.id || "");
@@ -122,11 +146,24 @@ export async function canAssessEmployee(evaluatorUser, targetEmployee) {
     target._id?.toString?.() ?? target.id?.toString?.() ?? String(target.id || "");
   const evalId = evaluatorUser.id ? String(evaluatorUser.id) : "";
 
-  if (isHrOrAdmin(evaluatorUser) || isAdminRole(evaluatorUser.role)) {
+  if (isAdminRole(evaluatorUser.role)) {
     return true;
   }
 
-  if (targetId && evalId && targetId === evalId) {
+  const { actor, oid, email } = await resolveActor(evaluatorUser);
+  if (targetIsDirectSupervisorOfEvaluator(actor, targetId)) {
+    return false;
+  }
+
+  const role = normalizeRole(evaluatorUser.role);
+  if (role === ROLE.HR_STAFF || role === ROLE.HR_MANAGER) {
+    if (targetId && oid && targetId === oid) {
+      return false;
+    }
+    return true;
+  }
+
+  if (targetId && oid && targetId === oid) {
     return false;
   }
 
@@ -150,7 +187,6 @@ export async function canAssessEmployee(evaluatorUser, targetEmployee) {
     return true;
   }
 
-  const { oid, email } = await resolveActor(evaluatorUser);
   if (!oid && !email) {
     return false;
   }

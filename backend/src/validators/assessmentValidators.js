@@ -14,6 +14,12 @@ export const createAssessmentSchema = Joi.object({
     "string.pattern.base": "Date must be in dd:mm:yyyy format",
     "any.required": "Date is required",
   }),
+  period: Joi.object({
+    year: Joi.number().integer().min(2020).max(2100).required(),
+    month: Joi.number().integer().min(1).max(12).required(),
+  }).required().messages({
+    "any.required": "Assessment period (year/month) is required",
+  }),
   daysBonus: Joi.number().min(0).default(0),
   overtime: Joi.number().min(0).default(0),
   deduction: Joi.number().min(0).default(0),
@@ -26,9 +32,6 @@ export const createAssessmentSchema = Joi.object({
     "string.empty": "Feedback cannot be empty",
     "any.required": "Feedback is required",
   }),
-  reviewPeriod: Joi.string().required().messages({
-    "string.empty": "Review period cannot be empty",
-    "any.required": "Review period is required",
-  }),
+  reviewPeriod: Joi.string().allow("").default(""),
   getThebounes: Joi.boolean().default(false),
 });

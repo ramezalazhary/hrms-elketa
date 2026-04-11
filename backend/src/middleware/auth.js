@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { Employee } from "../models/Employee.js";
 import { TokenBlacklist } from "../models/TokenBlacklist.js";
+import { normalizeRole, ROLE_LEVEL } from "../utils/roles.js";
 
 // Development fallback to avoid a hard failure before you create `.env`.
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -30,13 +31,6 @@ function forbidden(res, message = "Forbidden") {
   return res.status(403).json({ error: message });
 }
 
-/** Maps legacy numeric JWT roles to string roles used in the app. */
-const ROLE_MAP = {
-  1: "EMPLOYEE",
-  2: "MANAGER",
-  3: "ADMIN",
-};
-
 /**
  * Express middleware: validates `Authorization: Bearer <access_token>`, blacklist, and signature.
  *
@@ -63,10 +57,7 @@ export async function requireAuth(req, res, next) {
 
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    let resolvedRole = decoded.role;
-    if (typeof resolvedRole === "number") {
-      resolvedRole = ROLE_MAP[resolvedRole] || "EMPLOYEE";
-    }
+    const resolvedRole = normalizeRole(decoded.role);
 
     const user = decoded?.sub
       ? {
@@ -228,15 +219,7 @@ export function requireRole(allowedRoles) {
     if (!user) return unauthorized(res);
 
     if (typeof allowedRoles === "number") {
-      const roleWeight = {
-        EMPLOYEE: 1,
-        TEAM_LEADER: 2,
-        MANAGER: 2,
-        HR_STAFF: 3,
-        HR_MANAGER: 3,
-        ADMIN: 3,
-      };
-      if ((roleWeight[user.role] || 1) < allowedRoles) {
+      if ((ROLE_LEVEL[normalizeRole(user.role)] || 1) < allowedRoles) {
         return forbidden(res, "Insufficient permissions (Legacy Numeric)");
       }
       return next();
@@ -246,7 +229,9 @@ export function requireRole(allowedRoles) {
       allowedRoles = [allowedRoles];
     }
 
-    if (!allowedRoles.includes(user.role) && user.role !== "ADMIN") {
+    const role = normalizeRole(user.role);
+    const normalizedAllowed = allowedRoles.map((r) => normalizeRole(r));
+    if (!normalizedAllowed.includes(role) && role !== "ADMIN") {
       return forbidden(res, "Insufficient permissions");
     }
 

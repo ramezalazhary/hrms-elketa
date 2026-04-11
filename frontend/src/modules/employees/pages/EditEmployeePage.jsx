@@ -697,7 +697,7 @@ export function EditEmployeePage() {
               ...reportingFields,
 
               { type: "section", label: "5. Benefits & Compensation (Use 'Manage' -> 'Increase Salary' to change Base Salary)" },
-              { name: "baseSalary", label: "Base Salary", type: "number", disabled: true },
+              { name: "baseSalary", label: "Base Salary", type: "number"},
               {
                  name: "paymentMethod",
                  label: "Payment Method",
@@ -1075,15 +1075,44 @@ export function EditEmployeePage() {
             <div className="relative">
               <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-100" />
               <ol className="space-y-6">
-                {[...transferHistory].reverse().map((record, idx) => (
+                {[...transferHistory].reverse().map((record, idx) => {
+                  const noteText = String(record.notes || "").toLowerCase();
+                  const isReactivated =
+                    noteText.includes("reactivated") ||
+                    noteText.includes("-> active");
+                  const isTerminated =
+                    noteText.includes("to terminated") ||
+                    noteText.includes("to resigned");
+                  const markerClass = isReactivated
+                    ? "bg-emerald-500"
+                    : isTerminated
+                      ? "bg-rose-500"
+                      : "bg-indigo-500";
+                  const cardClass = isReactivated
+                    ? "rounded-xl border border-emerald-200 bg-emerald-50/60 p-4"
+                    : isTerminated
+                      ? "rounded-xl border border-rose-200 bg-rose-50/60 p-4"
+                      : "rounded-xl border border-slate-200 bg-slate-50/60 p-4";
+                  const toDeptClass = isReactivated
+                    ? "text-emerald-700"
+                    : isTerminated
+                      ? "text-rose-700"
+                      : "text-indigo-700";
+                  const arrowClass = isReactivated
+                    ? "h-3.5 w-3.5 text-emerald-500"
+                    : isTerminated
+                      ? "h-3.5 w-3.5 text-rose-500"
+                      : "h-3.5 w-3.5 text-indigo-500";
+
+                  return (
                   <li key={idx} className="relative pl-12">
-                    <div className="absolute left-3.5 top-1.5 w-3 h-3 rounded-full bg-indigo-500 border-2 border-white shadow" />
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                    <div className={`absolute left-3.5 top-1.5 w-3 h-3 rounded-full border-2 border-white shadow ${markerClass}`} />
+                    <div className={cardClass}>
                       <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
                         <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
                           <span className="text-slate-500">{record.fromDepartmentName || "—"}</span>
-                          <ArrowRightLeft className="h-3.5 w-3.5 text-indigo-500" />
-                          <span className="text-indigo-700">{record.toDepartmentName}</span>
+                          <ArrowRightLeft className={arrowClass} />
+                          <span className={toDeptClass}>{record.toDepartmentName}</span>
                         </div>
                         <span className="text-xs text-slate-500 bg-white border border-slate-200 rounded-full px-2.5 py-0.5">
                           {new Date(record.transferDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
@@ -1128,7 +1157,8 @@ export function EditEmployeePage() {
                       </div>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ol>
             </div>
           )}

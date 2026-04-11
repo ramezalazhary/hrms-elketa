@@ -4,10 +4,12 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { ApiError } from "../utils/ApiError.js";
+import { AuditLog } from "../models/AuditLog.js";
 import {
   createLeaveRequest,
   listLeaveRequests,
   applyLeaveRequestAction,
+  recordLeaveRequestDirect,
   cancelLeaveRequest,
   getLeaveRequestById,
   assertCanViewEmployeeLeaveBalance,
@@ -30,8 +32,14 @@ function errBody(e, fallback) {
   };
 }
 
+function attachRequestMeta(user, req) {
+  user._ip = req.ip;
+  user._ua = req.headers["user-agent"] || "";
+}
+
 router.post("/", requireAuth, async (req, res) => {
   try {
+    attachRequestMeta(req.user, req);
     const doc = await createLeaveRequest(req.user, req.body);
     return res.status(201).json(doc);
   } catch (e) {
@@ -61,6 +69,7 @@ router.get("/balance", requireAuth, async (req, res) => {
 
 router.post("/balance-credit", requireAuth, async (req, res) => {
   try {
+    attachRequestMeta(req.user, req);
     const { employeeId, days, reason } = req.body || {};
     const snapshot = await addAnnualLeaveCredit(req.user, {
       employeeId,
@@ -75,6 +84,7 @@ router.post("/balance-credit", requireAuth, async (req, res) => {
 
 router.post("/balance-credit/bulk", requireAuth, async (req, res) => {
   try {
+    attachRequestMeta(req.user, req);
     const body = req.body || {};
     const result = await addAnnualLeaveCreditBulk(req.user, body);
     return res.status(201).json(result);
@@ -92,14 +102,29 @@ router.get("/:id", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/:id/history", requireAuth, async (req, res) => {
+  try {
+    const doc = await getLeaveRequestById(req.params.id, req.user);
+    const logs = await AuditLog.find({
+      entityType: "LeaveRequest",
+      entityId: doc._id,
+    }).sort({ performedAt: -1 });
+    return res.json(logs);
+  } catch (e) {
+    return res.status(errStatus(e)).json(errBody(e, "Failed to load history"));
+  }
+});
+
 router.post("/:id/action", requireAuth, async (req, res) => {
   try {
-    const { action, comment } = req.body || {};
+    attachRequestMeta(req.user, req);
+    const { action, comment, excessDeductionMethod, excessDeductionAmount } = req.body || {};
     const doc = await applyLeaveRequestAction(
       req.params.id,
       req.user,
       action,
       comment,
+      { excessDeductionMethod, excessDeductionAmount },
     );
     return res.json(doc);
   } catch (e) {
@@ -107,9 +132,25 @@ router.post("/:id/action", requireAuth, async (req, res) => {
   }
 });
 
+router.post("/:id/record-direct", requireAuth, async (req, res) => {
+  try {
+    attachRequestMeta(req.user, req);
+    const { comment, excessDeductionMethod, excessDeductionAmount } = req.body || {};
+    const doc = await recordLeaveRequestDirect(
+      req.params.id, req.user, comment,
+      { excessDeductionMethod, excessDeductionAmount },
+    );
+    return res.json(doc);
+  } catch (e) {
+    return res.status(errStatus(e)).json(errBody(e, "Direct record failed"));
+  }
+});
+
 router.post("/:id/cancel", requireAuth, async (req, res) => {
   try {
-    const doc = await cancelLeaveRequest(req.params.id, req.user);
+    attachRequestMeta(req.user, req);
+    const { reason } = req.body || {};
+    const doc = await cancelLeaveRequest(req.params.id, req.user, reason);
     return res.json(doc);
   } catch (e) {
     return res.status(errStatus(e)).json(errBody(e, "Cancel failed"));

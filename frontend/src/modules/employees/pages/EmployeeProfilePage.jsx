@@ -21,6 +21,8 @@ import { updateEmployeeThunk, fetchEmployeesThunk } from '../store'
 import {
   listLeaveRequestsApi,
   getLeaveBalanceApi,
+  createLeaveRequestApi,
+  directRecordLeaveRequestApi,
   transferEmployeeApi,
   resetPasswordApi,
   processSalaryIncreaseApi,
@@ -110,6 +112,7 @@ export function EmployeeProfilePage() {
   const [showManualVacationModal, setShowManualVacationModal] = useState(false)
   const [showLeaveBalanceCreditModal, setShowLeaveBalanceCreditModal] = useState(false)
   const [vacationSaving, setVacationSaving] = useState(false)
+  const [vacationRecording, setVacationRecording] = useState(false)
   const [leaveRequests, setLeaveRequests] = useState([])
   const [leaveRequestsLoading, setLeaveRequestsLoading] = useState(false)
   const [leaveRequestsForbidden, setLeaveRequestsForbidden] = useState(false)
@@ -423,6 +426,90 @@ export function EmployeeProfilePage() {
       }
     },
     [dispatch, employeeId, currentUser?.email, showToast],
+  );
+
+  const addAsDirectLeaveRequest = useCallback(
+    async ({ startDate, endDate, type, notes }) => {
+      setVacationRecording(true);
+      try {
+        const created = await createLeaveRequestApi({
+          employeeId,
+          kind: "VACATION",
+          leaveType: type,
+          startDate,
+          endDate,
+          reason: notes,
+          note: notes,
+          onBehalf: true,
+        });
+
+        const requestId = created?._id || created?.id;
+        if (!requestId) throw new Error("Failed to create leave request");
+
+        await directRecordLeaveRequestApi(requestId, notes);
+
+        try {
+          const data = await listLeaveRequestsApi({ employeeId, limit: "100" });
+          setLeaveRequests(data.requests || []);
+        } catch {
+          // Leave requests list can refresh on next tab load.
+        }
+
+        showToast("Saved as direct leave request", "success");
+        return true;
+      } catch (e) {
+        showToast(
+          e?.error || e?.message || "Failed to save as leave request",
+          "error",
+        );
+        return false;
+      } finally {
+        setVacationRecording(false);
+      }
+    },
+    [employeeId, showToast],
+  );
+
+  const addExcuseAsDirectLeaveRequest = useCallback(
+    async ({ excuseDate, startTime, endTime, notes }) => {
+      setVacationRecording(true);
+      try {
+        const created = await createLeaveRequestApi({
+          employeeId,
+          kind: "EXCUSE",
+          excuseDate,
+          startTime,
+          endTime,
+          reason: notes,
+          note: notes,
+          onBehalf: true,
+        });
+
+        const requestId = created?._id || created?.id;
+        if (!requestId) throw new Error("Failed to create excuse request");
+
+        await directRecordLeaveRequestApi(requestId, notes);
+
+        try {
+          const data = await listLeaveRequestsApi({ employeeId, limit: "100" });
+          setLeaveRequests(data.requests || []);
+        } catch {
+          // Leave requests list can refresh on next tab load.
+        }
+
+        showToast("Excuse saved as direct leave request", "success");
+        return true;
+      } catch (e) {
+        showToast(
+          e?.error || e?.message || "Failed to save excuse as leave request",
+          "error",
+        );
+        return false;
+      } finally {
+        setVacationRecording(false);
+      }
+    },
+    [employeeId, showToast],
   );
 
   const vacationTabBadgeCount =
@@ -1196,15 +1283,44 @@ export function EmployeeProfilePage() {
               <div className="relative">
                 <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-100" />
                 <ol className="space-y-6">
-                  {[...transferHistory].reverse().map((record, idx) => (
+                  {[...transferHistory].reverse().map((record, idx) => {
+                    const noteText = String(record.notes || "").toLowerCase();
+                    const isReactivated =
+                      noteText.includes("reactivated") ||
+                      noteText.includes("-> active");
+                    const isTerminated =
+                      noteText.includes("to terminated") ||
+                      noteText.includes("to resigned");
+                    const markerClass = isReactivated
+                      ? "bg-emerald-500"
+                      : isTerminated
+                        ? "bg-rose-500"
+                        : "bg-indigo-500";
+                    const cardClass = isReactivated
+                      ? "rounded-xl border border-emerald-200 bg-emerald-50/60 p-4"
+                      : isTerminated
+                        ? "rounded-xl border border-rose-200 bg-rose-50/60 p-4"
+                        : "rounded-xl border border-slate-200 bg-slate-50/60 p-4";
+                    const toDeptClass = isReactivated
+                      ? "text-emerald-700"
+                      : isTerminated
+                        ? "text-rose-700"
+                        : "text-indigo-700";
+                    const arrowClass = isReactivated
+                      ? "h-3.5 w-3.5 text-emerald-500"
+                      : isTerminated
+                        ? "h-3.5 w-3.5 text-rose-500"
+                        : "h-3.5 w-3.5 text-indigo-500";
+
+                    return (
                     <li key={idx} className="relative pl-12">
-                      <div className="absolute left-3.5 top-1.5 w-3 h-3 rounded-full bg-indigo-500 border-2 border-white shadow" />
-                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                      <div className={`absolute left-3.5 top-1.5 w-3 h-3 rounded-full border-2 border-white shadow ${markerClass}`} />
+                      <div className={cardClass}>
                         <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
                           <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
                             <span className="text-slate-500">{record.fromDepartmentName || "—"}</span>
-                            <ArrowRightLeft className="h-3.5 w-3.5 text-indigo-500" />
-                            <span className="text-indigo-700">{record.toDepartmentName}</span>
+                            <ArrowRightLeft className={arrowClass} />
+                            <span className={toDeptClass}>{record.toDepartmentName}</span>
                           </div>
                           <span className="text-xs text-slate-500 bg-white border border-slate-200 rounded-full px-2.5 py-0.5">
                             {new Date(record.transferDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
@@ -1258,7 +1374,8 @@ export function EmployeeProfilePage() {
                         </div>
                       </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ol>
               </div>
             )}
@@ -1556,95 +1673,130 @@ export function EmployeeProfilePage() {
               <p className="text-slate-400 italic text-sm">No assessments on record for this employee.</p>
             </div>
           ) : (
-            <div className="relative">
-              <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-amber-50" />
-              <ol className="space-y-8">
-                {[...assessmentsData].reverse().map((record, idx) => {
-                  const overallStars = record.overall ?? record.rating ?? 0;
-                  const isNewFormat =
-                    record.overall != null ||
-                    record.commitment != null ||
-                    record.attitude != null ||
-                    record.quality != null;
-                  return (
-                  <li key={record.id || idx} className="relative pl-12">
-                    <div className="absolute left-3.5 top-1.5 w-3 h-3 rounded-full bg-amber-500 border-2 border-white shadow-sm ring-4 ring-amber-50" />
-                    <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-white to-amber-50/20 p-5 shadow-sm transition-all hover:shadow-md">
-                      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                        <div>
-                           <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-1 block">Review period: {record.reviewPeriod}</span>
-                           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Overall</p>
-                           <div className="flex gap-1 mt-1.5">
-                             {[1,2,3,4,5].map(star => (
-                               <Star key={star} size={16} className={star <= overallStars ? "text-amber-500 fill-current" : "text-amber-100"} />
-                             ))}
-                           </div>
-                        </div>
-                        <span className="text-xs font-semibold text-slate-500 bg-white border border-slate-200 rounded-lg px-3 py-1 shadow-sm">
-                          {record.date}
-                        </span>
-                      </div>
+            <div className="space-y-8">
+              {(() => {
+                const MONTH_LABELS = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+                const sorted = [...assessmentsData].sort((a, b) => {
+                  const ya = a.period?.year ?? 0;
+                  const yb = b.period?.year ?? 0;
+                  if (yb !== ya) return yb - ya;
+                  const ma = a.period?.month ?? 0;
+                  const mb = b.period?.month ?? 0;
+                  return mb - ma;
+                });
+                const groups = new Map();
+                for (const rec of sorted) {
+                  const key = rec.period ? `${rec.period.year}-${String(rec.period.month).padStart(2, "0")}` : "ungrouped";
+                  const label = rec.period ? `${MONTH_LABELS[rec.period.month]} ${rec.period.year}` : "Earlier Reviews";
+                  if (!groups.has(key)) groups.set(key, { label, records: [] });
+                  groups.get(key).records.push(rec);
+                }
+                return [...groups.entries()].map(([key, { label, records }]) => (
+                  <div key={key}>
+                    <h4 className="text-xs font-bold text-amber-700 uppercase tracking-widest mb-4 border-l-2 border-amber-400 pl-3">{label}</h4>
+                    <div className="relative">
+                      <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-amber-50" />
+                      <ol className="space-y-6">
+                        {records.map((record, idx) => {
+                          const overallStars = record.overall ?? record.rating ?? 0;
+                          const isNewFormat = record.overall != null || record.commitment != null || record.attitude != null || record.quality != null;
+                          const bonusBadge = record.bonusStatus && record.bonusStatus !== "NONE" ? {
+                            PENDING_HR: { bg: "bg-amber-50 text-amber-700 border-amber-200", text: "Pending HR Approval" },
+                            APPROVED: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", text: "Bonus Approved" },
+                            REJECTED: { bg: "bg-rose-50 text-rose-700 border-rose-200", text: "Bonus Rejected" },
+                          }[record.bonusStatus] : null;
+                          return (
+                            <li key={record.id || idx} className="relative pl-12">
+                              <div className="absolute left-3.5 top-1.5 w-3 h-3 rounded-full bg-amber-500 border-2 border-white shadow-sm ring-4 ring-amber-50" />
+                              <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-white to-amber-50/20 p-5 shadow-sm transition-all hover:shadow-md">
+                                <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                                  <div>
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-1 block">
+                                      {record.reviewPeriod || (record.period ? `${MONTH_LABELS[record.period.month]} ${record.period.year}` : "—")}
+                                    </span>
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Overall</p>
+                                    <div className="flex gap-1 mt-1.5">
+                                      {[1,2,3,4,5].map(star => (
+                                        <Star key={star} size={16} className={star <= overallStars ? "text-amber-500 fill-current" : "text-amber-100"} />
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-xs font-semibold text-slate-500 bg-white border border-slate-200 rounded-lg px-3 py-1 shadow-sm">
+                                      {record.date}
+                                    </span>
+                                    {bonusBadge && (
+                                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${bonusBadge.bg}`}>
+                                        {bonusBadge.text}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
 
-                      {isNewFormat && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4 text-[10px]">
-                          {[
-                            ["Days bonus", record.daysBonus ?? 0],
-                            ["Overtime", record.overtime ?? 0],
-                            ["Deduction", record.deduction ?? 0],
-                          ].map(([label, val]) => (
-                            <div key={label} className="rounded-lg border border-slate-100 bg-white/80 px-2 py-1.5">
-                              <span className="font-bold text-slate-400 uppercase tracking-tighter block">{label}</span>
-                              <span className="font-bold text-slate-800">{val}</span>
-                            </div>
-                          ))}
-                          {[
-                            ["Commitment", record.commitment],
-                            ["Attitude", record.attitude],
-                            ["Quality", record.quality],
-                          ].map(([label, val]) =>
-                            val != null ? (
-                              <div key={label} className="rounded-lg border border-slate-100 bg-white/80 px-2 py-1.5">
-                                <span className="font-bold text-slate-400 uppercase tracking-tighter block">{label}</span>
-                                <span className="font-bold text-amber-700">{val}/5</span>
+                                {isNewFormat && (
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4 text-[10px]">
+                                    {[
+                                      ["Days bonus", record.daysBonus ?? 0],
+                                      ["Overtime", record.overtime ?? 0],
+                                      ["Deduction", record.deduction ?? 0],
+                                    ].map(([lbl, val]) => (
+                                      <div key={lbl} className="rounded-lg border border-slate-100 bg-white/80 px-2 py-1.5">
+                                        <span className="font-bold text-slate-400 uppercase tracking-tighter block">{lbl}</span>
+                                        <span className="font-bold text-slate-800">{val}</span>
+                                      </div>
+                                    ))}
+                                    {[
+                                      ["Commitment", record.commitment],
+                                      ["Attitude", record.attitude],
+                                      ["Quality", record.quality],
+                                    ].map(([lbl, val]) =>
+                                      val != null ? (
+                                        <div key={lbl} className="rounded-lg border border-slate-100 bg-white/80 px-2 py-1.5">
+                                          <span className="font-bold text-slate-400 uppercase tracking-tighter block">{lbl}</span>
+                                          <span className="font-bold text-amber-700">{val}/5</span>
+                                        </div>
+                                      ) : null,
+                                    )}
+                                  </div>
+                                )}
+
+                                {record.notesPrevious?.trim?.() ? (
+                                  <div className="mb-3 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
+                                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Notes / previous</p>
+                                    <p className="text-xs text-slate-600 whitespace-pre-wrap">{record.notesPrevious}</p>
+                                  </div>
+                                ) : null}
+
+                                <div className="bg-white/60 p-4 rounded-xl border border-slate-100 mb-4">
+                                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Feedback</p>
+                                  <p className="text-sm text-slate-700 italic">"{record.feedback}"</p>
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-between gap-4 border-t border-amber-100/50 pt-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] uppercase font-bold text-slate-500">
+                                      {record.evaluatorId?.fullName?.[0] || "?"}
+                                    </div>
+                                    <div>
+                                      <p className="text-[10px] text-slate-400">Evaluated by</p>
+                                      <p className="text-[10px] font-bold text-slate-600">{record.evaluatorId?.fullName || "A Manager"} ({record.evaluatorId?.position || "Management"})</p>
+                                    </div>
+                                  </div>
+                                  {record.getThebounes && (
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-emerald-100">
+                                      <Gift size={12} /> Bonus Recommended
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            ) : null,
-                          )}
-                        </div>
-                      )}
-
-                      {record.notesPrevious?.trim?.() ? (
-                        <div className="mb-3 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
-                          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Notes / previous</p>
-                          <p className="text-xs text-slate-600 whitespace-pre-wrap">{record.notesPrevious}</p>
-                        </div>
-                      ) : null}
-                      
-                      <div className="bg-white/60 p-4 rounded-xl border border-slate-100 mb-4">
-                         <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Feedback</p>
-                         <p className="text-sm text-slate-700 italic">"{record.feedback}"</p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-amber-100/50 pt-3">
-                         <div className="flex items-center gap-2">
-                           <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] uppercase font-bold text-slate-500">
-                             {record.evaluatorId?.fullName?.[0] || "?"}
-                           </div>
-                           <div>
-                             <p className="text-[10px] text-slate-400">Evaluated by</p>
-                             <p className="text-[10px] font-bold text-slate-600">{record.evaluatorId?.fullName || "A Manager"} ({record.evaluatorId?.position || "Management"})</p>
-                           </div>
-                         </div>
-                         {record.getThebounes && (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-emerald-100">
-                              <Gift size={12} /> Bonus Recommended
-                            </span>
-                         )}
-                      </div>
+                            </li>
+                          );
+                        })}
+                      </ol>
                     </div>
-                  </li>
-                  );
-                })}
-              </ol>
+                  </div>
+                ));
+              })()}
             </div>
           )}
         </div>
@@ -1664,7 +1816,10 @@ export function EmployeeProfilePage() {
           employee={employee}
           onClose={() => setShowManualVacationModal(false)}
           onPersist={persistVacationRecords}
+          onAddAsLeaveRequest={addAsDirectLeaveRequest}
+          onAddExcuseAsLeaveRequest={addExcuseAsDirectLeaveRequest}
           saving={vacationSaving}
+          recording={vacationRecording}
           recorderEmail={currentUser?.email}
         />
       )}

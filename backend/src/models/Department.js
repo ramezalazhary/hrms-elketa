@@ -42,10 +42,6 @@ const DepartmentSchema = new Schema(
     positions: [{ title: String, level: String, responsibility: String, members: [String] }], // Legacy: Dept-level positions (use Position collection)
     teams: [TeamSchema], // Legacy: Nested teams (use Team collection)
 
-    // Attendance Policy
-    standardStartTime: { type: String, default: "09:00" }, // Format "HH:mm"
-    gracePeriod: { type: Number, default: 15 }, // Minutes
-
     // Metadata for scaling
     location: { type: String },
     budget: { type: Number },

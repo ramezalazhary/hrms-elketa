@@ -1,6 +1,7 @@
 import { Department } from "../models/Department.js";
 import { Employee } from "../models/Employee.js";
 import { isAdminRole } from "../utils/roles.js";
+import { can } from "../services/authorizationPolicyService.js";
 
 const HR_DEPARTMENT_NAME = process.env.HR_DEPARTMENT_NAME || "HR";
 
@@ -49,15 +50,7 @@ export async function requireAdminOrHrHead(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  if (isAdminRole(req.user.role)) {
-    return next();
-  }
-  if (req.user.role === "HR_MANAGER") {
-    return next();
-  }
-  if (req.user.role === "HR_STAFF") {
-    const ok = await isHrDepartmentHead(req.user.email, req.user.id);
-    if (ok) return next();
-  }
-  return res.status(403).json({ error: "Forbidden" });
+  const decision = await can(req.user, "manage", "users");
+  if (decision.allow) return next();
+  return res.status(403).json({ error: "Forbidden", reason: decision.reason });
 }

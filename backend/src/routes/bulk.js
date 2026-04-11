@@ -12,7 +12,8 @@ import { Position } from "../models/Position.js";
 import { Branch } from "../models/Branch.js";
 import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
 import { Attendance } from "../models/Attendance.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { syncEmployeeOrgCaches } from "../services/employeeOrgCaches.js";
 
 const router = Router();
@@ -23,7 +24,7 @@ const __dirname = path.dirname(__filename);
 /**
  * GET /api/bulk/template
  */
-router.get("/template", requireAuth, requireRole(3), (req, res) => {
+router.get("/template", requireAuth, enforcePolicy("manage", "bulk"), (req, res) => {
   const templatePath = path.join(__dirname, "..", "..", "HRMS_Template.xlsx");
   if (!fs.existsSync(templatePath)) {
     return res.status(404).json({ error: "Template file not found on server." });
@@ -34,7 +35,7 @@ router.get("/template", requireAuth, requireRole(3), (req, res) => {
 /**
  * POST /api/bulk/upload — destructive org reset + import. Requires ALLOW_DESTRUCTIVE_BULK=true.
  */
-router.post("/upload", requireAuth, requireRole(3), upload.single("file"), async (req, res) => {
+router.post("/upload", requireAuth, enforcePolicy("manage", "bulk"), upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file provided for upload." });
 
   if (process.env.ALLOW_DESTRUCTIVE_BULK !== "true") {

@@ -7,6 +7,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { logoutThunk } from "@/modules/identity/store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
+import { normaliseRoleKey } from "@/shared/components/EntityBadges";
 import {
   Home,
   Users,
@@ -47,9 +48,9 @@ export function DashboardLayout() {
   const dispatch = useAppDispatch();
   const { currentUser } = useAppSelector((state) => state.identity);
   const departments = useAppSelector((state) => state.departments.items);
-  const currentRole = currentUser?.role;
+  const currentRole = normaliseRoleKey(currentUser?.role);
 
-  const isAdmin = currentRole === "ADMIN" || currentRole === 3;
+  const isAdmin = currentRole === "ADMIN";
   const isHrManager = currentRole === "HR_MANAGER";
   const isHR = currentRole === "HR_STAFF" || isHrManager || isAdmin;
 
@@ -102,9 +103,7 @@ export function DashboardLayout() {
     currentRole === "MANAGER" ||
     currentRole === "HR_STAFF" ||
     currentRole === "HR_MANAGER" ||
-    currentRole === "ADMIN" ||
-    currentRole === 2 ||
-    currentRole === 3;
+    currentRole === "ADMIN";
 
   if (canApproveLeave) {
     navStructure.push({
@@ -157,8 +156,6 @@ export function DashboardLayout() {
         { type: "link", to: "/attendance", label: "Attendance", icon: CalendarRange },
       ],
     });
-  } else if (currentRole === "MANAGER") {
-    // Managers no longer have Employees/Departments links as requested
   }
 
   return (
@@ -174,7 +171,11 @@ export function DashboardLayout() {
 
       <aside
         className={`fixed inset-y-0 left-0 z-[70] bg-white border-r border-zinc-200 transition-[width] duration-200 ease-out md:translate-x-0 md:static md:inset-0
-          ${isCollapsed ? "w-[4.5rem]" : "w-56"}
+          ${
+            isCollapsed
+              ? "w-[4.5rem]"
+              : "w-[85vw] max-w-72 md:w-56"
+          }
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="h-full flex flex-col p-3 relative">
@@ -307,7 +308,7 @@ export function DashboardLayout() {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-h-0 bg-zinc-50">
+      <div className="flex-1 flex flex-col min-h-0 bg-zinc-50 min-w-0">
         <header className="md:hidden shrink-0 h-14 bg-white border-b border-zinc-200 flex items-center px-4 justify-between">
           <button
             type="button"
@@ -322,7 +323,7 @@ export function DashboardLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 pt-6 md:pt-8 selection:bg-zinc-200 selection:text-zinc-900">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 lg:p-8 pt-3 sm:pt-4 md:pt-6 lg:pt-8 selection:bg-zinc-200 selection:text-zinc-900">
           <Outlet />
         </main>
       </div>

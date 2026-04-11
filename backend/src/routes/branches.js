@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { Branch } from "../models/Branch.js";
 import { Employee } from "../models/Employee.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { NotFoundError, BadRequestError } from "../utils/ApiError.js";
 import { strictLimiter } from "../middleware/security.js";
@@ -22,7 +23,7 @@ router.get(
 router.post(
   "/",
   requireAuth,
-  requireRole(["ADMIN", "HR_MANAGER", "HR_STAFF", 3]),
+  enforcePolicy("manage", "branches"),
   strictLimiter,
   asyncHandler(async (req, res) => {
     const { name, code, location, city, country, managerId, status } = req.body;
@@ -55,7 +56,7 @@ router.post(
 router.put(
   "/:id",
   requireAuth,
-  requireRole(["ADMIN", "HR_MANAGER", "HR_STAFF", 3]),
+  enforcePolicy("manage", "branches"),
   strictLimiter,
   asyncHandler(async (req, res) => {
     const { name, code, location, city, country, managerId, status } = req.body;
@@ -100,7 +101,7 @@ router.put(
 router.delete(
   "/:id",
   requireAuth,
-  requireRole(["ADMIN", 3]),
+  enforcePolicy("delete", "branches"),
   strictLimiter,
   asyncHandler(async (req, res) => {
     const branch = await Branch.findById(req.params.id);

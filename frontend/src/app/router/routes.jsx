@@ -1,5 +1,5 @@
 import { AuthLayout } from "@/layouts/authLayout/AuthLayout";
-import { DashboardLayout } from "@/layouts/dashboardLayout/DashboardLayout";
+import { DashboardLayout } from "@/layouts/dashboardLayout/DashboardLayoutEnhanced";
 import { coreModuleRoutes } from "@/modules";
 import { DashboardPage } from "@/pages/dashboard/DashboardPage";
 import { LoginPage } from "@/pages/login/LoginPage";
@@ -13,6 +13,7 @@ import { PasswordRequestsPage } from "@/pages/admin/PasswordRequestsPage";
 import { ForgotPasswordPage } from "@/modules/identity/pages/ForgotPasswordPage";
 import { RequireAdminOrHrHead } from "@/shared/routing/RequireAdminOrHrHead";
 import { OrganizationRulesPage } from "@/modules/organization/pages/OrganizationRulesPage";
+import { HolidaysPage } from "@/modules/organization/pages/HolidaysPage";
 import { WelcomePage } from "@/modules/identity/pages/WelcomePage";
 
 export const appRoutes = [
@@ -32,13 +33,11 @@ export const appRoutes = [
     element: (
       <RequireRole
         roles={[
-          1,
-          2,
-          3,
           "EMPLOYEE",
           "TEAM_LEADER",
           "MANAGER",
           "HR_STAFF",
+          "HR_MANAGER",
           "ADMIN",
         ]}
       >
@@ -52,7 +51,7 @@ export const appRoutes = [
       {
         path: "/admin/users",
         element: (
-          <RequireRole roles={[2, 3, "MANAGER", "HR_STAFF", "ADMIN"]}>
+          <RequireRole roles={["MANAGER", "HR_STAFF", "HR_MANAGER", "ADMIN"]}>
             <UsersAdminPage />
           </RequireRole>
         ),
@@ -68,15 +67,23 @@ export const appRoutes = [
       {
         path: "/admin/organization-rules",
         element: (
-          <RequireRole roles={[3, "ADMIN"]}>
+          <RequireRole roles={["ADMIN"]}>
             <OrganizationRulesPage />
+          </RequireRole>
+        ),
+      },
+      {
+        path: "/admin/holidays",
+        element: (
+          <RequireRole roles={["ADMIN", "HR_MANAGER", "HR_STAFF"]}>
+            <HolidaysPage />
           </RequireRole>
         ),
       },
       {
         path: "/reports",
         element: (
-          <RequireRole roles={[3, 4, "HR_STAFF", "ADMIN"]}>
+          <RequireRole roles={["HR_STAFF", "HR_MANAGER", "ADMIN"]}>
             <ReportsPage />
           </RequireRole>
         ),

@@ -25,6 +25,13 @@ import { OnboardingRequest } from "../src/models/OnboardingRequest.js";
 import { OnboardingSubmission } from "../src/models/OnboardingSubmission.js";
 import { PasswordResetRequest } from "../src/models/PasswordResetRequest.js";
 import { TokenBlacklist } from "../src/models/TokenBlacklist.js";
+import { PayrollRecord } from "../src/models/PayrollRecord.js";
+import { PayrollRun } from "../src/models/PayrollRun.js";
+import { EmployeeAdvance } from "../src/models/EmployeeAdvance.js";
+import { Assessment } from "../src/models/Assessment.js";
+import { LeaveRequest } from "../src/models/LeaveRequest.js";
+import { buildPolicySnapshot } from "../src/services/leavePolicyService.js";
+import { computePayrollRun } from "../src/services/payrollComputationService.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, "..", ".env") });
@@ -32,6 +39,11 @@ dotenv.config({ path: join(__dirname, "..", ".env") });
 const APPLY = process.argv.includes("--apply");
 
 const WIPE_MODELS = [
+  ["PayrollRecord", PayrollRecord],
+  ["PayrollRun", PayrollRun],
+  ["EmployeeAdvance", EmployeeAdvance],
+  ["Assessment", Assessment],
+  ["LeaveRequest", LeaveRequest],
   ["Employee", Employee],
   ["Department", Department],
   ["Team", Team],
@@ -150,27 +162,48 @@ function addDays(d, n) {
   return x;
 }
 
-function startOfDay(d) {
+/** UTC midnight for the same calendar date (avoids local-TZ → UTC shift that breaks attendance analysis). */
+function startOfDayUTC(d) {
   const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+  return new Date(Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()));
 }
 
 function isWeekend(date) {
-  const wd = date.getDay();
+  const wd = date.getUTCDay();
   return wd === 5 || wd === 6;
 }
 
-/** Last 30 calendar days (today inclusive). */
+/** Last 30 UTC calendar days (today inclusive). */
 function last30Days() {
   const out = [];
-  const today = startOfDay(new Date());
+  const today = startOfDayUTC(new Date());
   for (let i = 0; i < 30; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    out.push(startOfDay(d));
+    out.push(new Date(today.getTime() - i * 86400000));
   }
   return out;
+}
+
+/** All weekdays in the current calendar month (UTC midnight). */
+function weekdaysInCurrentMonth() {
+  const out = [];
+  const now = new Date();
+  const y = now.getFullYear();
+  const mo = now.getMonth();
+  const lastDom = new Date(y, mo + 1, 0).getDate();
+  for (let dom = 1; dom <= lastDom; dom += 1) {
+    const d = new Date(Date.UTC(y, mo, dom));
+    if (!isWeekend(d)) out.push(d);
+  }
+  return out;
+}
+
+/** Union of last 30 days + current-month weekdays (deduped, sorted). */
+function datesForAttendanceSeed() {
+  const byTime = new Map();
+  for (const d of [...last30Days(), ...weekdaysInCurrentMonth()]) {
+    byTime.set(d.getTime(), d);
+  }
+  return Array.from(byTime.values()).sort((a, b) => a - b);
 }
 
 const FIRST_NAMES = [
@@ -333,11 +366,11 @@ async function main() {
   }
 
   const usedEmails = new Set();
-  const adminPwPlain = "Admin@123456";
-  const empPwPlain = "Employee@123456";
+  const adminPwPlain = "admin123";
+  const empPwPlain = "emp123";
 
-  let adminHash = "[dry-run: would bcrypt hash Admin@123456]";
-  let empHash = "[dry-run: would bcrypt hash Employee@123456]";
+  let adminHash = "[dry-run: would bcrypt hash admin123]";
+  let empHash = "[dry-run: would bcrypt hash emp123]";
   if (APPLY) {
     try {
       adminHash = await hashPassword(adminPwPlain);
@@ -356,7 +389,7 @@ async function main() {
 
   const superAdminPlan = {
     fullName: "Super Admin",
-    email: "admin@company.com",
+    email: "admin@hr.local",
     passwordHash: adminHash,
     role: "ADMIN",
     isActive: true,
@@ -392,6 +425,53 @@ async function main() {
       { name: "Tax Card", isMandatory: true },
       { name: "Social Insurance Form", isMandatory: true },
     ],
+    companyTimezone: "Africa/Cairo",
+    companyMonthStartDay: 1,
+    leavePolicies: [
+      {
+        version: 1,
+        vacationRules: {
+          annualDays: 21,
+          accrualModel: "YEARLY",
+          maxConsecutiveDays: 365,
+          minDaysAfterHire: 0,
+        },
+        excuseRules: {
+          maxHoursPerExcuse: 8,
+          maxMinutesPerMonth: 40 * 60,
+          maxExcusesPerPeriod: 0,
+        },
+      },
+    ],
+    assessmentPayrollRules: {
+      bonusDaysEnabled: true,
+      bonusDayMultiplier: 1,
+      overtimeEnabled: true,
+      overtimeDayMultiplier: 1.5,
+      deductionEnabled: true,
+      deductionDayMultiplier: 1,
+    },
+    payrollConfig: {
+      workingDaysPerMonth: 22,
+      hoursPerDay: 8,
+      overtimeMultiplier: 1.5,
+      personalExemptionAnnual: 20000,
+      martyrsFundRate: 0.0005,
+    },
+    attendanceRules: {
+      standardStartTime: "09:00",
+      standardEndTime: "17:00",
+      gracePeriodMinutes: 15,
+      workingDaysPerMonth: 22,
+      lateDeductionTiers: [
+        { fromMinutes: 1, toMinutes: 30, deductionDays: 0.25 },
+        { fromMinutes: 30, toMinutes: 120, deductionDays: 0.5 },
+        { fromMinutes: 120, toMinutes: 10000, deductionDays: 1 },
+      ],
+      absenceDeductionDays: 1,
+      earlyDepartureDeductionDays: 0,
+      incompleteRecordDeductionDays: 0,
+    },
   };
 
   console.log("── Super Admin (planned) ──");
@@ -519,7 +599,7 @@ async function main() {
   if (!APPLY) {
     console.log("\n── Attendance (sample logic) ──");
     console.log(
-      "  For each ACTIVE employee, last 30 calendar days, skip Fri/Sat: ~80% PRESENT, ~10% LATE, ~10% ABSENT (no row).",
+      "  For each ACTIVE employee, last 30 days ∪ current-month weekdays (deduped), skip Fri/Sat: ~80% PRESENT, ~10% LATE, ~10% ABSENT (no row).",
     );
     console.log("  checkOut = checkIn + 8h; status from dept standardStartTime + gracePeriod.\n");
 
@@ -531,6 +611,15 @@ async function main() {
     console.log("── UserPermission (planned) ──");
     console.log("  Super Admin: module * / actions [*] / ALL");
     console.log("  Each MANAGER: employees, attendance, reports (per spec)\n");
+
+    console.log("── Extended seed (with --apply) ──");
+    console.log("  OrganizationPolicy: leavePolicies, payrollConfig, attendanceRules, assessmentPayrollRules");
+    console.log("  Roles: HR_MANAGER + HR_STAFF (HR dept); TEAM_LEADER (Engineering #2)");
+    console.log("  Financial: mixed INSURED / NOT_INSURED, allowances, bank accounts, some CASH");
+    console.log("  LeaveRequest: 2 vacation + 1 excuse (mixed APPROVED / PENDING)");
+    console.log("  Assessment: up to 10 employees, current month (bonus APPROVED / PENDING_HR)");
+    console.log("  EmployeeAdvance: 2 ACTIVE rows");
+    console.log("  PayrollRun: current calendar month → computePayrollRun (COMPUTED + PayrollRecords)\n");
 
     console.log("══════════════════════════════════════════════════");
     console.log("Final summary (dry run — no writes)");
@@ -562,6 +651,10 @@ async function main() {
   let attendanceCreated = 0;
   let alertsCreated = 0;
   let permissionsCreated = 0;
+  let leaveCreated = 0;
+  let assessmentCreated = 0;
+  let advancesCreated = 0;
+  let payrollSeedNote = "—";
 
   try {
     superAdminDoc = await Employee.create(superAdminPlan);
@@ -573,6 +666,17 @@ async function main() {
     await OrganizationPolicy.create(policyPlan);
   } catch (e) {
     console.error("[ERROR] OrganizationPolicy create:", e.message);
+  }
+
+  try {
+    if (superAdminDoc) {
+      await OrganizationPolicy.updateOne(
+        { name: "default" },
+        { $set: { chiefExecutiveEmployeeId: superAdminDoc._id } },
+      );
+    }
+  } catch (e) {
+    console.error("[ERROR] OrganizationPolicy chiefExecutive patch:", e.message);
   }
 
   try {
@@ -707,6 +811,7 @@ async function main() {
       ];
 
       dep.head = manager.email;
+      dep.headId = manager._id;
       const t0 = dep.teams[0];
       if (t0) {
         t0.leaderEmail = manager.email;
@@ -731,6 +836,112 @@ async function main() {
     }
   } catch (e) {
     console.error("[ERROR] Department heads / teams update:", e.message);
+  }
+
+  try {
+    const hrDep = deptByName["HR"];
+    if (hrDep) {
+      const hrSorted = await Employee.find({ departmentId: hrDep._id }).sort({
+        employeeCode: 1,
+      });
+      if (hrSorted[0]) {
+        await Employee.updateOne(
+          { _id: hrSorted[0]._id },
+          { $set: { role: "HR_MANAGER" } },
+        );
+        const m0 = employees.find((x) => x._id.equals(hrSorted[0]._id));
+        if (m0) m0.role = "HR_MANAGER";
+      }
+      if (hrSorted[1]) {
+        await Employee.updateOne(
+          { _id: hrSorted[1]._id },
+          { $set: { role: "HR_STAFF" } },
+        );
+        const m1 = employees.find((x) => x._id.equals(hrSorted[1]._id));
+        if (m1) m1.role = "HR_STAFF";
+      }
+    }
+
+    const engDep = deptByName["Engineering"];
+    if (engDep) {
+      const engSorted = await Employee.find({ departmentId: engDep._id }).sort({
+        employeeCode: 1,
+      });
+      const mgr = engSorted.find((e) => e.role === "MANAGER");
+      const tl = engSorted[1];
+      if (mgr && tl && !tl._id.equals(mgr._id)) {
+        await Employee.updateOne(
+          { _id: tl._id },
+          { $set: { role: "TEAM_LEADER" } },
+        );
+        const memTl = employees.find((x) => x._id.equals(tl._id));
+        if (memTl) memTl.role = "TEAM_LEADER";
+        for (const e of engSorted) {
+          if (e._id.equals(mgr._id) || e._id.equals(tl._id)) continue;
+          await Employee.updateOne(
+            { _id: e._id },
+            { $set: { teamLeaderId: tl._id } },
+          );
+          const mem = employees.find((x) => x._id.equals(e._id));
+          if (mem) mem.teamLeaderId = tl._id;
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[ERROR] HR / Engineering role patch:", e.message);
+  }
+
+  try {
+    const staff = await Employee.find({
+      email: { $ne: "admin@company.com" },
+      status: "ACTIVE",
+      isActive: true,
+    });
+    let fi = 0;
+    for (const e of staff) {
+      fi += 1;
+      const base = Number(e.financial?.baseSalary) || 0;
+      const fin =
+        e.financial && typeof e.financial.toObject === "function"
+          ? e.financial.toObject()
+          : { ...(e.financial || {}) };
+      fin.currency = fin.currency || "EGP";
+      if (fi % 2 === 0) {
+        fin.allowances = randInt(500, 2500);
+        fin.fixedBonus =
+          fi % 4 === 0 ? randInt(200, 1200) : Number(fin.fixedBonus) || 0;
+        fin.fixedDeduction =
+          fi % 5 === 0 ? randInt(50, 400) : Number(fin.fixedDeduction) || 0;
+        fin.paymentMethod = fi % 7 === 0 ? "CASH" : "BANK_TRANSFER";
+        if (fin.paymentMethod === "BANK_TRANSFER") {
+          fin.bankAccount =
+            fin.bankAccount ||
+            `EG${randInt(1000000000000000, 9999999999999999)}`;
+        }
+        const subW = Math.min(Math.max(base, 2700), 16700);
+        e.financial = fin;
+        e.socialInsurance = {
+          status: "INSURED",
+          subscriptionWage: subW,
+          basicWage: Math.min(subW, 10000),
+          insuranceNumber: String(randInt(1000000000, 9999999999)),
+          insuranceDate: addMonths(new Date(), -14),
+        };
+      } else {
+        fin.paymentMethod = fin.paymentMethod || "BANK_TRANSFER";
+        if (fin.paymentMethod === "BANK_TRANSFER" && !fin.bankAccount) {
+          fin.bankAccount = `EG${randInt(1000000000000000, 9999999999999999)}`;
+        }
+        e.financial = fin;
+        e.socialInsurance = e.socialInsurance || {};
+        if (!e.socialInsurance.status) {
+          e.socialInsurance.status = "NOT_INSURED";
+        }
+      }
+      await e.save();
+    }
+  } catch (e) {
+    console.error("[ERROR] Financial / insurance seed:", e.message);
   }
 
   const mgrs = employees.filter((e) => e.role === "MANAGER" && e.isActive);
@@ -830,24 +1041,24 @@ async function main() {
     console.error("[ERROR] Alerts create:", e.message);
   }
 
-  const deptPolicyById = Object.fromEntries(
-    departments.map((d) => [
-      d._id.toString(),
+  // Department model does not persist standardStartTime / gracePeriod; use planned specs.
+  const deptPolicyByName = Object.fromEntries(
+    departmentPlans.map((d) => [
+      d.name,
       { standardStartTime: d.standardStartTime, gracePeriod: d.gracePeriod },
     ]),
   );
 
   try {
-    const days = last30Days();
+    const days = datesForAttendanceSeed();
     const activeStaff = await Employee.find({
       isActive: true,
       status: "ACTIVE",
-      departmentId: { $ne: null },
     });
 
     for (const emp of activeStaff) {
       const pol =
-        deptPolicyById[emp.departmentId.toString()] || {
+        deptPolicyByName[emp.department] || {
           standardStartTime: "09:00",
           gracePeriod: 15,
         };
@@ -902,6 +1113,161 @@ async function main() {
     console.error("[ERROR] Attendance seed:", e.message);
   }
 
+  const seedYear = new Date().getFullYear();
+  const seedMonth = new Date().getMonth() + 1;
+
+  try {
+    const policyDoc = await OrganizationPolicy.findOne({ name: "default" });
+    if (!policyDoc) throw new Error("default policy missing");
+
+    const activeForSeed = await Employee.find({
+      isActive: true,
+      status: "ACTIVE",
+      email: { $ne: "admin@company.com" },
+    }).sort({ employeeCode: 1 });
+
+    const [e1, e2, e3, e4, e5] = activeForSeed;
+    if (e1) {
+      const vs = addDays(new Date(), -50);
+      const ve = addDays(vs, 2);
+      await LeaveRequest.create({
+        employeeId: e1._id,
+        employeeEmail: e1.email,
+        kind: "VACATION",
+        leaveType: "ANNUAL",
+        startDate: vs,
+        endDate: ve,
+        status: "APPROVED",
+        policySnapshot: buildPolicySnapshot(policyDoc, "VACATION"),
+        computed: { days: 3 },
+        approvals: [
+          {
+            role: "TEAM_LEADER",
+            status: "APPROVED",
+            processedBy: "admin@company.com",
+            processedAt: new Date(),
+          },
+          {
+            role: "HR",
+            status: "APPROVED",
+            processedBy: "admin@company.com",
+            processedAt: new Date(),
+          },
+        ],
+      });
+      leaveCreated += 1;
+    }
+    if (e2) {
+      const vs = addDays(new Date(), 20);
+      const ve = addDays(vs, 4);
+      await LeaveRequest.create({
+        employeeId: e2._id,
+        employeeEmail: e2.email,
+        kind: "VACATION",
+        leaveType: "ANNUAL",
+        startDate: vs,
+        endDate: ve,
+        status: "PENDING",
+        policySnapshot: buildPolicySnapshot(policyDoc, "VACATION"),
+        computed: { days: 5 },
+        approvals: [
+          { role: "TEAM_LEADER", status: "PENDING" },
+          { role: "HR", status: "PENDING" },
+        ],
+      });
+      leaveCreated += 1;
+    }
+    if (e3) {
+      const ed = addDays(new Date(), -8);
+      await LeaveRequest.create({
+        employeeId: e3._id,
+        employeeEmail: e3.email,
+        kind: "EXCUSE",
+        excuseDate: ed,
+        startTime: "10:00",
+        endTime: "12:30",
+        status: "APPROVED",
+        policySnapshot: buildPolicySnapshot(policyDoc, "EXCUSE"),
+        computed: { minutes: 150 },
+        approvals: [
+          {
+            role: "MANAGER",
+            status: "APPROVED",
+            processedBy: "admin@company.com",
+            processedAt: new Date(),
+          },
+          {
+            role: "HR",
+            status: "APPROVED",
+            processedBy: "admin@company.com",
+            processedAt: new Date(),
+          },
+        ],
+      });
+      leaveCreated += 1;
+    }
+
+    if (superAdminDoc) {
+      const evalId = superAdminDoc._id;
+      const pool = activeForSeed.slice(0, 10);
+      for (let i = 0; i < pool.length; i += 1) {
+        const emp = pool[i];
+        const sub = {
+          date: `${seedYear}-${String(seedMonth).padStart(2, "0")}-15`,
+          period: { year: seedYear, month: seedMonth },
+          feedback: "Seeded quarterly review — collaboration and delivery on track.",
+          reviewPeriod: `${seedYear}-Q${Math.ceil(seedMonth / 3)}`,
+          evaluatorId: evalId,
+          overall: 3 + (i % 3),
+          commitment: 4,
+          attitude: 4,
+          quality: 4,
+          getThebounes: i < 4,
+          daysBonus: i < 3 ? 2 : 0,
+          overtime: i === 2 ? 6 : 0,
+          deduction: i === 5 ? 4 : 0,
+          bonusStatus:
+            i < 2 ? "APPROVED" : i === 2 ? "PENDING_HR" : "NONE",
+        };
+        await Assessment.create({ employeeId: emp._id, assessment: [sub] });
+        assessmentCreated += 1;
+      }
+    }
+
+    if (e4) {
+      await EmployeeAdvance.create({
+        employeeId: e4._id,
+        amount: 2500,
+        reason: "Salary advance (seed)",
+        status: "ACTIVE",
+        recordedBy: "admin@company.com",
+      });
+      advancesCreated += 1;
+    }
+    if (e5) {
+      await EmployeeAdvance.create({
+        employeeId: e5._id,
+        amount: 1200,
+        reason: "Emergency advance (seed)",
+        status: "ACTIVE",
+        recordedBy: "admin@company.com",
+      });
+      advancesCreated += 1;
+    }
+
+    const run = await PayrollRun.create({
+      period: { year: seedYear, month: seedMonth },
+      createdBy: "admin@company.com",
+    });
+    const computeResult = await computePayrollRun(
+      run._id.toString(),
+      "admin@company.com",
+    );
+    payrollSeedNote = `run ${run._id} — ${computeResult.recordCount} record(s), status COMPUTED`;
+  } catch (e) {
+    console.error("[ERROR] Leave / assessment / advance / payroll seed:", e.message);
+  }
+
   const empA = resolveCaseEmp("A");
   const empB = resolveCaseEmp("B");
   const empC = resolveCaseEmp("C");
@@ -919,6 +1285,10 @@ async function main() {
   console.log(`  ✓ Attendance records:    ${attendanceCreated}`);
   console.log(`  ✓ Alerts created:        ${alertsCreated}`);
   console.log(`  ✓ Permissions created:   ${permissionsCreated}`);
+  console.log(`  ✓ Leave requests:      ${leaveCreated}`);
+  console.log(`  ✓ Assessment docs:       ${assessmentCreated}`);
+  console.log(`  ✓ Salary advances:       ${advancesCreated}`);
+  console.log(`  ✓ Payroll (computed):    ${payrollSeedNote}`);
   console.log("\n  Test cases seeded:");
   console.log(
     `    → CASE A (overdue increase):  ${empA ? `${empA.fullName} <${empA.email}>` : "—"}`,

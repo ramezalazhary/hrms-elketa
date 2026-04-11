@@ -180,11 +180,26 @@ export const leaveRequestActionApi = async (id, body) => {
   return handleApiResponse(response);
 };
 
-export const cancelLeaveRequestApi = async (id) => {
+export const directRecordLeaveRequestApi = async (id, comment, extras = {}) => {
+  const response = await fetchWithAuth(`${API_URL}/leave-requests/${id}/record-direct`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment, ...extras }),
+  });
+  return handleApiResponse(response);
+};
+
+export const cancelLeaveRequestApi = async (id, reason) => {
   const response = await fetchWithAuth(`${API_URL}/leave-requests/${id}/cancel`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
   });
+  return handleApiResponse(response);
+};
+
+export const getLeaveRequestHistoryApi = async (id) => {
+  const response = await fetchWithAuth(`${API_URL}/leave-requests/${id}/history`);
   return handleApiResponse(response);
 };
 
@@ -208,10 +223,46 @@ export const getAssessmentEligibilityApi = async (employeeId) => {
   const response = await fetchWithAuth(
     `${API_URL}/assessments/eligibility/${employeeId}`,
   );
-  /* Backend returns 404 + { canAssess: false } for unknown id; avoid throwing so UI can set a resolved gate */
   if (response.status === 404) {
     return { canAssess: false };
   }
+  return handleApiResponse(response);
+};
+
+export const getPendingAssessmentsApi = async (params) => {
+  const q = params ? `?${new URLSearchParams(params).toString()}` : "";
+  const response = await fetchWithAuth(`${API_URL}/assessments/pending${q}`);
+  return handleApiResponse(response);
+};
+
+export const getAssessmentRemindersApi = async () => {
+  const response = await fetchWithAuth(`${API_URL}/assessments/reminders`);
+  return handleApiResponse(response);
+};
+
+export const getBonusApprovalsApi = async () => {
+  const response = await fetchWithAuth(`${API_URL}/assessments/bonus-approvals`);
+  const body = await handleApiResponse(response);
+  return Array.isArray(body?.approvals) ? body.approvals : [];
+};
+
+export const approveBonusApi = async (employeeId, assessmentId) => {
+  const response = await fetchWithAuth(
+    `${API_URL}/assessments/${employeeId}/assessment/${assessmentId}/approve-bonus`,
+    { method: "POST", headers: { "Content-Type": "application/json" } },
+  );
+  return handleApiResponse(response);
+};
+
+export const rejectBonusApi = async (employeeId, assessmentId, reason) => {
+  const response = await fetchWithAuth(
+    `${API_URL}/assessments/${employeeId}/assessment/${assessmentId}/reject-bonus`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    },
+  );
   return handleApiResponse(response);
 };
 

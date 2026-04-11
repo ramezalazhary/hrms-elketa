@@ -18,7 +18,7 @@ import {
 } from "../middleware/auth.js";
 import { authLimiter } from "../middleware/security.js";
 import { requireAuth } from "../middleware/auth.js";
-import { requireAdminOrHrHead } from "../middleware/rbac.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import {
   validateLogin,
   validateUserCreation,
@@ -317,7 +317,7 @@ router.post("/forgot-password", async (req, res) => {
 router.get(
   "/password-requests",
   requireAuth,
-  requireAdminOrHrHead,
+  enforcePolicy("manage", "auth"),
   async (_req, res) => {
     try {
       const requests = await PasswordResetRequest.find({
@@ -340,7 +340,7 @@ router.get(
 router.post(
   "/reset-password",
   requireAuth,
-  requireAdminOrHrHead,
+  enforcePolicy("manage", "auth"),
   async (req, res) => {
     try {
       const { targetUserId, targetEmail, newPassword } = req.body;

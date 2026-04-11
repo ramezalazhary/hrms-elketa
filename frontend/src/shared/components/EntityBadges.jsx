@@ -10,6 +10,9 @@ import {
   Briefcase,
   UserRound,
   Crown,
+  Clock,
+  AlertCircle,
+  LogOut,
 } from "lucide-react";
 
 /** @param {string} s */
@@ -73,6 +76,48 @@ const STATUS_CONFIG = {
     className: "bg-red-50 text-red-900 border-red-200",
     iconClass: "text-red-600",
   },
+  PRESENT: {
+    label: "Present",
+    Icon: CheckCircle2,
+    className: "bg-emerald-50 text-emerald-900 border-emerald-200",
+    iconClass: "text-emerald-600",
+  },
+  LATE: {
+    label: "Late",
+    Icon: Clock,
+    className: "bg-amber-50 text-amber-900 border-amber-200",
+    iconClass: "text-amber-600",
+  },
+  ABSENT: {
+    label: "Absent",
+    Icon: Ban,
+    className: "bg-red-50 text-red-900 border-red-200",
+    iconClass: "text-red-600",
+  },
+  EXCUSED: {
+    label: "Excused",
+    Icon: CheckCircle2,
+    className: "bg-teal-50 text-teal-900 border-teal-200",
+    iconClass: "text-teal-600",
+  },
+  EARLY_DEPARTURE: {
+    label: "Early departure",
+    Icon: LogOut,
+    className: "bg-orange-50 text-orange-900 border-orange-200",
+    iconClass: "text-orange-600",
+  },
+  INCOMPLETE: {
+    label: "Incomplete",
+    Icon: AlertCircle,
+    className: "bg-yellow-50 text-yellow-900 border-yellow-200",
+    iconClass: "text-yellow-600",
+  },
+  OVERTIME: {
+    label: "Overtime",
+    Icon: Clock,
+    className: "bg-blue-50 text-blue-900 border-blue-200",
+    iconClass: "text-blue-600",
+  },
 };
 
 /**
@@ -125,6 +170,17 @@ const ROLE_CONFIG = {
     statCountInactive: "text-emerald-950",
     statLabelInactive: "text-emerald-800",
   },
+  HR_MANAGER: {
+    label: "HR Manager",
+    Icon: Users,
+    className: "bg-emerald-100 text-emerald-900 border-emerald-300",
+    iconClass: "text-emerald-700",
+    statInactive:
+      "border-emerald-300 bg-emerald-100/40 hover:bg-emerald-100 hover:border-emerald-400",
+    statActive: "border-emerald-700 bg-emerald-700 shadow-md",
+    statCountInactive: "text-emerald-950",
+    statLabelInactive: "text-emerald-900",
+  },
   MANAGER: {
     label: "Manager",
     Icon: Briefcase,
@@ -161,6 +217,7 @@ const ROLE_CONFIG = {
 function normaliseRoleKey(r) {
   if (r === 3 || r === "ADMIN") return "ADMIN";
   if (r === 2 || r === "MANAGER") return "MANAGER";
+  if (r === "HR_MANAGER") return "HR_MANAGER";
   if (r === "HR_STAFF") return "HR_STAFF";
   if (r === "TEAM_LEADER") return "TEAM_LEADER";
   return "EMPLOYEE";

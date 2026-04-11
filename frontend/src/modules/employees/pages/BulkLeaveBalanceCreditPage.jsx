@@ -15,8 +15,7 @@ const HR_MODES = [
 export function BulkLeaveBalanceCreditPage() {
   const { showToast } = useToast();
   const currentUser = useAppSelector((s) => s.identity.currentUser);
-  const isAdmin =
-    currentUser?.role === "ADMIN" || currentUser?.role === 3;
+  const isAdmin = currentUser?.role === "ADMIN";
 
   const [mode, setMode] = useState("department");
   const [departments, setDepartments] = useState([]);

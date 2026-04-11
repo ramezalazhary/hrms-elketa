@@ -3,8 +3,8 @@ import crypto from "crypto";
 import { OnboardingRequest } from "../models/OnboardingRequest.js";
 import { OnboardingSubmission } from "../models/OnboardingSubmission.js";
 import { requireAuth } from "../middleware/auth.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { createEmployee } from "../services/employeeService.js";
-import { isHrOrAdmin } from "../utils/roles.js";
 
 const router = Router();
 
@@ -12,12 +12,10 @@ const router = Router();
  * @route POST /api/onboarding/generate
  * @desc Admin only: Generate a temporary onboarding link
  */
-router.post("/generate", requireAuth, async (req, res) => {
+router.post("/generate", requireAuth, enforcePolicy("manage", "onboarding"), async (req, res) => {
   try {
     const { expiresHours = 48, department, position, team, employeeCode, baseSalary } = req.body;
     const user = req.user;
-
-    if (!isHrOrAdmin(user)) return res.status(403).json({ error: "Forbidden" });
 
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date();
@@ -88,11 +86,8 @@ router.post("/submit/:token", async (req, res) => {
  * @route GET /api/onboarding/links
  * @desc Admin only: List all links with usage metrics
  */
-router.get("/links", requireAuth, async (req, res) => {
+router.get("/links", requireAuth, enforcePolicy("manage", "onboarding"), async (req, res) => {
   try {
-    const user = req.user;
-    if (!isHrOrAdmin(user)) return res.status(403).json({ error: "Forbidden" });
-
     const links = await OnboardingRequest.find().sort({ createdAt: -1 });
     res.json(links);
   } catch (error) {
@@ -104,9 +99,8 @@ router.get("/links", requireAuth, async (req, res) => {
  * @route PATCH /api/onboarding/links/:id/stop
  * @desc Admin only: Stop (deactivate) a link
  */
-router.patch("/links/:id/stop", requireAuth, async (req, res) => {
+router.patch("/links/:id/stop", requireAuth, enforcePolicy("manage", "onboarding"), async (req, res) => {
   try {
-    if (!isHrOrAdmin(req.user)) return res.status(403).json({ error: "Forbidden" });
 
     const link = await OnboardingRequest.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
     if (!link) return res.status(404).json({ error: "Link not found" });
@@ -121,9 +115,8 @@ router.patch("/links/:id/stop", requireAuth, async (req, res) => {
  * @route GET /api/onboarding/submissions
  * @desc Admin only: List all submissions
  */
-router.get("/submissions", requireAuth, async (req, res) => {
+router.get("/submissions", requireAuth, enforcePolicy("manage", "onboarding"), async (req, res) => {
   try {
-    if (!isHrOrAdmin(req.user)) return res.status(403).json({ error: "Forbidden" });
 
     const submissions = await OnboardingSubmission.find()
       .populate("linkId", "token")
@@ -138,11 +131,10 @@ router.get("/submissions", requireAuth, async (req, res) => {
  * @route PATCH /api/onboarding/submissions/:id
  * @desc Admin only: Approve/Reject a submission
  */
-router.patch("/submissions/:id", requireAuth, async (req, res) => {
+router.patch("/submissions/:id", requireAuth, enforcePolicy("manage", "onboarding"), async (req, res) => {
   try {
     const { status, adminNotes, editedData } = req.body;
     const user = req.user;
-    if (!isHrOrAdmin(user)) return res.status(403).json({ error: "Forbidden" });
 
     const sub = await OnboardingSubmission.findById(req.params.id);
     if (!sub) return res.status(404).json({ error: "Submission not found" });
@@ -194,9 +186,8 @@ router.patch("/submissions/:id", requireAuth, async (req, res) => {
 /**
  * @route DELETE /api/onboarding/links/:id
  */
-router.delete("/links/:id", requireAuth, async (req, res) => {
+router.delete("/links/:id", requireAuth, enforcePolicy("manage", "onboarding"), async (req, res) => {
   try {
-    if (!isHrOrAdmin(req.user)) return res.status(403).json({ error: "Forbidden" });
 
     await OnboardingRequest.findByIdAndDelete(req.params.id);
     res.json({ message: "Link deleted successfully" });

@@ -80,8 +80,39 @@ const LeaveRequestSchema = new Schema(
     submittedAt: { type: Date, default: Date.now },
 
     createdBy: { type: String },
+    onBehalf: { type: Boolean, default: false },
+
+    cancelledBy: { type: String },
+    cancelledAt: { type: Date },
+    cancellationReason: { type: String },
+
+    /** Set at approval time: PAID = deducted from balance; UNPAID = salary deduction instead. */
+    effectivePaymentType: {
+      type: String,
+      enum: ["PAID", "UNPAID"],
+    },
+    unpaidReason: {
+      type: String,
+      enum: ["NO_BALANCE", "NOT_ELIGIBLE", "HR_OVERRIDE"],
+    },
+    /** For excuses: true when employee had exhausted their excuse quota (set at submission and/or approval). */
+    quotaExceeded: { type: Boolean, default: false },
+    /** HR's chosen deduction method for quota-exceeded excuses. */
+    excessDeductionMethod: {
+      type: String,
+      enum: ["SALARY", "VACATION_BALANCE"],
+    },
+    /** HR-specified deduction amount (day-fraction for SALARY, day count for VACATION_BALANCE). */
+    excessDeductionAmount: { type: Number },
+
     lastUpdatedAt: { type: Date },
     lastUpdatedBy: { type: String },
+
+    /** True when HR/Admin bypassed normal approval chain and recorded directly. */
+    directRecorded: { type: Boolean, default: false },
+    directRecordedBy: { type: String },
+    directRecordedAt: { type: Date },
+    directRecordComment: { type: String },
   },
   { timestamps: true },
 );

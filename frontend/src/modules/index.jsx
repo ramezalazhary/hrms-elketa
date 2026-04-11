@@ -5,6 +5,7 @@ import { employeesRoutes } from "./employees/routes";
 import { positionsRoutes } from "./positions/routes";
 import { teamsRoutes } from "./teams/routes";
 import { attendanceRoutes } from "./attendance/routes";
+import { payrollRoutes } from "./payroll/routes";
 
 const contractsRoutesActive =
   import.meta.env.VITE_ENABLE_CONTRACTS === "true" ? contractsRoutes : [];
@@ -17,6 +18,5 @@ export const coreModuleRoutes = [
   ...employmentsRoutes,
   ...contractsRoutesActive,
   ...attendanceRoutes,
+  ...payrollRoutes,
 ];
-
-// Future modules (payroll, recruitment) can append routes here.

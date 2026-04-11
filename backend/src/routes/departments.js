@@ -1,14 +1,16 @@
 /**
- * @file `/api/departments` — read filtered by role; create/update/delete require legacy `requireRole(3)` (Admin numeric gate).
+ * @file `/api/departments` — read filtered by role; create/update/delete require enforcePolicy (Admin gate).
  */
 import { Router } from "express";
+import mongoose from "mongoose";
 import { Department } from "../models/Department.js";
 import { Employee } from "../models/Employee.js";
 import { Team } from "../models/Team.js";
 import { Position } from "../models/Position.js";
 import { ManagementRequest } from "../models/ManagementRequest.js";
 import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import {
   validateDepartmentCreation,
   validateDepartmentUpdate,
@@ -19,33 +21,29 @@ import {
   syncTeamLeaderRolesFromDepartmentTeams,
 } from "../services/employeeOrgSync.js";
 import { syncEmployeesWithDepartment } from "../services/orgResolutionService.js";
+import { normalizeRole, ROLE } from "../utils/roles.js";
 
 const router = Router();
 
 // GET /departments - View departments
 router.get("/", requireAuth, async (req, res) => {
   const user = req.user;
+  const role = normalizeRole(user.role);
 
   try {
     let departments;
 
-    if (user.role === 1 || user.role === "EMPLOYEE") {
-      // Employee: see only their department
+    if (role === ROLE.EMPLOYEE) {
       const employee = await Employee.findOne({ email: user.email });
       if (!employee) return res.json([]);
       departments = await Department.find({ name: employee.department });
-    } else if (user.role === 2 || user.role === "MANAGER" || user.role === "HR_STAFF" || user.role === "TEAM_LEADER") {
-      // Manager/HR/Leader: see departments they manage or all if HR
-      if (user.role === "HR_STAFF") {
-        departments = await Department.find();
-      } else if (user.role === "TEAM_LEADER") {
-        // Special: Team Leader sees departments where they lead a team
-        departments = await Department.find({ "teams.leaderEmail": user.email });
-      } else {
-        departments = await Department.find({ head: user.email });
-      }
+    } else if (role === ROLE.HR_STAFF || role === ROLE.HR_MANAGER) {
+      departments = await Department.find();
+    } else if (role === ROLE.TEAM_LEADER) {
+      departments = await Department.find({ "teams.leaderEmail": user.email });
+    } else if (role === ROLE.MANAGER) {
+      departments = await Department.find({ head: user.email });
     } else {
-      // Admin: see all departments
       departments = await Department.find();
     }
 
@@ -83,18 +81,17 @@ router.get("/:id", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "Department not found" });
     }
 
-    // Check access based on role
-    if (user.role === 1 || user.role === "EMPLOYEE") {
+    const role = normalizeRole(user.role);
+    if (role === ROLE.EMPLOYEE) {
       const employee = await Employee.findOne({ email: user.email });
       if (!employee || employee.department !== department.name) {
         return res.status(403).json({ error: "Access denied" });
       }
-    } else if (user.role === 2 || user.role === "MANAGER") {
+    } else if (role === ROLE.MANAGER) {
       if (department.head !== user.email) {
         return res.status(403).json({ error: "Access denied" });
       }
     }
-    // Admin has access to all
 
     const standaloneTeams = await Team.find({ departmentId: department._id, status: "ACTIVE" });
     const deptObj = department.toObject();
@@ -119,8 +116,8 @@ router.get("/:id", requireAuth, async (req, res) => {
 router.post(
   "/",
   requireAuth,
-  requireRole(3), // Admin only
-  strictLimiter, // Additional rate limiting for sensitive operations
+  enforcePolicy("manage", "departments"),
+  strictLimiter,
   validateDepartmentCreation,
   async (req, res) => {
     try {
@@ -220,182 +217,527 @@ router.post(
 router.put(
   "/:id",
   requireAuth,
-  requireRole(3), // Admin only
+  enforcePolicy("manage", "departments"),
   strictLimiter,
   validateDepartmentUpdate,
   async (req, res) => {
+    const correlationId = `dept-head-sync-${Date.now().toString(36)}`;
+    const session = await mongoose.startSession();
     try {
-      const { name, code, head, headTitle, headResponsibility, positions, description, type, status, teams, requiredDocuments } = req.body;
+      const {
+        name,
+        code,
+        head,
+        headTitle,
+        headResponsibility,
+        positions,
+        description,
+        type,
+        status,
+        teams,
+        requiredDocuments,
+      } = req.body;
 
-      const department = await Department.findById(req.params.id);
-      if (!department) {
-        return res.status(404).json({ error: "Department not found" });
-      }
-
-      const previousHeadForSync = department.head;
-      const teamsBeforeSync = Array.isArray(department.teams)
-        ? department.teams.map((t) => ({
-            leaderEmail: t.leaderEmail,
-            manager: t.manager,
-            managerEmail: t.managerEmail,
-          }))
-        : [];
-
-      const currentName = name ?? department.name;
-
-      // Check if new name or code is taken by another department
-      const conflict = await Department.findOne({
-        _id: { $ne: req.params.id },
-        $or: [
-          { name: currentName },
-          { code: code !== undefined ? code : department.code }
-        ].filter(Boolean)
-      });
-
-      if (conflict) {
-        const field = conflict.name === currentName ? "name" : "code";
-        return res.status(409).json({ error: `Department ${field} already exists` });
-      }
-
-      if (head !== undefined && head !== null && head !== "") {
-        const headEmp = await Employee.findOne({ email: head });
-        if (!headEmp) {
-          return res.status(400).json({ error: `Leader with email ${head} not found.` });
+      let responsePayload = null;
+      let roleSyncDepartmentId = null;
+      let roleSyncTeams = null;
+      let roleSyncPreviousTeams = null;
+      let finalizedHeadEmail = null;
+      let finalizedHeadEmployeeId = null;
+      let previousHeadDemotedId = null;
+      let consistencyMode = "atomic-transaction";
+      let postCommitReconcileOk = true;
+      const runDepartmentUpdate = async () => {
+        const department = await Department.findById(req.params.id).session(session);
+        if (!department) {
+          throw new Error("NOT_FOUND_DEPARTMENT");
         }
-        // Support renaming: Allow if the employee is already assigned to this department (by ID or legacy name)
-        if (headEmp.departmentId?.toString() !== req.params.id && headEmp.department !== department.name && name !== headEmp.department) {
-          return res.status(400).json({ error: `Leader ${head} belongs to ${headEmp.department}, not ${currentName}.` });
+
+        const teamsBeforeSync = Array.isArray(department.teams)
+          ? department.teams.map((t) => ({
+              leaderEmail: t.leaderEmail,
+              manager: t.manager,
+              managerEmail: t.managerEmail,
+            }))
+          : [];
+
+        const oldName = department.name;
+        const previousHeadEmail = department.head || null;
+        const currentName = name ?? department.name;
+        const normalizedHead =
+          head !== undefined
+            ? head && typeof head === "string" && head.trim()
+              ? head.trim()
+              : null
+            : undefined;
+        const effectiveHeadEmail =
+          normalizedHead !== undefined ? normalizedHead : previousHeadEmail;
+
+        const conflict = await Department.findOne({
+          _id: { $ne: req.params.id },
+          $or: [{ name: currentName }, { code: code !== undefined ? code : department.code }].filter(
+            Boolean,
+          ),
+        }).session(session);
+
+        if (conflict) {
+          throw new Error(
+            conflict.name === currentName
+              ? "CONFLICT_DEPARTMENT_NAME"
+              : "CONFLICT_DEPARTMENT_CODE",
+          );
         }
-      }
 
-      const oldName = department.name;
-      department.name = currentName;
-      if (code !== undefined) department.code = code;
-      if (head !== undefined) {
-        department.head =
-          head && typeof head === "string" && head.trim() ? head.trim() : null;
-      }
-      if (headTitle !== undefined) department.headTitle = headTitle;
-      if (headResponsibility !== undefined) department.headResponsibility = headResponsibility;
+        let nextHeadEmployee = null;
+        if (normalizedHead) {
+          nextHeadEmployee = await Employee.findOne({ email: normalizedHead }).session(
+            session,
+          );
+          if (!nextHeadEmployee) {
+            throw new Error(`INVALID_HEAD_EMAIL:${normalizedHead}`);
+          }
+          if (
+            nextHeadEmployee.departmentId?.toString() !== req.params.id &&
+            nextHeadEmployee.department !== department.name &&
+            name !== nextHeadEmployee.department
+          ) {
+            throw new Error(`INVALID_HEAD_DEPARTMENT:${normalizedHead}`);
+          }
+        }
 
-      department.description = description ?? department.description;
-      department.type = type ?? department.type;
-      department.status = status ?? department.status;
-      department.positions = Array.isArray(positions) ? positions : department.positions;
-      department.requiredDocuments = Array.isArray(requiredDocuments) ? requiredDocuments : department.requiredDocuments;
+        department.name = currentName;
+        if (code !== undefined) department.code = code;
+        if (normalizedHead !== undefined) {
+          department.head = normalizedHead;
+          department.headId = nextHeadEmployee?._id || null;
+        }
+        if (headTitle !== undefined) department.headTitle = headTitle;
+        if (headResponsibility !== undefined)
+          department.headResponsibility = headResponsibility;
+        department.description = description ?? department.description;
+        department.type = type ?? department.type;
+        department.status = status ?? department.status;
+        department.positions = Array.isArray(positions)
+          ? positions
+          : department.positions;
+        department.requiredDocuments = Array.isArray(requiredDocuments)
+          ? requiredDocuments
+          : department.requiredDocuments;
 
-      if (Array.isArray(teams)) {
-        // Validate team leaders and members departmental integrity
-        for (const t of teams) {
-          const leaderEmail = t.leaderEmail || t.manager || t.managerEmail;
-          if (leaderEmail) {
-            const leader = await Employee.findOne({ email: leaderEmail });
-            if (!leader || (leader.department !== currentName && leader.departmentId?.toString() !== req.params.id)) {
-              return res.status(400).json({
-                error: `Team leader ${leaderEmail} must belong to department ${currentName}`
+        let normalizedTeamsPayload = null;
+        if (Array.isArray(teams)) {
+          normalizedTeamsPayload = teams.map((t) => ({ ...t }));
+
+          // Invariant: department head cannot be a team leader/member in this department.
+          if (effectiveHeadEmail) {
+            normalizedTeamsPayload = normalizedTeamsPayload.map((team) => {
+              const teamLeaderEmail =
+                team.leaderEmail || team.manager || team.managerEmail || "";
+              const members = Array.isArray(team.members)
+                ? team.members.filter((m) => m !== effectiveHeadEmail)
+                : [];
+              const isHeadAsLeader = teamLeaderEmail === effectiveHeadEmail;
+              return {
+                ...team,
+                members,
+                leaderEmail: isHeadAsLeader ? "" : teamLeaderEmail,
+                manager: isHeadAsLeader ? "" : team.manager,
+                managerEmail: isHeadAsLeader ? "" : team.managerEmail,
+                leaderTitle: isHeadAsLeader ? "Vacant" : team.leaderTitle,
+                leaderResponsibility: isHeadAsLeader
+                  ? ""
+                  : team.leaderResponsibility,
+              };
+            });
+          }
+
+          for (const t of normalizedTeamsPayload) {
+            const leaderEmail = t.leaderEmail || t.manager || t.managerEmail;
+            if (leaderEmail) {
+              const leader = await Employee.findOne({ email: leaderEmail }).session(
+                session,
+              );
+              if (
+                !leader ||
+                (leader.department !== currentName &&
+                  leader.departmentId?.toString() !== req.params.id)
+              ) {
+                throw new Error(`INVALID_TEAM_LEADER:${leaderEmail}`);
+              }
+            }
+
+            if (Array.isArray(t.members)) {
+              for (const memberEmail of t.members) {
+                const member = await Employee.findOne({ email: memberEmail }).session(
+                  session,
+                );
+                if (
+                  !member ||
+                  (member.department !== currentName &&
+                    member.departmentId?.toString() !== req.params.id)
+                ) {
+                  throw new Error(`INVALID_TEAM_MEMBER:${memberEmail}`);
+                }
+              }
+            }
+          }
+
+          const incomingIds = normalizedTeamsPayload
+            .map((t) => t.id || t._id)
+            .filter(Boolean);
+          await Team.deleteMany({
+            departmentId: department._id,
+            _id: { $nin: incomingIds },
+          }).session(session);
+
+          for (const t of normalizedTeamsPayload) {
+            if (t.id || t._id) {
+              await Team.findByIdAndUpdate(
+                t.id || t._id,
+                {
+                  name: t.name,
+                  leaderEmail: t.leaderEmail || t.manager || t.managerEmail || "",
+                  leaderTitle: t.leaderTitle || "Team Leader",
+                  leaderResponsibility: t.leaderResponsibility || "",
+                  members: Array.isArray(t.members) ? t.members : [],
+                },
+                { session },
+              );
+            }
+          }
+
+          const standaloneIds = (
+            await Team.find({ departmentId: department._id }).session(session)
+          ).map((st) => st._id.toString());
+
+          department.teams = normalizedTeamsPayload
+            .filter((t) => !t.id || !standaloneIds.includes(t.id))
+            .map((t) => ({
+              ...t,
+              leaderEmail: t.leaderEmail || t.manager || t.managerEmail || "",
+              leaderTitle: t.leaderTitle || "Team Leader",
+              leaderResponsibility: t.leaderResponsibility || "",
+              members: Array.isArray(t.members) ? t.members : [],
+            }));
+        }
+
+        const headChanged =
+          normalizedHead !== undefined && normalizedHead !== previousHeadEmail;
+        if (headChanged) {
+          const previousHeadEmployee = previousHeadEmail
+            ? await Employee.findOne({ email: previousHeadEmail }).session(session)
+            : null;
+          const wasTeamLeader = nextHeadEmployee?.role === "TEAM_LEADER";
+
+          if (previousHeadEmployee && previousHeadEmployee.role !== "ADMIN") {
+            previousHeadEmployee.role = "EMPLOYEE";
+            previousHeadEmployee.position = null;
+            previousHeadEmployee.positionId = null;
+            await previousHeadEmployee.save({ session });
+            previousHeadDemotedId = previousHeadEmployee._id;
+          }
+
+          if (
+            nextHeadEmployee &&
+            !["MANAGER", "ADMIN"].includes(nextHeadEmployee.role)
+          ) {
+            nextHeadEmployee.role = "MANAGER";
+          }
+
+          if (nextHeadEmployee) {
+            // Department heads should not remain on any team roster/leadership.
+            // They are elevated to department manager scope.
+            nextHeadEmployee.teamId = null;
+            nextHeadEmployee.team = null;
+            nextHeadEmployee.teamLeaderId = null;
+            nextHeadEmployee.position = `Head Manager of ${currentName}`;
+            const policy = await OrganizationPolicy.findOne({ name: "default" })
+              .select("chiefExecutiveEmployeeId")
+              .session(session);
+            const chiefExecutiveId = policy?.chiefExecutiveEmployeeId || null;
+            nextHeadEmployee.managerId =
+              chiefExecutiveId &&
+              String(chiefExecutiveId) !== String(nextHeadEmployee._id)
+                ? chiefExecutiveId
+                : null;
+            await nextHeadEmployee.save({ session });
+            finalizedHeadEmail = nextHeadEmployee.email;
+            finalizedHeadEmployeeId = nextHeadEmployee._id;
+
+            // If UI payload still contains this person as team leader/member, sanitize it now.
+            if (Array.isArray(normalizedTeamsPayload)) {
+              normalizedTeamsPayload = normalizedTeamsPayload.map((team) => {
+                const teamLeaderEmail =
+                  team.leaderEmail || team.manager || team.managerEmail || "";
+                const members = Array.isArray(team.members)
+                  ? team.members.filter((m) => m !== nextHeadEmployee.email)
+                  : [];
+                const isHeadAsLeader = teamLeaderEmail === nextHeadEmployee.email;
+                return {
+                  ...team,
+                  members,
+                  leaderEmail: isHeadAsLeader ? "" : teamLeaderEmail,
+                  manager: isHeadAsLeader ? "" : team.manager,
+                  managerEmail: isHeadAsLeader ? "" : team.managerEmail,
+                  leaderTitle: isHeadAsLeader ? "Vacant" : team.leaderTitle,
+                  leaderResponsibility: isHeadAsLeader
+                    ? ""
+                    : team.leaderResponsibility,
+                };
               });
             }
           }
 
-          if (Array.isArray(t.members)) {
-            for (const memberEmail of t.members) {
-              const member = await Employee.findOne({ email: memberEmail });
-              if (!member || (member.department !== currentName && member.departmentId?.toString() !== req.params.id)) {
-                return res.status(400).json({
-                  error: `Team member ${memberEmail} must belong to department ${currentName}`
-                });
+          if (previousHeadEmployee?._id) {
+            await Employee.updateMany(
+              {
+                $or: [
+                  { departmentId: department._id },
+                  { department: oldName },
+                  { department: currentName },
+                ],
+                managerId: previousHeadEmployee._id,
+              },
+              { $set: { managerId: nextHeadEmployee?._id || null } },
+              { session },
+            );
+          }
+
+          if (nextHeadEmployee) {
+            const affectedTeams = await Team.find({
+              departmentId: department._id,
+              $or: [
+                { leaderId: nextHeadEmployee._id },
+                { leaderEmail: nextHeadEmployee.email },
+                { memberIds: nextHeadEmployee._id },
+                { members: nextHeadEmployee.email },
+              ],
+            }).session(session);
+
+            if (affectedTeams.length > 0) {
+              const affectedTeamIds = affectedTeams.map((t) => t._id);
+              const affectedTeamMemberEmails = affectedTeams.flatMap((t) =>
+                Array.isArray(t.members) ? t.members : [],
+              );
+
+              await Team.updateMany(
+                { _id: { $in: affectedTeamIds } },
+                {
+                  $set: {
+                    leaderEmail: "",
+                    leaderId: null,
+                    leaderTitle: "Vacant",
+                    leaderResponsibility: "",
+                  },
+                  $pull: {
+                    members: nextHeadEmployee.email,
+                    memberIds: nextHeadEmployee._id,
+                  },
+                },
+                { session },
+              );
+
+              department.teams = (department.teams || []).map((team) => {
+                const teamObj = team?.toObject?.() || team;
+                const isLeader =
+                  teamObj.leaderEmail === nextHeadEmployee.email ||
+                  String(teamObj.leaderId || "") ===
+                    String(nextHeadEmployee._id || "");
+                const memberList = Array.isArray(teamObj.members)
+                  ? teamObj.members.filter((m) => m !== nextHeadEmployee.email)
+                  : [];
+                return {
+                  ...teamObj,
+                  members: memberList,
+                  leaderEmail: isLeader ? "" : teamObj.leaderEmail,
+                  leaderId: isLeader ? null : teamObj.leaderId,
+                  leaderTitle: isLeader ? "Vacant" : teamObj.leaderTitle,
+                  leaderResponsibility: isLeader
+                    ? ""
+                    : teamObj.leaderResponsibility,
+                };
+              });
+
+              if (wasTeamLeader) {
+                await Employee.updateMany(
+                  {
+                    $or: [
+                      { teamId: { $in: affectedTeamIds } },
+                      { email: { $in: affectedTeamMemberEmails } },
+                      { teamLeaderId: nextHeadEmployee._id },
+                    ],
+                  },
+                  { $set: { teamLeaderId: null } },
+                  { session },
+                );
               }
             }
           }
         }
 
-        // Synchronization logic for standalone Teams collection
-        const incomingIds = teams.map(t => t.id || t._id).filter(Boolean);
-        
-        // 1. Remove standalone teams that are no longer in the incoming list
-        await Team.deleteMany({ 
-          departmentId: department._id, 
-          _id: { $nin: incomingIds } 
-        });
+        const isRenaming = name && name !== oldName;
+        await department.save({ session });
 
-        // 2. Update standalone teams that are still present
-        for (const t of teams) {
-          if (t.id || t._id) {
-            await Team.findByIdAndUpdate(t.id || t._id, {
-              name: t.name,
-              leaderEmail: t.leaderEmail || t.manager || t.managerEmail || "",
-              leaderTitle: t.leaderTitle || "Team Leader",
-              leaderResponsibility: t.leaderResponsibility || "",
-              members: Array.isArray(t.members) ? t.members : []
-            });
-          }
+        roleSyncDepartmentId = department._id;
+        roleSyncTeams = Array.isArray(normalizedTeamsPayload)
+          ? normalizedTeamsPayload
+          : null;
+        roleSyncPreviousTeams = teamsBeforeSync;
+
+        if (isRenaming) {
+          await Employee.updateMany(
+            {
+              $or: [{ departmentId: department._id }, { department: oldName }],
+            },
+            { $set: { department: name } },
+            { session },
+          );
+
+          await ManagementRequest.updateMany(
+            { departmentId: department._id },
+            { $set: { departmentName: name } },
+            { session },
+          );
+
+          await OrganizationPolicy.updateMany(
+            {
+              "salaryIncreaseRules.type": "DEPARTMENT",
+              "salaryIncreaseRules.target": oldName,
+            },
+            { $set: { "salaryIncreaseRules.$[rule].target": name } },
+            {
+              arrayFilters: [{ "rule.type": "DEPARTMENT", "rule.target": oldName }],
+              session,
+            },
+          );
         }
 
-        // 3. Update embedded teams
-        // We filter out teams that exist as standalone to avoid duplicates on GET
-        const standaloneIds = (await Team.find({ departmentId: department._id })).map(st => st._id.toString());
+        responsePayload = department;
+      };
 
-        department.teams = teams
-          .filter(t => !t.id || !standaloneIds.includes(t.id))
-          .map(t => ({
-            ...t,
-            leaderEmail: t.leaderEmail || t.manager || t.managerEmail || "",
-            leaderTitle: t.leaderTitle || "Team Leader",
-            leaderResponsibility: t.leaderResponsibility || "",
-            members: Array.isArray(t.members) ? t.members : []
-          }));
+      let supportsTransactions = false;
+      try {
+        const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+        supportsTransactions = Boolean(hello?.setName || hello?.msg === "isdbgrid");
+      } catch {
+        supportsTransactions = false;
       }
 
-      const isRenaming = name && name !== oldName;
-      await department.save();
-
-      if (head !== undefined) {
-        await syncDepartmentHeadRoles(previousHeadForSync, department.head);
-      }
-      if (Array.isArray(teams)) {
-        await syncTeamLeaderRolesFromDepartmentTeams(
-          department._id,
-          teams,
-          teamsBeforeSync,
+      if (supportsTransactions) {
+        await session.withTransaction(runDepartmentUpdate);
+      } else {
+        consistencyMode = "best-effort-fallback";
+        console.warn(
+          `[DepartmentUpdate][${correlationId}] Running fallback (non-transactional) mode: MongoDB does not support transactions in current topology.`,
         );
+        await runDepartmentUpdate();
       }
 
-      // If renaming, synchronize the department name for all assigned employees
-      if (isRenaming) {
-        await Employee.updateMany(
-          {
-            $or: [
-              { departmentId: department._id },
-              { department: oldName },
-            ],
-          },
-          { $set: { department: name } },
-        );
-
-        // Cascade rename to ManagementRequest
-        await ManagementRequest.updateMany(
-          { departmentId: department._id },
-          { $set: { departmentName: name } },
-        );
-
-        // Cascade rename to OrganizationPolicy salary rules that target by name
-        await OrganizationPolicy.updateMany(
-          { "salaryIncreaseRules.type": "DEPARTMENT", "salaryIncreaseRules.target": oldName },
-          { $set: { "salaryIncreaseRules.$[rule].target": name } },
-          { arrayFilters: [{ "rule.type": "DEPARTMENT", "rule.target": oldName }] },
-        );
+      if (Array.isArray(roleSyncTeams) && roleSyncDepartmentId) {
+        try {
+          await syncTeamLeaderRolesFromDepartmentTeams(
+            roleSyncDepartmentId,
+            roleSyncTeams,
+            roleSyncPreviousTeams,
+          );
+        } catch (syncErr) {
+          postCommitReconcileOk = false;
+          console.error(
+            `[DepartmentUpdate][${correlationId}] Post-commit team-leader reconciliation failed:`,
+            syncErr,
+          );
+        }
       }
 
       try {
-        await syncEmployeesWithDepartment(department._id);
+        if (responsePayload?._id) {
+          await syncEmployeesWithDepartment(responsePayload._id);
+        }
       } catch (syncErr) {
+        postCommitReconcileOk = false;
         console.error("syncEmployeesWithDepartment (update):", syncErr);
       }
 
-      res.json(department);
+      // Ensure final state after sync: department head is detached from teams.
+      if (finalizedHeadEmail && finalizedHeadEmployeeId) {
+        await Team.updateMany(
+          { departmentId: responsePayload._id },
+          {
+            $pull: { members: finalizedHeadEmail, memberIds: finalizedHeadEmployeeId },
+          },
+        );
+        await Team.updateMany(
+          {
+            departmentId: responsePayload._id,
+            $or: [{ leaderEmail: finalizedHeadEmail }, { leaderId: finalizedHeadEmployeeId }],
+          },
+          {
+            $set: {
+              leaderEmail: "",
+              leaderId: null,
+              leaderTitle: "Vacant",
+              leaderResponsibility: "",
+            },
+          },
+        );
+        await Employee.updateOne(
+          { _id: finalizedHeadEmployeeId },
+          { $set: { team: null, teamId: null, teamLeaderId: null } },
+        );
+      }
+
+      if (previousHeadDemotedId) {
+        await Employee.updateOne(
+          { _id: previousHeadDemotedId, role: "EMPLOYEE" },
+          { $set: { position: null, positionId: null } },
+        );
+      }
+
+      res.set("X-Consistency-Mode", consistencyMode);
+      res.set("X-Consistency-Correlation-Id", correlationId);
+      res.set("X-Post-Commit-Reconcile", postCommitReconcileOk ? "ok" : "degraded");
+      res.json(responsePayload);
     } catch (error) {
-      console.error("Error updating department:", error);
-      res.status(500).json({ error: "Failed to update department" });
+      if (error.message === "NOT_FOUND_DEPARTMENT") {
+        return res.status(404).json({ error: "Department not found" });
+      }
+      if (
+        error.message === "CONFLICT_DEPARTMENT_NAME" ||
+        error.message === "CONFLICT_DEPARTMENT_CODE"
+      ) {
+        const field =
+          error.message === "CONFLICT_DEPARTMENT_NAME" ? "name" : "code";
+        return res.status(409).json({ error: `Department ${field} already exists` });
+      }
+      if (error.message.startsWith("INVALID_HEAD_EMAIL:")) {
+        const email = error.message.split(":")[1];
+        return res
+          .status(400)
+          .json({ error: `Leader with email ${email} not found.` });
+      }
+      if (error.message.startsWith("INVALID_HEAD_DEPARTMENT:")) {
+        const email = error.message.split(":")[1];
+        return res.status(400).json({ error: `Leader ${email} must belong to this department.` });
+      }
+      if (error.message.startsWith("INVALID_TEAM_LEADER:")) {
+        const email = error.message.split(":")[1];
+        return res
+          .status(400)
+          .json({ error: `Team leader ${email} must belong to this department.` });
+      }
+      if (error.message.startsWith("INVALID_TEAM_MEMBER:")) {
+        const email = error.message.split(":")[1];
+        return res
+          .status(400)
+          .json({ error: `Team member ${email} must belong to this department.` });
+      }
+      console.error("Error updating department:", correlationId, error);
+      res.status(500).json({
+        error: "Failed to update department",
+        correlationId,
+      });
+    } finally {
+      await session.endSession();
     }
   },
 );
@@ -404,7 +746,7 @@ router.put(
 router.delete(
   "/:id",
   requireAuth,
-  requireRole(3), // Admin only
+  enforcePolicy("manage", "departments"),
   strictLimiter,
   async (req, res) => {
     try {

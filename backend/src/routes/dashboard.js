@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
-import { resolveEmployeeAccess } from '../services/accessService.js';
+import { enforcePolicy } from '../middleware/enforcePolicy.js';
 import { Alert } from '../models/Alert.js';
 import { Employee } from '../models/Employee.js';
 import { generateAlerts } from '../modules/alerts/index.js';
@@ -8,14 +8,13 @@ import { generateAlerts } from '../modules/alerts/index.js';
 const router = Router();
 
 // Endpoint 1: Generate & Gather Alerts via Aggregation
-router.get('/alerts', requireAuth, async (req, res) => {
+router.get('/alerts', requireAuth, enforcePolicy("read", "dashboard"), async (req, res) => {
   try {
     await generateAlerts();
 
-    const access = await resolveEmployeeAccess(req.user);
-
+    const decision = req.authzDecision;
     const employeeMatch = { status: { $ne: 'TERMINATED' } };
-    if (access.scope === 'department') {
+    if (decision.scope === 'department') {
        const userEmp = await Employee.findOne({ email: req.user.email });
        if (userEmp?.departmentId) employeeMatch.departmentId = userEmp.departmentId;
        else if (userEmp?.department) employeeMatch.department = userEmp.department;
@@ -56,12 +55,11 @@ router.get('/alerts', requireAuth, async (req, res) => {
 });
 
 // Endpoint 2: Gather Financial/Headcount Metrics
-router.get('/metrics', requireAuth, async (req, res) => {
+router.get('/metrics', requireAuth, enforcePolicy("read", "dashboard"), async (req, res) => {
   try {
-    const access = await resolveEmployeeAccess(req.user);
-
+    const decision = req.authzDecision;
     let deptFilter = {};
-    if (access.scope === 'department') {
+    if (decision.scope === 'department') {
        const userEmp = await Employee.findOne({ email: req.user.email });
        if (userEmp?.departmentId) deptFilter = { departmentId: userEmp.departmentId };
        else if (userEmp?.department) deptFilter = { department: userEmp.department };

@@ -44,6 +44,83 @@ const OrganizationPolicySchema = new Schema(
         excuseRules: { type: Schema.Types.Mixed, default: {} },
       },
     ],
+
+    assessmentPayrollRules: {
+      bonusDaysEnabled: { type: Boolean, default: true },
+      bonusDayMultiplier: { type: Number, default: 1.0, min: 0 },
+      overtimeEnabled: { type: Boolean, default: false },
+      overtimeDayMultiplier: { type: Number, default: 1.5, min: 0 },
+      deductionEnabled: { type: Boolean, default: false },
+      deductionDayMultiplier: { type: Number, default: 1.0, min: 0 },
+    },
+
+    payrollConfig: {
+      /** HR-defined decimal places for all EGP amounts in payroll (0 = whole pounds, 2 = typical). Max 8. */
+      decimalPlaces: { type: Number, default: 2, min: 0, max: 8 },
+      workingDaysPerMonth: { type: Number, default: 22, min: 1 },
+      hoursPerDay: { type: Number, default: 8, min: 1 },
+      overtimeMultiplier: { type: Number, default: 1.5, min: 0 },
+      personalExemptionAnnual: { type: Number, default: 20000, min: 0 },
+      martyrsFundRate: { type: Number, default: 0.0005, min: 0 },
+      insuranceRates: {
+        employeeShare: { type: Number, default: 0.11 },
+        companyShare: { type: Number, default: 0.1875 },
+        maxInsurableWage: { type: Number, default: 16700 },
+        minInsurableWage: { type: Number, default: 2700 },
+      },
+      taxBrackets: {
+        type: [
+          {
+            from: { type: Number, required: true },
+            to: { type: Number, default: null },
+            rate: { type: Number, required: true },
+          },
+        ],
+        default: [
+          { from: 0, to: 40000, rate: 0 },
+          { from: 40000, to: 55000, rate: 0.10 },
+          { from: 55000, to: 70000, rate: 0.15 },
+          { from: 70000, to: 200000, rate: 0.20 },
+          { from: 200000, to: 400000, rate: 0.225 },
+          { from: 400000, to: 1200000, rate: 0.25 },
+          { from: 1200000, to: null, rate: 0.275 },
+        ],
+      },
+    },
+
+    attendanceRules: {
+      standardStartTime: { type: String, default: "09:00" },
+      standardEndTime: { type: String, default: "17:00" },
+      gracePeriodMinutes: { type: Number, default: 15, min: 0 },
+      workingDaysPerMonth: { type: Number, default: 22, min: 1, max: 31 },
+      lateDeductionTiers: [
+        {
+          fromMinutes: { type: Number, required: true, min: 0 },
+          toMinutes: { type: Number, required: true, min: 1 },
+          deductionDays: { type: Number, required: true, min: 0 },
+        },
+      ],
+      absenceDeductionDays: { type: Number, default: 1, min: 0 },
+      earlyDepartureDeductionDays: { type: Number, default: 0, min: 0 },
+      incompleteRecordDeductionDays: { type: Number, default: 0, min: 0 },
+      unpaidLeaveDeductionDays: { type: Number, default: 1, min: 0 },
+      /** When true, excuses approved beyond quota trigger proportional salary deduction. */
+      excessExcuseDeductionEnabled: { type: Boolean, default: true },
+      /** 0=Sun … 6=Sat (UTC, matches getUTCDay). Default Fri+Sat. Empty = no weekly rest. */
+      weeklyRestDays: {
+        type: [Number],
+        default: [5, 6],
+        validate: {
+          validator(arr) {
+            return (
+              !Array.isArray(arr) ||
+              arr.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+            );
+          },
+          message: "weeklyRestDays must be integers 0–6",
+        },
+      },
+    },
   },
   { timestamps: true }
 );

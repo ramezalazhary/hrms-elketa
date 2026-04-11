@@ -1,19 +1,15 @@
 /**
- * @file `/api/teams` — list/read for authenticated users; mutations gated by `isAdmin` / `requireRole(3)`.
+ * @file `/api/teams` — list/read for authenticated users; mutations gated by enforcePolicy.
  */
 import { Router } from "express";
 import { Team } from "../models/Team.js";
 import { Department } from "../models/Department.js";
 import { Employee } from "../models/Employee.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { strictLimiter } from "../middleware/security.js";
-import { isAdminRole } from "../utils/roles.js";
 
 const router = Router();
-
-function isAdmin(user) {
-  return isAdminRole(user.role);
-}
 
 // GET /teams - List all teams (with optional filtering)
 router.get("/", requireAuth, async (req, res) => {
@@ -72,7 +68,7 @@ router.get("/:id", requireAuth, async (req, res) => {
 router.post(
   "/",
   requireAuth,
-  requireRole(3), // Admin only
+  enforcePolicy("manage", "teams"),
   strictLimiter,
   async (req, res) => {
     try {
@@ -208,7 +204,7 @@ router.post(
 router.put(
   "/:id",
   requireAuth,
-  requireRole(3), // Admin only
+  enforcePolicy("manage", "teams"),
   strictLimiter,
   async (req, res) => {
     try {
@@ -357,7 +353,7 @@ router.put(
 router.delete(
   "/:id",
   requireAuth,
-  requireRole(3), // Admin only
+  enforcePolicy("manage", "teams"),
   strictLimiter,
   async (req, res) => {
     try {

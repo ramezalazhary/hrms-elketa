@@ -6,7 +6,8 @@ import {
   createAttendanceApi, 
   updateAttendanceApi, 
   deleteAttendanceApi,
-  deleteAttendanceBulkApi
+  deleteAttendanceBulkApi,
+  getMonthlyReportApi,
 } from "./api";
 
 export const fetchAttendanceThunk = createAsyncThunk(
@@ -75,10 +76,24 @@ export const importAttendanceThunk = createAsyncThunk(
   },
 );
 
+export const fetchMonthlyReportThunk = createAsyncThunk(
+  "attendance/monthlyReport",
+  async (params, { rejectWithValue }) => {
+    try {
+      return await getMonthlyReportApi(params);
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, "Failed to load monthly report"));
+    }
+  },
+);
+
 const initialState = {
   items: [],
   isLoading: false,
   error: null,
+  monthlyReport: null,
+  monthlyReportLoading: false,
+  monthlyReportError: null,
 };
 
 const attendanceSlice = createSlice({
@@ -130,6 +145,18 @@ const attendanceSlice = createSlice({
       .addCase(importAttendanceThunk.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload || action.error.message;
+      })
+      .addCase(fetchMonthlyReportThunk.pending, (state) => {
+        state.monthlyReportLoading = true;
+        state.monthlyReportError = null;
+      })
+      .addCase(fetchMonthlyReportThunk.fulfilled, (state, action) => {
+        state.monthlyReportLoading = false;
+        state.monthlyReport = action.payload;
+      })
+      .addCase(fetchMonthlyReportThunk.rejected, (state, action) => {
+        state.monthlyReportLoading = false;
+        state.monthlyReportError = action.payload || action.error.message;
       });
   },
 });

@@ -1,10 +1,15 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
-import { requireRole } from "../middleware/auth.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import {
   createAssessment,
   getEmployeeAssessments,
   getAssessmentEligibility,
+  getPendingAssessments,
+  getAssessmentReminders,
+  getBonusApprovals,
+  approveBonus,
+  rejectBonus,
 } from "../controllers/assessmentController.js";
 
 const router = Router();
@@ -13,21 +18,49 @@ router.use(requireAuth);
 
 router.get(
   "/eligibility/:employeeId",
-  requireRole(["EMPLOYEE", "MANAGER", "TEAM_LEADER", "HR_STAFF", "HR_MANAGER", "ADMIN"]),
-  getAssessmentEligibility,
+  enforcePolicy("read", "assessments"),
+  getAssessmentEligibility
 );
 
-// Accessible by authorized managers and HR/Admins
+router.get(
+  "/pending",
+  enforcePolicy("assess", "assessments"),
+  getPendingAssessments
+);
+
+router.get(
+  "/reminders",
+  enforcePolicy("assess", "assessments"),
+  getAssessmentReminders
+);
+
+router.get(
+  "/bonus-approvals",
+  enforcePolicy("manage", "assessments"),
+  getBonusApprovals
+);
+
+router.post(
+  "/:employeeId/assessment/:assessmentId/approve-bonus",
+  enforcePolicy("manage", "assessments"),
+  approveBonus
+);
+
+router.post(
+  "/:employeeId/assessment/:assessmentId/reject-bonus",
+  enforcePolicy("manage", "assessments"),
+  rejectBonus
+);
+
 router.post(
   "/",
-  requireRole(["MANAGER", "TEAM_LEADER", "HR_STAFF", "HR_MANAGER", "ADMIN"]),
+  enforcePolicy("assess", "assessments"),
   createAssessment
 );
 
-// Accessible by the employee themselves, or authorized managers/HR/Admins
 router.get(
   "/employee/:id",
-  requireRole(["EMPLOYEE", "MANAGER", "TEAM_LEADER", "HR_STAFF", "HR_MANAGER", "ADMIN"]),
+  enforcePolicy("read", "assessments"),
   getEmployeeAssessments
 );
 

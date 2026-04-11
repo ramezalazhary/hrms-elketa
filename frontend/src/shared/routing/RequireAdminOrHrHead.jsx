@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
+import { normaliseRoleKey } from "@/shared/components/EntityBadges";
 
 const HR_NAME = "HR";
 
@@ -12,18 +13,19 @@ const HR_NAME = "HR";
 export function RequireAdminOrHrHead({ children }) {
   const dispatch = useAppDispatch();
   const currentUser = useAppSelector((s) => s.identity.currentUser);
+  const roleKey = normaliseRoleKey(currentUser?.role);
   const departments = useAppSelector((s) => s.departments.items);
   const departmentsLoading = useAppSelector((s) => s.departments.isLoading);
 
   useEffect(() => {
     if (
-      currentUser?.role === "HR_STAFF" ||
-      currentUser?.role === "ADMIN" ||
-      currentUser?.role === 3
+      roleKey === "HR_STAFF" ||
+      roleKey === "HR_MANAGER" ||
+      roleKey === "ADMIN"
     ) {
       void dispatch(fetchDepartmentsThunk());
     }
-  }, [dispatch, currentUser?.role]);
+  }, [dispatch, roleKey]);
 
   if (!currentUser) return <Navigate to="/login" replace />;
 
@@ -31,10 +33,11 @@ export function RequireAdminOrHrHead({ children }) {
     return <Navigate to="/change-password" replace />;
   }
 
-  const isAdmin = currentUser.role === "ADMIN" || currentUser.role === 3;
+  const isAdmin = roleKey === "ADMIN";
   if (isAdmin) return <>{children}</>;
 
-  if (currentUser.role !== "HR_STAFF") {
+  if (roleKey === "HR_MANAGER") return <>{children}</>;
+  if (roleKey !== "HR_STAFF") {
     return <Navigate to="/" replace />;
   }
 

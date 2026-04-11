@@ -3,6 +3,7 @@
  * department head, team leader, self). Mutations check `resolveEmployeeAccess` actions + department rules.
  */
 import { Router } from "express";
+import mongoose from "mongoose";
 import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
 import { Team } from "../models/Team.js";
@@ -15,9 +16,10 @@ import { ManagementRequest } from "../models/ManagementRequest.js";
 import { LeaveRequest } from "../models/LeaveRequest.js";
 import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
 import { requireAuth } from "../middleware/auth.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { hashPassword } from "../middleware/auth.js";
 import { resolveEmployeeAccess } from "../services/accessService.js";
-import { isEmployeeRole, isHrOrAdmin } from "../utils/roles.js";
+import { editorCanModifyTargetRole } from "../utils/roles.js";
 import { createAuditLog, detectChanges } from "../services/auditService.js";
 import { syncEmployeeLeadershipAfterSave } from "../services/employeeOrgSync.js";
 import {
@@ -31,6 +33,188 @@ import {
 } from "../utils/employeePrivacySanitizer.js";
 
 const router = Router();
+
+function escapeRegex(s) {
+  return String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Case-insensitive exact match on leader email (Mongo). */
+function leaderEmailRegex(email) {
+  const t = String(email || "").trim();
+  if (!t) return null;
+  return new RegExp(`^${escapeRegex(t)}$`, "i");
+}
+
+/**
+ * Extra OR clauses so team-scoped users see roster members linked via Team.memberIds / members
+ * (not only employees whose `team` string matches the unit name).
+ */
+async function buildLedTeamRosterClauses(user) {
+  const clauses = [];
+  const oid =
+    user?.id && mongoose.Types.ObjectId.isValid(String(user.id))
+      ? new mongoose.Types.ObjectId(String(user.id))
+      : null;
+  const leaderOr = [];
+  const re = leaderEmailRegex(user?.email);
+  if (re) leaderOr.push({ leaderEmail: re });
+  if (oid) leaderOr.push({ leaderId: oid });
+  if (!leaderOr.length) return clauses;
+
+  const ledStandalone = await Team.find({
+    status: "ACTIVE",
+    $or: leaderOr,
+  })
+    .select("members memberIds")
+    .lean();
+
+  const idList = [];
+  const emailOrs = [];
+  const seenEmail = new Set();
+
+  const pushEmailClause = (raw) => {
+    const trimmed = String(raw || "").trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seenEmail.has(key)) return;
+    seenEmail.add(key);
+    emailOrs.push({
+      email: new RegExp(`^${escapeRegex(trimmed)}$`, "i"),
+    });
+  };
+
+  for (const t of ledStandalone) {
+    for (const mid of t.memberIds || []) {
+      const raw = mid?._id ?? mid;
+      if (raw && mongoose.Types.ObjectId.isValid(String(raw))) {
+        idList.push(new mongoose.Types.ObjectId(String(raw)));
+      }
+    }
+    for (const m of t.members || []) pushEmailClause(m);
+  }
+
+  const deptMatch = re
+    ? await Department.find({
+        teams: { $elemMatch: { leaderEmail: re } },
+      })
+        .select("teams")
+        .lean()
+    : [];
+
+  for (const d of deptMatch) {
+    for (const t of d.teams || []) {
+      if (!re.test(String(t.leaderEmail || ""))) continue;
+      for (const m of t.members || []) pushEmailClause(m);
+    }
+  }
+
+  if (idList.length) clauses.push({ _id: { $in: idList } });
+  if (emailOrs.length) clauses.push({ $or: emailOrs });
+
+  return clauses;
+}
+
+async function employeeOnLedTeamRoster(user, employee) {
+  const eid = employee?._id ?? employee?.id;
+  const emEmail = (employee?.email || "").toLowerCase().trim();
+  if (!eid && !emEmail) return false;
+
+  const oid =
+    user?.id && mongoose.Types.ObjectId.isValid(String(user.id))
+      ? new mongoose.Types.ObjectId(String(user.id))
+      : null;
+  const leaderOr = [];
+  const re = leaderEmailRegex(user?.email);
+  if (re) leaderOr.push({ leaderEmail: re });
+  if (oid) leaderOr.push({ leaderId: oid });
+  if (!leaderOr.length) return false;
+
+  const ledStandalone = await Team.find({
+    status: "ACTIVE",
+    $or: leaderOr,
+  })
+    .select("members memberIds")
+    .lean();
+
+  for (const t of ledStandalone) {
+    for (const mid of t.memberIds || []) {
+      const raw = mid?._id ?? mid;
+      if (eid && String(raw) === String(eid)) return true;
+    }
+    for (const m of t.members || []) {
+      if (
+        emEmail &&
+        String(m || "").toLowerCase().trim() === emEmail
+      ) {
+        return true;
+      }
+    }
+  }
+
+  const deptMatch = re
+    ? await Department.find({
+        teams: { $elemMatch: { leaderEmail: re } },
+      })
+        .select("teams")
+        .lean()
+    : [];
+
+  for (const d of deptMatch) {
+    for (const t of d.teams || []) {
+      if (!re.test(String(t.leaderEmail || ""))) continue;
+      for (const m of t.members || []) {
+        if (
+          emEmail &&
+          String(m || "").toLowerCase().trim() === emEmail
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+function accessFromPolicyDecision(decision) {
+  const scopeMap = {
+    all: "all",
+    company: "all",
+    department: "department",
+    team: "team",
+    self: "self",
+  };
+  return {
+    scope: scopeMap[decision?.scope] || "self",
+    actions: Array.isArray(decision?.actions) ? decision.actions : [],
+    teams: Array.isArray(decision?.allowedTeams) ? decision.allowedTeams : [],
+  };
+}
+
+async function logEmployeePolicyParity(req, action) {
+  try {
+    const legacy = await resolveEmployeeAccess(req.user);
+    const now = accessFromPolicyDecision(req.authzDecision);
+    if (legacy.scope !== now.scope) {
+      console.warn("[authz-parity] employees mismatch", {
+        action,
+        userId: req.user?.id,
+        email: req.user?.email,
+        policyScope: now.scope,
+        legacyScope: legacy.scope,
+      });
+    }
+  } catch {
+    // parity logging is best-effort during migration
+  }
+}
+
+async function getChiefExecutiveId() {
+  const policy = await OrganizationPolicy.findOne({ name: "default" })
+    .select("chiefExecutiveEmployeeId")
+    .lean();
+  return policy?.chiefExecutiveEmployeeId || null;
+}
 
 async function respondWithEnrichedEmployees(
   res,
@@ -120,10 +304,9 @@ function intersectDepartmentFilter(query, allowedDeptNames) {
  *   ?manager=email@example.com — department head (`Department.head`); returns employees in those departments’ names
  *   ?location=Cairo HQ
  */
-router.get("/", requireAuth, async (req, res) => {
-  const access = await resolveEmployeeAccess(req.user);
-  if (!access.actions.includes("view"))
-    return res.status(403).json({ error: "Forbidden" });
+router.get("/", requireAuth, enforcePolicy("read", "employees"), async (req, res) => {
+  await logEmployeePolicyParity(req, "read");
+  const access = accessFromPolicyDecision(req.authzDecision);
 
   const {
     salaryIncreaseFrom,
@@ -294,10 +477,18 @@ router.get("/", requireAuth, async (req, res) => {
 
   if (access.scope === "team") {
     let finalQuery = { ...query };
-    const teamScopeOr = [
-      { team: { $in: access.teams } },
-      { email: req.user.email },
-    ];
+    const rosterClauses = [];
+    if (Array.isArray(access.teams) && access.teams.length > 0) {
+      rosterClauses.push({ team: { $in: access.teams } });
+    }
+    rosterClauses.push(...(await buildLedTeamRosterClauses(req.user)));
+
+    const teamScopeOr = [];
+    if (rosterClauses.length > 0) {
+      teamScopeOr.push({ $or: rosterClauses });
+    }
+    teamScopeOr.push({ email: req.user.email });
+
     if (finalQuery.$or) {
       finalQuery.$and = [{ $or: finalQuery.$or }, { $or: teamScopeOr }];
       delete finalQuery.$or;
@@ -362,10 +553,9 @@ router.get("/", requireAuth, async (req, res) => {
   return respondWithEnrichedEmployees(res, [], false, undefined, req.user, access);
 });
 
-router.get("/:id", requireAuth, async (req, res) => {
-  const access = await resolveEmployeeAccess(req.user);
-  if (!access.actions.includes("view"))
-    return res.status(403).json({ error: "Forbidden" });
+router.get("/:id", requireAuth, enforcePolicy("read", "employees"), async (req, res) => {
+  await logEmployeePolicyParity(req, "read");
+  const access = accessFromPolicyDecision(req.authzDecision);
 
   const employee = await Employee.findById(req.params.id).populate(
     "managerId teamLeaderId",
@@ -393,10 +583,24 @@ router.get("/:id", requireAuth, async (req, res) => {
   }
 
   if (access.scope === "team") {
-    if (
-      employee.email === req.user.email ||
-      access.teams.includes(employee.team)
-    ) {
+    const selfEmail = (req.user.email || "").toLowerCase().trim();
+    const empEmail = (employee.email || "").toLowerCase().trim();
+    if (empEmail && empEmail === selfEmail) {
+      return send();
+    }
+    const empTeam = (employee.team || "").trim().toLowerCase();
+    const inNamedTeam =
+      Array.isArray(access.teams) &&
+      access.teams.some(
+        (n) =>
+          n != null &&
+          String(n).trim().toLowerCase() === empTeam &&
+          empTeam.length > 0,
+      );
+    if (inNamedTeam) {
+      return send();
+    }
+    if (await employeeOnLedTeamRoster(req.user, employee)) {
       return send();
     }
     return res.status(403).json({ error: "Forbidden: Not in your team scope" });
@@ -410,10 +614,9 @@ router.get("/:id", requireAuth, async (req, res) => {
   return res.status(403).json({ error: "Forbidden" });
 });
 
-router.post("/", requireAuth, async (req, res) => {
-  const access = await resolveEmployeeAccess(req.user);
-  if (!access.actions.includes("create"))
-    return res.status(403).json({ error: "Forbidden" });
+router.post("/", requireAuth, enforcePolicy("create", "employees"), async (req, res) => {
+  await logEmployeePolicyParity(req, "create");
+  const access = accessFromPolicyDecision(req.authzDecision);
 
   const {
     fullName,
@@ -461,6 +664,13 @@ router.post("/", requireAuth, async (req, res) => {
 
   if (!fullName || !email || !department || !position) {
     return res.status(400).json({ error: "Required fields are missing" });
+  }
+
+  const newRole = req.body.role || "EMPLOYEE";
+  if (!editorCanModifyTargetRole(req.user.role, newRole)) {
+    return res.status(403).json({
+      error: "Forbidden: You cannot create an employee with an equal or higher role than yours.",
+    });
   }
 
   if (access.scope === "department") {
@@ -581,6 +791,15 @@ router.post("/", requireAuth, async (req, res) => {
       useDefaultReporting:
         typeof useDefaultReporting === "boolean" ? useDefaultReporting : true,
     });
+
+    if (newEmployee.role === "MANAGER") {
+      const chiefExecutiveId = await getChiefExecutiveId();
+      newEmployee.managerId =
+        chiefExecutiveId &&
+        String(chiefExecutiveId) !== String(newEmployee._id)
+          ? chiefExecutiveId
+          : null;
+    }
     await newEmployee.save();
 
     // Create audit log for employee creation
@@ -613,10 +832,9 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/:id", requireAuth, async (req, res) => {
-  const access = await resolveEmployeeAccess(req.user);
-  if (!access.actions.includes("edit"))
-    return res.status(403).json({ error: "Forbidden" });
+router.put("/:id", requireAuth, enforcePolicy("edit", "employees"), async (req, res) => {
+  await logEmployeePolicyParity(req, "edit");
+  const access = accessFromPolicyDecision(req.authzDecision);
 
   const {
     fullName,
@@ -670,6 +888,12 @@ router.put("/:id", requireAuth, async (req, res) => {
 
   const employee = await Employee.findById(req.params.id);
   if (!employee) return res.status(404).json({ error: "Employee not found" });
+
+  if (!editorCanModifyTargetRole(req.user.role, employee.role)) {
+    return res.status(403).json({
+      error: "Forbidden: You cannot edit an employee with an equal or higher role.",
+    });
+  }
 
   if (access.scope === "department") {
     const isAllowedDept = await checkScopeDepartment(
@@ -726,6 +950,7 @@ router.put("/:id", requireAuth, async (req, res) => {
   }
 
   const originalEmployee = employee.toObject();
+  const previousStatus = originalEmployee.status;
 
   employee.fullName = fullName ?? employee.fullName;
   const oldEmail = employee.email;
@@ -917,8 +1142,45 @@ router.put("/:id", requireAuth, async (req, res) => {
     employee.useDefaultReporting = Boolean(useDefaultReporting);
   }
 
+  const statusChanged = previousStatus !== employee.status;
+  if (statusChanged) {
+    if (!employee.transferHistory) employee.transferHistory = [];
+    const statusChangeDate = new Date();
+    const actor = req.user?.email || "system";
+
+    if (previousStatus === "ACTIVE" && employee.status !== "ACTIVE") {
+      employee.transferHistory.push({
+        fromDepartment: employee.departmentId || undefined,
+        fromDepartmentName: employee.department || undefined,
+        toDepartment: employee.departmentId || undefined,
+        toDepartmentName: employee.department || undefined,
+        transferDate: statusChangeDate,
+        newPosition: employee.position || undefined,
+        notes: `Employment status changed from ${previousStatus} to ${employee.status}${terminationReason ? `: ${terminationReason}` : ""}`,
+        processedBy: actor,
+      });
+    } else if (
+      (previousStatus === "TERMINATED" || previousStatus === "RESIGNED") &&
+      employee.status === "ACTIVE"
+    ) {
+      employee.transferHistory.push({
+        fromDepartment: employee.departmentId || undefined,
+        fromDepartmentName: employee.department || undefined,
+        toDepartment: employee.departmentId || undefined,
+        toDepartmentName: employee.department || undefined,
+        transferDate: statusChangeDate,
+        newPosition: employee.position || undefined,
+        notes: `Employee reactivated (${previousStatus} -> ACTIVE)`,
+        processedBy: actor,
+      });
+    }
+  }
+
   if (employee.status === "TERMINATED" || employee.status === "RESIGNED") {
     employee.isActive = false;
+    if (employee.status === "TERMINATED") {
+      employee.role = "EMPLOYEE";
+    }
 
     // Auto-clear from Management Positions (Dept Head or Team Leader)
     const email = employee.email;
@@ -945,9 +1207,35 @@ router.put("/:id", requireAuth, async (req, res) => {
         { leaderEmail: email },
         { $set: { leaderEmail: null } },
       );
+
+      // Remove from team member lists
+      await Team.updateMany(
+        { members: email },
+        { $pull: { members: email } },
+      );
     }
+
+    // Clear org assignment references after separation
+    employee.department = null;
+    employee.departmentId = null;
+    employee.team = null;
+    employee.teamId = null;
+    employee.position = null;
+    employee.positionId = null;
+    employee.managerId = null;
+    employee.teamLeaderId = null;
+    employee.additionalAssignments = [];
   } else if (employee.status === "ACTIVE") {
     employee.isActive = true;
+  }
+
+  if (employee.role === "MANAGER") {
+    const chiefExecutiveId = await getChiefExecutiveId();
+    employee.managerId =
+      chiefExecutiveId &&
+      String(chiefExecutiveId) !== String(employee._id)
+        ? chiefExecutiveId
+        : null;
   }
 
   await employee.save();
@@ -1041,13 +1329,18 @@ router.put("/:id", requireAuth, async (req, res) => {
  * Transfer an employee to another department.
  * Body: { toDepartment, newPosition, newSalary, resetNextReviewDate, notes } (resetYearlyIncreaseDate accepted as alias)
  */
-router.post("/:id/transfer", requireAuth, async (req, res) => {
-  const access = await resolveEmployeeAccess(req.user);
-  if (!access.actions.includes("edit"))
-    return res.status(403).json({ error: "Forbidden" });
+router.post("/:id/transfer", requireAuth, enforcePolicy("transfer", "employees"), async (req, res) => {
+  await logEmployeePolicyParity(req, "transfer");
+  const access = accessFromPolicyDecision(req.authzDecision);
 
   const employee = await Employee.findById(req.params.id);
   if (!employee) return res.status(404).json({ error: "Employee not found" });
+
+  if (!editorCanModifyTargetRole(req.user.role, employee.role)) {
+    return res.status(403).json({
+      error: "Forbidden: You cannot transfer an employee with an equal or higher role than yours.",
+    });
+  }
 
   const {
     toDepartment,
@@ -1175,6 +1468,23 @@ router.post("/:id/transfer", requireAuth, async (req, res) => {
 
   await employee.save();
 
+  // Backfill attendance records with new employee code so search/reports stay consistent
+  if (newEmployeeCode) {
+    try {
+      const backfillResult = await Attendance.updateMany(
+        { employeeId: employee._id },
+        { $set: { employeeCode: newEmployeeCode } },
+      );
+      if (backfillResult.modifiedCount > 0) {
+        console.log(
+          `[TRANSFER] Backfilled ${backfillResult.modifiedCount} attendance records: ${transferRecord.previousEmployeeCode} -> ${newEmployeeCode}`,
+        );
+      }
+    } catch (err) {
+      console.error("[TRANSFER] Attendance backfill failed (non-blocking):", err.message);
+    }
+  }
+
   // Create audit log for employee transfer
   await createAuditLog({
     entityType: "Employee",
@@ -1211,19 +1521,18 @@ router.post("/:id/transfer", requireAuth, async (req, res) => {
   });
 });
 
-router.delete("/:id", requireAuth, async (req, res) => {
-  const access = await resolveEmployeeAccess(req.user);
-  if (!access.actions.includes("delete"))
-    return res.status(403).json({ error: "Forbidden" });
-
-  if (isEmployeeRole(req.user.role)) {
-    return res.status(403).json({
-      error: "Policy Restriction: Only Managers and Admins can delete data.",
-    });
-  }
+router.delete("/:id", requireAuth, enforcePolicy("delete", "employees"), async (req, res) => {
+  await logEmployeePolicyParity(req, "delete");
+  const access = accessFromPolicyDecision(req.authzDecision);
 
   const employee = await Employee.findById(req.params.id);
   if (!employee) return res.status(404).json({ error: "Employee not found" });
+
+  if (!editorCanModifyTargetRole(req.user.role, employee.role)) {
+    return res.status(403).json({
+      error: "Forbidden: You cannot delete an employee with an equal or higher role.",
+    });
+  }
 
   if (access.scope === "department") {
     const allowed = await checkScopeDepartment(
@@ -1325,14 +1634,9 @@ router.delete("/:id", requireAuth, async (req, res) => {
  * Process Annual Salary Increase
  * @route POST /api/employees/:id/process-increase
  */
-router.post("/:id/process-increase", requireAuth, async (req, res) => {
-  const { role, email } = req.user;
-  // HR roles may process increases for any employee company-wide (no department/team scope).
-  if (!isHrOrAdmin(req.user)) {
-    return res
-      .status(403)
-      .json({ error: "Unauthorized to process salary increases" });
-  }
+router.post("/:id/process-increase", requireAuth, enforcePolicy("process_increase", "employees"), async (req, res) => {
+  const { email } = req.user;
+  await logEmployeePolicyParity(req, "process_increase");
 
   // Use org policy as default increase %, allow manual override per request
   const policy = await OrganizationPolicy.findOne({ name: "default" });

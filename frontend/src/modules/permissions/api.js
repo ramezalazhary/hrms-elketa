@@ -22,3 +22,12 @@ export async function deleteUserPermissionsApi(userId) {
   });
   return handleApiResponse(response);
 }
+
+export async function simulateAccessApi(payload) {
+  const response = await fetchWithAuth(`${API_URL}/permissions/simulate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handleApiResponse(response);
+}

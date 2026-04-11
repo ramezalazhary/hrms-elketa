@@ -5,30 +5,27 @@
  */
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
-import {
-  requireAdminOrHrHead,
-  isHrDepartmentHead,
-} from "../middleware/rbac.js";
+import { isHrDepartmentHead } from "../middleware/rbac.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { Employee } from "../models/Employee.js";
 import bcrypt from "bcryptjs";
+import { parseRoleInput } from "../utils/roles.js";
 
 const router = Router();
 
 const HR_DEPARTMENT_NAME = process.env.HR_DEPARTMENT_NAME || "HR";
 
 const VALID_USER_ROLES = [
-  1,
-  2,
-  3,
   "EMPLOYEE",
+  "TEAM_LEADER",
   "MANAGER",
   "HR_STAFF",
+  "HR_MANAGER",
   "ADMIN",
-  "TEAM_LEADER",
 ];
 
 // List users (admin or Head of HR — HR sees HR accounts only)
-router.get("/", requireAuth, requireAdminOrHrHead, async (_req, res) => {
+router.get("/", requireAuth, enforcePolicy("manage", "users"), async (_req, res) => {
   const hrHead = await isHrDepartmentHead(_req.user.email);
 
   if (hrHead) {
@@ -57,7 +54,7 @@ router.get("/", requireAuth, requireAdminOrHrHead, async (_req, res) => {
 });
 
 // Update role (admin only — HR Head cannot change roles)
-router.put("/:id/role", requireAuth, requireAdminOrHrHead, async (req, res) => {
+router.put("/:id/role", requireAuth, enforcePolicy("manage", "users"), async (req, res) => {
   const hrHead = await isHrDepartmentHead(req.user.email);
   if (hrHead) {
     return res
@@ -65,7 +62,7 @@ router.put("/:id/role", requireAuth, requireAdminOrHrHead, async (req, res) => {
       .json({ error: "HR Head cannot change system roles" });
   }
 
-  const { role } = req.body ?? {};
+  const role = parseRoleInput(req.body?.role);
   if (!VALID_USER_ROLES.includes(role)) {
     return res.status(400).json({ error: "Invalid role" });
   }
@@ -87,7 +84,7 @@ router.put("/:id/role", requireAuth, requireAdminOrHrHead, async (req, res) => {
 });
 
 // Create login account (admin or HR Head — HR only for HR employees)
-router.post("/", requireAuth, requireAdminOrHrHead, async (req, res) => {
+router.post("/", requireAuth, enforcePolicy("manage", "users"), async (req, res) => {
   const actorEmail = req.user.email;
   const hrHead = await isHrDepartmentHead(actorEmail);
 
@@ -96,7 +93,9 @@ router.post("/", requireAuth, requireAdminOrHrHead, async (req, res) => {
     return res.status(400).json({ error: "Email and password are required" });
   }
 
-  const employee = await Employee.findOne({ email }).select("department");
+  const employee = await Employee.findOne({ email }).select(
+    "department passwordHash role isActive requirePasswordChange",
+  );
   if (!employee) {
     return res
       .status(400)
@@ -114,10 +113,14 @@ router.post("/", requireAuth, requireAdminOrHrHead, async (req, res) => {
     return res.status(409).json({ error: "User already has an account" });
   }
 
+  if (role !== undefined && parseRoleInput(role) === null) {
+    return res.status(400).json({ error: "Invalid role" });
+  }
+  const parsedRequestedRole = parseRoleInput(role);
   const chosenRole = hrHead
     ? "EMPLOYEE"
-    : VALID_USER_ROLES.includes(role)
-      ? role
+    : VALID_USER_ROLES.includes(parsedRequestedRole)
+      ? parsedRequestedRole
       : "EMPLOYEE";
 
   const passwordHash = await bcrypt.hash(String(password), 10);

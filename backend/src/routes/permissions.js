@@ -4,12 +4,14 @@
  */
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
-import { requireAdminOrHrHead, isHrDepartmentHead } from "../middleware/rbac.js";
+import { isHrDepartmentHead } from "../middleware/rbac.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { UserPermission } from "../models/Permission.js";
 import { Employee } from "../models/Employee.js";
 import { validatePermissionCreation } from "../middleware/validation.js";
 import { strictLimiter } from "../middleware/security.js";
-import { isAdminRole } from "../utils/roles.js";
+import { isAdminRole, normalizeRole } from "../utils/roles.js";
+import { simulateAccess } from "../services/authorizationPolicyService.js";
 
 const router = Router();
 
@@ -21,7 +23,8 @@ const HR_DEPARTMENT_NAME = process.env.HR_DEPARTMENT_NAME || "HR";
  * @returns {Promise<void>} `next()` or 403/404 JSON.
  */
 async function restrictHrHeadToHrEmployees(req, res, next) {
-  if (isAdminRole(req.user.role)) return next();
+  if (isAdminRole(req.user.role) || normalizeRole(req.user.role) === "HR_MANAGER")
+    return next();
 
   const targetUser = await Employee.findById(req.params.userId).select("email");
   if (!targetUser) return res.status(404).json({ error: "User not found" });
@@ -44,10 +47,26 @@ async function restrictHrHeadToHrEmployees(req, res, next) {
   return next();
 }
 
+router.post("/simulate", requireAuth, enforcePolicy("manage", "permissions"), async (req, res) => {
+  try {
+    const { role, action, resource, context } = req.body ?? {};
+    const decision = await simulateAccess({
+      user: { ...req.user, role: normalizeRole(role || req.user.role) },
+      action: String(action || "read"),
+      resource: String(resource || "users"),
+      context: context ?? {},
+    });
+    return res.json(decision);
+  } catch (error) {
+    console.error("Error simulating access:", error);
+    return res.status(500).json({ error: "Failed to simulate access" });
+  }
+});
+
 router.get(
   "/:userId",
   requireAuth,
-  requireAdminOrHrHead,
+  enforcePolicy("manage", "permissions"),
   restrictHrHeadToHrEmployees,
   async (req, res) => {
     try {
@@ -73,7 +92,7 @@ router.get(
 router.post(
   "/:userId",
   requireAuth,
-  requireAdminOrHrHead,
+  enforcePolicy("manage", "permissions"),
   restrictHrHeadToHrEmployees,
   strictLimiter,
   validatePermissionCreation,
@@ -116,7 +135,7 @@ router.post(
 router.put(
   "/:userId",
   requireAuth,
-  requireAdminOrHrHead,
+  enforcePolicy("manage", "permissions"),
   restrictHrHeadToHrEmployees,
   strictLimiter,
   async (req, res) => {
@@ -186,7 +205,7 @@ router.put(
 router.delete(
   "/:userId/:permissionId",
   requireAuth,
-  requireAdminOrHrHead,
+  enforcePolicy("manage", "permissions"),
   restrictHrHeadToHrEmployees,
   strictLimiter,
   async (req, res) => {
@@ -213,7 +232,7 @@ router.delete(
 router.delete(
   "/:userId",
   requireAuth,
-  requireAdminOrHrHead,
+  enforcePolicy("manage", "permissions"),
   restrictHrHeadToHrEmployees,
   strictLimiter,
   async (req, res) => {

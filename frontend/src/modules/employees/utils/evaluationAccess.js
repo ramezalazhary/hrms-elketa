@@ -11,9 +11,34 @@ import {
 export function isHrOrAdminRole(role) {
   return (
     role === "ADMIN" ||
-    role === 3 ||
     role === "HR_MANAGER" ||
     role === "HR_STAFF"
+  );
+}
+
+/** Mirrors backend `isAdminRole` (including legacy numeric admin). */
+export function isAdminRoleClient(role) {
+  if (typeof role === "number") return role === 3;
+  return String(role || "").trim().toUpperCase() === "ADMIN";
+}
+
+/**
+ * True if `targetEmp` is the evaluator's direct manager or team leader (mirrors backend R0b).
+ */
+export function targetIsDirectSupervisorOfEvaluatorClient(targetEmp, evaluatorEmp) {
+  if (!targetEmp || !evaluatorEmp) return false;
+  const tid =
+    targetEmp.id != null
+      ? String(targetEmp.id)
+      : targetEmp._id != null
+        ? String(targetEmp._id)
+        : "";
+  if (!tid) return false;
+  return (
+    refMatches(evaluatorEmp.managerId, tid) ||
+    refMatches(evaluatorEmp.effectiveManager, tid) ||
+    refMatches(evaluatorEmp.teamLeaderId, tid) ||
+    refMatches(evaluatorEmp.effectiveTeamLeader, tid)
   );
 }
 
@@ -49,17 +74,30 @@ export function employeeMatchesTeamName(emp, teamNames) {
 /**
  * @param {object} options
  * @param {boolean} [options.allowGlobalRoles=true] — HR/Admin may assess anyone (set false on employee list if only TL/manager buttons).
+ * @param {object} [options.evaluatorEmployee] — current user's employee row (for upward chain; managerId / teamLeaderId).
  * @param {string[]} [options.ledTeamNames] — team names the user leads (standalone + embedded names).
  * @param {string[]} [options.deptHeadTeamNames] — team names under departments this user heads.
  */
 export function canAssessEmployeeSync(emp, currentUser, options = {}) {
   const {
     allowGlobalRoles = true,
+    evaluatorEmployee = null,
     ledTeamNames = [],
     deptHeadTeamNames = [],
   } = options;
 
   if (!emp || !currentUser) return false;
+
+  if (isAdminRoleClient(currentUser.role)) {
+    return true;
+  }
+
+  if (
+    evaluatorEmployee &&
+    targetIsDirectSupervisorOfEvaluatorClient(emp, evaluatorEmployee)
+  ) {
+    return false;
+  }
 
   if (allowGlobalRoles && isHrOrAdminRole(currentUser.role)) {
     return true;
@@ -179,6 +217,7 @@ function canDeptHeadEvaluateEmployeeByMergedRosters(
 /**
  * @param {{
  *   excludeHrAdminRoles?: boolean,
+ *   evaluatorEmployee?: object | null,
  *   ledTeamNames?: string[],
  *   deptHeadTeamNames?: string[],
  *   departments?: object[] | null,
@@ -189,6 +228,7 @@ function canDeptHeadEvaluateEmployeeByMergedRosters(
 export function canManagerOrTeamLeaderEvaluateEmployee(emp, currentUser, opts = {}) {
   const {
     excludeHrAdminRoles = false,
+    evaluatorEmployee = null,
     ledTeamNames = [],
     deptHeadTeamNames = [],
     departments = null,
@@ -196,8 +236,16 @@ export function canManagerOrTeamLeaderEvaluateEmployee(emp, currentUser, opts = 
     allOrgTeams = null,
   } = opts;
   if (
+    !isAdminRoleClient(currentUser?.role) &&
+    evaluatorEmployee &&
+    targetIsDirectSupervisorOfEvaluatorClient(emp, evaluatorEmployee)
+  ) {
+    return false;
+  }
+  if (
     canAssessEmployeeSync(emp, currentUser, {
       allowGlobalRoles: !excludeHrAdminRoles,
+      evaluatorEmployee,
       ledTeamNames,
       deptHeadTeamNames,
     })
@@ -234,9 +282,20 @@ export function canManagerOrTeamLeaderEvaluateEmployee(emp, currentUser, opts = 
 /**
  * Team leader dashboard row: user leads `team` and `emp` is on that roster (email in members or same team name).
  */
-export function canTeamLeaderEvaluateRosterMember(emp, team, currentUser) {
+export function canTeamLeaderEvaluateRosterMember(
+  emp,
+  team,
+  currentUser,
+  evaluatorEmployee = null,
+) {
   if (!emp || !team || !currentUser) return false;
   if (currentUser.role !== "TEAM_LEADER") return false;
+  if (
+    evaluatorEmployee &&
+    targetIsDirectSupervisorOfEvaluatorClient(emp, evaluatorEmployee)
+  ) {
+    return false;
+  }
   const empId = emp.id ?? emp._id;
   if (empId != null && String(empId) === String(currentUser.id)) return false;
   const em = (emp.email || "").toLowerCase().trim();

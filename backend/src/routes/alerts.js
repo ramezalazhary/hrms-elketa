@@ -3,11 +3,14 @@
  * Alert Types:
  *   - ID Expiry: 60 days before nationalIdExpiryDate
  *   - Salary Increase: 30 days before nextReviewDate
+ *   - Assessment Due: monthly reminder for TL/Manager
  */
 import { Router } from "express";
 import { Employee } from "../models/Employee.js";
+import { Assessment } from "../models/Assessment.js";
 import { requireAuth } from "../middleware/auth.js";
-import { isAdminRole } from "../utils/roles.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
+import { canAssessEmployee } from "../services/assessmentAccessService.js";
 
 const router = Router();
 
@@ -15,15 +18,13 @@ const router = Router();
  * @route GET /api/alerts
  * @desc Get dashboard alerts for the current user's scope
  */
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, enforcePolicy("read", "alerts"), async (req, res) => {
   try {
-    const user = req.user;
-    const isAdmin =
-      isAdminRole(user.role) || user.role === "HR_MANAGER" || user.role === "HR_STAFF";
+    const decision = req.authzDecision;
+    const isAdmin = decision.scope === "all";
 
     if (!isAdmin) {
-      // Non-admin users only see their own alerts
-      const self = await Employee.findOne({ email: user.email });
+      const self = await Employee.findOne({ email: req.user.email });
       if (!self) return res.json({ alerts: [] });
 
       const alerts = [];
@@ -104,6 +105,34 @@ router.get("/", requireAuth, async (req, res) => {
       });
     }
 
+    // 3. Assessment Due Alerts — check how many employees are un-assessed this month
+    const now2 = new Date();
+    const curYear = now2.getFullYear();
+    const curMonth = now2.getMonth() + 1;
+    const dayOfMonth = now2.getDate();
+
+    if (dayOfMonth >= 20) {
+      const assessed = await Assessment.find({
+        "assessment.period.year": curYear,
+        "assessment.period.month": curMonth,
+      }).select("employeeId").lean();
+      const assessedSet = new Set(assessed.map((d) => d.employeeId.toString()));
+
+      const activeCount = await Employee.countDocuments({ isActive: true });
+      const pendingCount = activeCount - assessedSet.size;
+
+      if (pendingCount > 0) {
+        const daysLeft = new Date(curYear, curMonth, 0).getDate() - dayOfMonth;
+        alerts.push({
+          type: "ASSESSMENT_DUE",
+          severity: daysLeft <= 5 ? "critical" : "warning",
+          message: `${pendingCount} employee${pendingCount !== 1 ? "s" : ""} still need assessment for this month (${daysLeft} day${daysLeft !== 1 ? "s" : ""} left)`,
+          daysRemaining: daysLeft,
+          pendingCount,
+        });
+      }
+    }
+
     // Sort by urgency (least days remaining first)
     alerts.sort((a, b) => a.daysRemaining - b.daysRemaining);
 
@@ -112,6 +141,7 @@ router.get("/", requireAuth, async (req, res) => {
       totalAlerts: alerts.length,
       idExpiryCount: alerts.filter((a) => a.type === "ID_EXPIRY").length,
       salaryIncreaseCount: alerts.filter((a) => a.type === "SALARY_INCREASE").length,
+      assessmentDueCount: alerts.filter((a) => a.type === "ASSESSMENT_DUE").length,
       criticalCount: alerts.filter((a) => a.severity === "critical").length,
     };
 
@@ -126,12 +156,8 @@ router.get("/", requireAuth, async (req, res) => {
  * @route GET /api/alerts/salary-increase-summary
  * @desc Get count of employees with salary increase in next 30 days (for dashboard widget)
  */
-router.get("/salary-increase-summary", requireAuth, async (req, res) => {
+router.get("/salary-increase-summary", requireAuth, enforcePolicy("manage", "alerts"), async (req, res) => {
   try {
-    const user = req.user;
-    if (!isAdminRole(user.role) && user.role !== "HR_MANAGER" && user.role !== "HR_STAFF") {
-      return res.status(403).json({ error: "Forbidden: insufficient permissions" });
-    }
 
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);

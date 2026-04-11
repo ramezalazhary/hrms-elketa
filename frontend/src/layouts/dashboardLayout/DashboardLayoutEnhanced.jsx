@@ -1,8 +1,9 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { logoutThunk } from "@/modules/identity/store";
 import { fetchDepartmentsThunk } from "@/modules/departments/store";
+import { normaliseRoleKey } from "@/shared/components/EntityBadges";
 import { Breadcrumb } from "@/shared/components/Breadcrumb";
 import {
   Home,
@@ -22,6 +23,10 @@ import {
   Bell,
   Search,
   CalendarCheck,
+  BarChart3,
+  Wallet,
+  CircleDollarSign,
+  CalendarOff,
 } from "lucide-react";
 
 /**
@@ -50,11 +55,15 @@ export function DashboardLayout() {
   const dispatch = useAppDispatch();
   const { currentUser } = useAppSelector((state) => state.identity);
   const departments = useAppSelector((state) => state.departments.items);
-  const currentRole = currentUser?.role;
+  const currentRole = normaliseRoleKey(currentUser?.role);
 
-  const isAdmin = currentRole === "ADMIN" || currentRole === 3;
+  const isAdmin = currentRole === "ADMIN";
   const isHrManager = currentRole === "HR_MANAGER";
   const isHR = currentRole === "HR_STAFF" || isHrManager || isAdmin;
+  const isHrBonusApprover =
+    currentRole === "HR_STAFF" ||
+    currentRole === "HR_MANAGER" ||
+    currentRole === "ADMIN";
 
   const hasHrOpsAccess =
     isAdmin ||
@@ -91,58 +100,60 @@ export function DashboardLayout() {
     }));
   };
 
-  const navStructure = [{ type: "link", to: "/", label: "Home", icon: Home }];
+  const navStructure = useMemo(() => {
+    const structure = [{ type: "link", to: "/", label: "Home", icon: Home }];
 
-  navStructure.push({
-    type: "link",
-    to: "/employees/time-off",
-    label: "Time off",
-    icon: CalendarCheck,
-  });
-
-  const canApproveLeave =
-    currentRole === "TEAM_LEADER" ||
-    currentRole === "MANAGER" ||
-    currentRole === "HR_STAFF" ||
-    currentRole === "HR_MANAGER" ||
-    currentRole === "ADMIN" ||
-    currentRole === 2 ||
-    currentRole === 3;
-
-  if (canApproveLeave) {
-    navStructure.push({
+    structure.push({
       type: "link",
-      to: "/employees/time-off/approvals",
-      label: "Leave approvals",
-      icon: CalendarRange,
+      to: "/employees/time-off",
+      label: "Time off",
+      icon: CalendarCheck,
     });
-  }
 
-  if (currentRole === "TEAM_LEADER") {
-    navStructure.push({
-      type: "link",
-      to: "/dashboard",
-      label: "My Team",
-      icon: Users,
-    });
-  } else if (currentRole === "MANAGER") {
-    navStructure.push({
-      type: "link",
-      to: "/dashboard",
-      label: "My Department",
-      icon: LayoutDashboard,
-    });
-  } else if (currentRole === "EMPLOYEE") {
-    // Employees only have Home (Dashboard)
-  }
+    const canApproveLeave =
+      currentRole === "TEAM_LEADER" ||
+      currentRole === "MANAGER" ||
+      currentRole === "HR_STAFF" ||
+      currentRole === "HR_MANAGER" ||
+      currentRole === "ADMIN";
 
-  // Organizations & Employees restricted to HR/Admin
-  if (isHR) {
-    navStructure.push({
-      type: "group",
-      label: "Organizations",
-      icon: Network,
-      children: [
+    if (canApproveLeave) {
+      structure.push({
+        type: "link",
+        to: "/employees/time-off/approvals",
+        label: "Leave approvals",
+        icon: CalendarRange,
+      });
+    }
+
+    if (isHrBonusApprover) {
+      structure.push({
+        type: "link",
+        to: "/employees/bonus-approvals",
+        label: "Bonus approvals",
+        icon: CalendarCheck,
+      });
+    }
+
+    if (currentRole === "TEAM_LEADER") {
+      structure.push({
+        type: "link",
+        to: "/dashboard",
+        label: "My Team",
+        icon: Users,
+      });
+    } else if (currentRole === "MANAGER") {
+      structure.push({
+        type: "link",
+        to: "/dashboard",
+        label: "My Department",
+        icon: LayoutDashboard,
+      });
+    }
+
+    // Organizations & Employees restricted to HR/Admin
+    if (isHR) {
+      const orgChildren = [
         {
           type: "link",
           to: "/organizations",
@@ -156,36 +167,71 @@ export function DashboardLayout() {
           label: "Departments",
           icon: Briefcase,
         },
-        {
+      ];
+      if (isAdmin) {
+        orgChildren.push({
           type: "link",
           to: "/admin/organization-rules",
           label: "Organization Rules",
           icon: Settings,
-        },
-      ],
-    });
-  }
+        });
+      }
+      orgChildren.push({
+        type: "link",
+        to: "/admin/holidays",
+        label: "Holidays",
+        icon: CalendarOff,
+      });
+      orgChildren.push({
+        type: "link",
+        to: "/reports",
+        label: "Reports",
+        icon: BarChart3,
+      });
+      structure.push({
+        type: "group",
+        label: "Organizations",
+        icon: Network,
+        children: orgChildren,
+      });
+    }
 
-  if (hasHrOpsAccess) {
-    navStructure.push({
-      type: "group",
-      label: "HR Operations",
-      icon: CalendarRange,
-      children: [
+    if (hasHrOpsAccess) {
+      const hrOpsChildren = [
         {
           type: "link",
           to: "/attendance",
           label: "Attendance",
           icon: CalendarRange,
         },
-      ],
-    });
-  } else if (currentRole === "MANAGER") {
-    // Managers no longer have Employees/Departments links as requested
-  }
+      ];
+      if (isHR) {
+        hrOpsChildren.push({
+          type: "link",
+          to: "/payroll",
+          label: "Payroll",
+          icon: Wallet,
+        });
+        hrOpsChildren.push({
+          type: "link",
+          to: "/advances",
+          label: "Advances",
+          icon: CircleDollarSign,
+        });
+      }
+      structure.push({
+        type: "group",
+        label: "HR Operations",
+        icon: CalendarRange,
+        children: hrOpsChildren,
+      });
+    }
+
+    return structure;
+  }, [currentRole, isHR, hasHrOpsAccess]);
 
   return (
-    <div className="min-h-screen flex overflow-hidden bg-zinc-50 text-zinc-900">
+    <div className="min-h-screen flex overflow-hidden bg-slate-50 text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
       {sidebarOpen && (
         <button
           type="button"
@@ -198,7 +244,11 @@ export function DashboardLayout() {
       {/* Enhanced Sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-[70] bg-white border-r border-zinc-200 transition-[width] duration-200 ease-out md:translate-x-0 md:static md:inset-0
-          ${isCollapsed ? "w-[4.5rem]" : "w-64"}
+          ${
+            isCollapsed
+              ? "w-[4.5rem]"
+              : "w-[85vw] max-w-72 md:w-64"
+          }
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="h-full flex flex-col p-4 relative">
@@ -301,7 +351,7 @@ export function DashboardLayout() {
               </div>
             ))}
 
-            {(isAdmin || (currentRole === "HR_STAFF" && isHrDepartmentHead)) &&
+            {(isAdmin || isHrManager || (currentRole === "HR_STAFF" && isHrDepartmentHead)) &&
               !isCollapsed && (
                 <p className="px-3 pt-6 pb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
                   Administration
@@ -316,7 +366,7 @@ export function DashboardLayout() {
                 closeMobile={() => setSidebarOpen(false)}
               />
             )}
-            {(isAdmin ||
+            {(isAdmin || isHrManager ||
               (currentRole === "HR_STAFF" && isHrDepartmentHead)) && (
               <SidebarLink
                 to="/admin/password-requests"
@@ -355,12 +405,12 @@ export function DashboardLayout() {
                 await dispatch(logoutThunk());
                 navigate("/login");
               }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50/50 transition-all duration-200 group ${
                 isCollapsed ? "justify-center" : ""
               }`}
               title="Sign out"
             >
-              <LogOut size={18} className="shrink-0" />
+              <LogOut size={18} className="shrink-0 transition-transform group-hover:-translate-x-1" />
               {!isCollapsed && <span>Sign out</span>}
             </button>
           </div>
@@ -368,7 +418,7 @@ export function DashboardLayout() {
       </aside>
 
       {/* Enhanced Main Content */}
-      <div className="flex-1 flex flex-col min-h-0 bg-zinc-50">
+      <div className="flex-1 flex flex-col min-h-0 bg-zinc-50 min-w-0">
         {/* Enhanced Header */}
         <header className="md:hidden shrink-0 h-16 bg-white border-b border-zinc-200 flex items-center px-4 justify-between">
           <button
@@ -395,14 +445,14 @@ export function DashboardLayout() {
 
         {/* Desktop Header with Breadcrumb */}
         <header className="hidden md:block shrink-0 bg-white border-b border-zinc-200">
-          <div className="px-8 py-4">
+          <div className="px-4 py-3 lg:px-8 lg:py-4">
             <Breadcrumb />
           </div>
         </header>
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto">
-          <div className="p-6 md:p-8">
+          <div className="p-3 sm:p-4 md:p-6 lg:p-8">
             <Outlet />
           </div>
         </main>
@@ -411,7 +461,7 @@ export function DashboardLayout() {
   );
 }
 
-function SidebarLink({ to, label, icon: Icon, isCollapsed, closeMobile }) {
+const SidebarLink = memo(function SidebarLink({ to, label, icon: Icon, isCollapsed, closeMobile }) {
   return (
     <NavLink
       to={to}
@@ -419,19 +469,25 @@ function SidebarLink({ to, label, icon: Icon, isCollapsed, closeMobile }) {
       onClick={closeMobile}
       title={isCollapsed ? label : ""}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+        `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 group
         ${
           isActive
-            ? "bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100"
-            : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+            ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200/50"
+            : "text-slate-500 hover:bg-white hover:text-indigo-600 hover:shadow-sm"
         }`
       }
     >
-      <Icon
-        size={18}
-        className={`shrink-0 opacity-80 ${isCollapsed ? "mx-auto" : ""}`}
-      />
-      {!isCollapsed && <span className="truncate">{label}</span>}
+      {({ isActive }) => (
+        <>
+          <Icon
+            size={18}
+            className={`shrink-0 transition-colors ${isCollapsed ? "mx-auto" : ""} ${
+              isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600"
+            }`}
+          />
+          {!isCollapsed && <span className="truncate">{label}</span>}
+        </>
+      )}
     </NavLink>
   );
-}
+});

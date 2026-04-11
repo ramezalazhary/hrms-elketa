@@ -7,10 +7,17 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "seed": "node src/seedUsers.js",
+    "seed:real": "node scripts/seed-real-data.js --apply",
     "seed:attendance": "node src/seedAttendanceDemo.js",
+    "generate:bulk-template": "node scripts/generateTemplate.js",
+    "xlsx:project-data": "node scripts/write-hrms-data-workbook.mjs",
+    "export:test-sheets": "node scripts/export-test-sheets.mjs",
     "test:permissions": "node scripts/permission-smoke.mjs",
     "test:api": "node scripts/full-api-smoke.mjs",
+    "test:org-invariants": "node scripts/org-invariants-smoke.mjs",
+    "test:ci-chain": "npm run test:permissions && npm run test:org-invariants && npm run test:api",
     "test:integration": "node scripts/full-api-smoke.mjs && node scripts/permission-smoke.mjs",
+    "clears": "node src/clearDatabase.js",
     "start": "node src/index.js"
   },
   "dependencies": {

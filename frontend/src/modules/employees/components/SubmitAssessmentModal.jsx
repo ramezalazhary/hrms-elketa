@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useToast } from "@/shared/components/ToastProvider";
 import { createAssessmentApi } from "../api";
-import { Star, FileText } from "lucide-react";
+import { Star, FileText, Calendar } from "lucide-react";
 
 const LABELS_5 = [
   "Needs Improvement",
@@ -44,8 +44,16 @@ function StarScoreRow({ label, value, onChange }) {
   );
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
 export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
+  const now = new Date();
   const [formData, setFormData] = useState({
+    periodMonth: now.getMonth() + 1,
+    periodYear: now.getFullYear(),
     daysBonus: "",
     overtime: "",
     deduction: "",
@@ -54,20 +62,28 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
     quality: 0,
     overall: 0,
     notesPrevious: "",
-    reviewPeriod: "",
     feedback: "",
     getThebounes: false,
   });
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
 
+  const yearOptions = useMemo(() => {
+    const y = now.getFullYear();
+    return [y - 1, y, y + 1];
+  }, []);
+
   const setScore = (key) => (v) => setFormData((prev) => ({ ...prev, [key]: v }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const { commitment, attitude, quality, overall } = formData;
+    const { commitment, attitude, quality, overall, periodMonth, periodYear } = formData;
     if (!commitment || !attitude || !quality || !overall) {
       showToast("Please score Commitment, Attitude, Quality, and Overall (1–5)", "error");
+      return;
+    }
+    if (!periodMonth || !periodYear) {
+      showToast("Please select the assessment period (month & year)", "error");
       return;
     }
 
@@ -85,6 +101,7 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
       await createAssessmentApi({
         employeeId: employee.id || employee._id,
         date: `${dd}:${mm}:${yyyy}`,
+        period: { year: Number(periodYear), month: Number(periodMonth) },
         daysBonus,
         overtime,
         deduction,
@@ -93,7 +110,6 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
         quality,
         overall,
         notesPrevious: formData.notesPrevious.trim(),
-        reviewPeriod: formData.reviewPeriod.trim(),
         feedback: formData.feedback.trim(),
         getThebounes: formData.getThebounes,
       });
@@ -102,7 +118,7 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
       onSuccess?.();
       onClose();
     } catch (err) {
-      showToast(err.message || "Failed to submit assessment", "error");
+      showToast(err.error || err.message || "Failed to submit assessment", "error");
     } finally {
       setLoading(false);
     }
@@ -127,7 +143,7 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">
-                Days bonus
+                Bonus days
               </label>
               <input
                 type="number"
@@ -138,10 +154,11 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
                 className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
                 placeholder="0"
               />
+              <p className="text-[9px] text-zinc-400 mt-0.5">days × daily rate</p>
             </div>
             <div>
               <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">
-                Overtime
+                Overtime hours
               </label>
               <input
                 type="number"
@@ -152,20 +169,22 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
                 className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
                 placeholder="0"
               />
+              <p className="text-[9px] text-zinc-400 mt-0.5">hours × daily rate</p>
             </div>
             <div>
               <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">
-                Deduction
+                Deduction (EGP)
               </label>
               <input
                 type="number"
                 min={0}
-                step={0.5}
+                step={1}
                 value={formData.deduction}
                 onChange={(e) => setFormData((p) => ({ ...p, deduction: e.target.value }))}
                 className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
                 placeholder="0"
               />
+              <p className="text-[9px] text-zinc-400 mt-0.5">fixed EGP amount</p>
             </div>
           </div>
 
@@ -198,16 +217,28 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
 
           <div>
             <label className="block text-[10px] font-bold text-zinc-700 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-              <FileText size={12} className="text-indigo-500" /> Review period
+              <Calendar size={12} className="text-indigo-500" /> Assessment period
             </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g., Q1 2026"
-              value={formData.reviewPeriod}
-              onChange={(e) => setFormData({ ...formData, reviewPeriod: e.target.value })}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-4 py-2.5 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none transition"
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <select
+                value={formData.periodMonth}
+                onChange={(e) => setFormData({ ...formData, periodMonth: Number(e.target.value) })}
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none transition"
+              >
+                {MONTH_NAMES.map((m, i) => (
+                  <option key={i + 1} value={i + 1}>{m}</option>
+                ))}
+              </select>
+              <select
+                value={formData.periodYear}
+                onChange={(e) => setFormData({ ...formData, periodYear: Number(e.target.value) })}
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none transition"
+              >
+                {yearOptions.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
