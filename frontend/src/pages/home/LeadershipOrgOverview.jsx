@@ -41,9 +41,16 @@ import { Layout } from "@/shared/components/Layout";
 import { DepartmentBadge, normaliseRoleKey } from "@/shared/components/EntityBadges";
 import { downloadBulkTemplateApi, uploadBulkFileApi, getAlertsFeedApi } from "@/modules/bulk/api";
 import { useAppSelector } from "@/shared/hooks/reduxHooks";
+import {
+  canAccessAttendance,
+  canAccessOnboardingApprovals,
+  canApproveLeaves,
+  canManageBonusApprovals,
+  canManagePayroll,
+  canViewReports,
+} from "@/shared/utils/accessControl";
 
-const HR_ROLES = new Set(["HR_STAFF", "HR_MANAGER", "ADMIN"]);
-const BONUS_APPROVER_ROLES = new Set(["HR_STAFF", "HR_MANAGER", "ADMIN"]);
+const HR_ROLES = new Set(["HR", "HR_STAFF", "HR_MANAGER", "ADMIN"]);
 
 const CHART_COLORS = ["#6366f1", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#64748b", "#94a3b8"];
 const STATUS_COLORS = {
@@ -492,6 +499,7 @@ export function LeadershipOrgOverview({
             <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/80 to-white p-5 sm:p-6 mb-6">
               <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-500 mb-4">HR Quick Actions</h3>
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                {canApproveLeaves(currentUser) && (
                 <Link to="/employees/time-off/approvals" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
                   <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center"><CalendarCheck className="h-4 w-4 text-amber-600" /></div>
                   <div>
@@ -499,21 +507,26 @@ export function LeadershipOrgOverview({
                     <p className="text-[10px] text-slate-400">Review pending requests</p>
                   </div>
                 </Link>
-                <Link to="/employees/onboarding" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
-                  <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center"><ClipboardList className="h-4 w-4 text-emerald-600" /></div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">Onboarding</p>
-                    <p className="text-[10px] text-slate-400">Pending submissions</p>
-                  </div>
-                </Link>
-                <Link to="/attendance" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
-                  <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center"><BarChart3 className="h-4 w-4 text-indigo-600" /></div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">Attendance</p>
-                    <p className="text-[10px] text-slate-400">Monthly report & records</p>
-                  </div>
-                </Link>
-                {BONUS_APPROVER_ROLES.has(normaliseRoleKey(currentUser?.role)) && (
+                )}
+                {canAccessOnboardingApprovals(currentUser) && (
+                  <Link to="/employees/onboarding" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
+                    <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center"><ClipboardList className="h-4 w-4 text-emerald-600" /></div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">Onboarding</p>
+                      <p className="text-[10px] text-slate-400">Pending submissions</p>
+                    </div>
+                  </Link>
+                )}
+                {canAccessAttendance(currentUser) && (
+                  <Link to="/attendance" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
+                    <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center"><BarChart3 className="h-4 w-4 text-indigo-600" /></div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">Attendance</p>
+                      <p className="text-[10px] text-slate-400">Monthly report & records</p>
+                    </div>
+                  </Link>
+                )}
+                {canManageBonusApprovals(currentUser) && (
                   <Link to="/employees/bonus-approvals" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
                     <div className="h-9 w-9 rounded-lg bg-violet-50 flex items-center justify-center"><Gift className="h-4 w-4 text-violet-600" /></div>
                     <div>
@@ -522,6 +535,7 @@ export function LeadershipOrgOverview({
                     </div>
                   </Link>
                 )}
+                {canManagePayroll(currentUser) && (
                 <Link to="/payroll" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
                   <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center"><Wallet className="h-4 w-4 text-indigo-600" /></div>
                   <div>
@@ -529,6 +543,8 @@ export function LeadershipOrgOverview({
                     <p className="text-[10px] text-slate-400">Monthly payroll runs</p>
                   </div>
                 </Link>
+                )}
+                {canViewReports(currentUser) && (
                 <Link to="/reports" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
                   <div className="h-9 w-9 rounded-lg bg-slate-50 flex items-center justify-center"><FileKey className="h-4 w-4 text-slate-600" /></div>
                   <div>
@@ -536,6 +552,7 @@ export function LeadershipOrgOverview({
                     <p className="text-[10px] text-slate-400">View all reports</p>
                   </div>
                 </Link>
+                )}
               </div>
             </div>
           )}

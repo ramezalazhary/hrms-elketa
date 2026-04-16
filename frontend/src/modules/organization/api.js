@@ -51,3 +51,33 @@ export async function deleteHolidayApi(id) {
   });
   return handleApiResponse(response);
 }
+
+export async function getPartnersApi() {
+  const response = await fetchWithAuth(`${API_URL}/policy/partners`);
+  return handleApiResponse(response);
+}
+
+export async function createPartnerApi(payload) {
+  const response = await fetchWithAuth(`${API_URL}/policy/partners`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handleApiResponse(response);
+}
+
+export async function updatePartnerApi(partnerId, payload) {
+  const response = await fetchWithAuth(`${API_URL}/policy/partners/${partnerId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handleApiResponse(response);
+}
+
+export async function deletePartnerApi(partnerId) {
+  const response = await fetchWithAuth(`${API_URL}/policy/partners/${partnerId}`, {
+    method: "DELETE",
+  });
+  return handleApiResponse(response);
+}

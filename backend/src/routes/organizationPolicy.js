@@ -3,6 +3,7 @@ import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
 import { Employee } from "../models/Employee.js";
 import { requireAuth } from "../middleware/auth.js";
 import { enforcePolicy } from "../middleware/enforcePolicy.js";
+import { requireCeoOrAdmin } from "../middleware/requireCeoOrAdmin.js";
 import { strictLimiter } from "../middleware/security.js";
 import {
   sanitizeWorkLocationsForSave,
@@ -10,8 +11,28 @@ import {
 } from "../utils/policyWorkLocations.js";
 import { normalizeWeeklyRestDays } from "../utils/weeklyRestDays.js";
 import { finalizePolicyWorkingDays } from "../utils/orgPolicyWorkingDays.js";
+import { validateLateDeductionTiersForSave } from "../utils/attendanceTimingCore.js";
 
 const router = Router();
+
+/** 24h clock string: HH:mm or HH:mm:ss (validated; invalid → fallback). */
+function sanitizeOrgClockTime(raw, fallback) {
+  const s = String(raw ?? "").trim();
+  if (!s) return fallback;
+  const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!m) return fallback;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  const sec = m[3] !== undefined && m[3] !== "" ? Number(m[3]) : 0;
+  if (!Number.isFinite(h) || !Number.isFinite(min) || !Number.isFinite(sec)) return fallback;
+  if (h > 23 || min > 59 || sec > 59) return fallback;
+  const hh = String(h).padStart(2, "0");
+  const mm = String(min).padStart(2, "0");
+  if (m[3] !== undefined && m[3] !== "") {
+    return `${hh}:${mm}:${String(sec).padStart(2, "0")}`;
+  }
+  return `${hh}:${mm}`;
+}
 
 async function syncManagersToChiefExecutive(chiefExecutiveEmployeeId) {
   const ceoId = chiefExecutiveEmployeeId ? String(chiefExecutiveEmployeeId) : null;
@@ -43,8 +64,42 @@ async function resolveValidChiefExecutiveId(rawId) {
   return exists ? candidateId : null;
 }
 
+function sanitizePartnersForSave(rawPartners) {
+  if (!Array.isArray(rawPartners)) return [];
+  return rawPartners
+    .map((row) => {
+      const name = String(row?.name || "").trim();
+      if (!name) return null;
+      const title = String(row?.title || "").trim() || "Partner";
+      const notes = String(row?.notes || "").trim();
+      const ownershipRaw =
+        row?.ownershipPercent === null || row?.ownershipPercent === ""
+          ? null
+          : Number(row?.ownershipPercent);
+      const ownershipPercent = Number.isFinite(ownershipRaw)
+        ? Math.min(100, Math.max(0, ownershipRaw))
+        : null;
+      const employeeId =
+        row?.employeeId && typeof row.employeeId === "object"
+          ? row.employeeId._id || row.employeeId.id || null
+          : row?.employeeId || null;
+      return {
+        name,
+        title,
+        notes,
+        ownershipPercent,
+        employeeId: employeeId ? String(employeeId).trim() : null,
+      };
+    })
+    .filter(Boolean);
+}
+
 // GET /policy/documents
-router.get("/documents", requireAuth, async (req, res) => {
+router.get(
+  "/documents",
+  requireAuth,
+  enforcePolicy("read", "organization_policy"),
+  async (req, res) => {
   try {
     let policy = await OrganizationPolicy.findOne({ name: "default" }).populate(
       "chiefExecutiveEmployeeId",
@@ -59,11 +114,14 @@ router.get("/documents", requireAuth, async (req, res) => {
         companyMonthStartDay: 1,
         chiefExecutiveEmployeeId: null,
         chiefExecutiveTitle: "Chief Executive Officer",
+        partners: [],
         leavePolicies: [],
         attendanceRules: {
           standardStartTime: "09:00",
           standardEndTime: "17:00",
           gracePeriodMinutes: 15,
+          monthlyGraceUsesEnabled: false,
+          monthlyGraceUsesAllowed: 0,
           workingDaysPerMonth: 22,
           lateDeductionTiers: [],
           absenceDeductionDays: 1,
@@ -106,7 +164,8 @@ router.get("/documents", requireAuth, async (req, res) => {
     console.error("Error fetching policy:", error);
     res.status(500).json({ error: "Failed to fetch policy" });
   }
-});
+},
+);
 
 // PUT /policy/documents (Admin only)
 router.put("/documents", requireAuth, enforcePolicy("manage", "organization_policy"), strictLimiter, async (req, res) => {
@@ -120,6 +179,7 @@ router.put("/documents", requireAuth, enforcePolicy("manage", "organization_poli
       companyMonthStartDay,
       chiefExecutiveEmployeeId,
       chiefExecutiveTitle,
+      partners,
       attendanceRules,
       assessmentPayrollRules,
       payrollConfig,
@@ -134,18 +194,37 @@ router.put("/documents", requireAuth, enforcePolicy("manage", "organization_poli
       if (!raw || typeof raw !== "object") return undefined;
       const tiers = Array.isArray(raw.lateDeductionTiers)
         ? raw.lateDeductionTiers
-            .filter((t) => t && Number.isFinite(t.fromMinutes) && Number.isFinite(t.toMinutes))
-            .map((t) => ({
-              fromMinutes: Math.max(0, Math.floor(t.fromMinutes)),
-              toMinutes: Math.max(1, Math.floor(t.toMinutes)),
-              deductionDays: Math.max(0, Number(t.deductionDays) || 0),
-            }))
+            .filter((t) => t && Number.isFinite(Number(t.fromMinutes)) && Number.isFinite(Number(t.toMinutes)))
+            .map((t) => {
+              const fromMinutes = Math.max(0, Number(t.fromMinutes));
+              let toMinutes = Number(t.toMinutes);
+              const minBand = 1 / 60; // at least one second wider than `from`
+              if (!Number.isFinite(toMinutes) || toMinutes <= fromMinutes) {
+                toMinutes = fromMinutes + minBand;
+              }
+              return {
+                fromMinutes,
+                toMinutes,
+                deductionDays: Math.max(0, Number(t.deductionDays) || 0),
+              };
+            })
             .sort((a, b) => a.fromMinutes - b.fromMinutes)
         : [];
+      const tierCheck = validateLateDeductionTiersForSave(tiers);
+      if (!tierCheck.ok) {
+        const err = new Error(tierCheck.message);
+        err.statusCode = 400;
+        throw err;
+      }
       return {
-        standardStartTime: String(raw.standardStartTime || "09:00").trim(),
-        standardEndTime: String(raw.standardEndTime || "17:00").trim(),
+        standardStartTime: sanitizeOrgClockTime(raw.standardStartTime, "09:00"),
+        standardEndTime: sanitizeOrgClockTime(raw.standardEndTime, "17:00"),
         gracePeriodMinutes: Math.max(0, Math.floor(Number.isFinite(Number(raw.gracePeriodMinutes)) ? Number(raw.gracePeriodMinutes) : 15)),
+        monthlyGraceUsesEnabled: Boolean(raw.monthlyGraceUsesEnabled),
+        monthlyGraceUsesAllowed: Math.max(
+          0,
+          Math.min(31, Math.floor(Number.isFinite(Number(raw.monthlyGraceUsesAllowed)) ? Number(raw.monthlyGraceUsesAllowed) : 0)),
+        ),
         workingDaysPerMonth: Math.max(1, Math.min(31, Math.floor(Number.isFinite(Number(raw.workingDaysPerMonth)) ? Number(raw.workingDaysPerMonth) : 22))),
         lateDeductionTiers: tiers,
         absenceDeductionDays: Math.max(0, Number.isFinite(Number(raw.absenceDeductionDays)) ? Number(raw.absenceDeductionDays) : 1),
@@ -183,8 +262,17 @@ router.put("/documents", requireAuth, enforcePolicy("manage", "organization_poli
         policy.chiefExecutiveTitle = t || "Chief Executive Officer";
       }
       if (chiefExecutiveEmployeeId !== undefined) {
-        policy.chiefExecutiveEmployeeId =
+        const nextChiefExecutiveId =
           await resolveValidChiefExecutiveId(chiefExecutiveEmployeeId);
+        if (!nextChiefExecutiveId) {
+          return res.status(400).json({
+            error: "Chief Executive must be a valid active employee",
+          });
+        }
+        policy.chiefExecutiveEmployeeId = nextChiefExecutiveId;
+      }
+      if (partners !== undefined) {
+        policy.partners = sanitizePartnersForSave(partners);
       }
       if (payrollConfig !== undefined && typeof payrollConfig === "object") {
         const pc = payrollConfig;
@@ -242,6 +330,11 @@ router.put("/documents", requireAuth, enforcePolicy("manage", "organization_poli
         attendanceWd: requestAttendanceWorkingDays,
         payrollWd: requestPayrollWorkingDays,
       });
+      if (!policy.chiefExecutiveEmployeeId) {
+        return res.status(400).json({
+          error: "Chief Executive must be selected and active",
+        });
+      }
       await policy.save();
       await syncManagersToChiefExecutive(policy.chiefExecutiveEmployeeId);
     } else {
@@ -258,6 +351,11 @@ router.put("/documents", requireAuth, enforcePolicy("manage", "organization_poli
           ? String(chiefExecutiveTitle).trim()
           : "Chief Executive Officer";
       const ceoId = await resolveValidChiefExecutiveId(chiefExecutiveEmployeeId);
+      if (!ceoId) {
+        return res.status(400).json({
+          error: "Chief Executive must be selected and active",
+        });
+      }
       policy = new OrganizationPolicy({
         name: "default",
         documentRequirements: documentRequirements || [],
@@ -269,6 +367,7 @@ router.put("/documents", requireAuth, enforcePolicy("manage", "organization_poli
         companyMonthStartDay: monthStart,
         chiefExecutiveTitle: ceoTitle,
         chiefExecutiveEmployeeId: ceoId,
+        partners: sanitizePartnersForSave(partners),
       });
       await policy.save();
       await syncManagersToChiefExecutive(policy.chiefExecutiveEmployeeId);
@@ -283,8 +382,101 @@ router.put("/documents", requireAuth, enforcePolicy("manage", "organization_poli
     res.json(out);
   } catch (error) {
     console.error("Error updating policy:", error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({ error: error.message });
+    }
     res.status(500).json({ error: "Failed to update policy" });
   }
 });
+
+router.get(
+  "/partners",
+  requireAuth,
+  enforcePolicy("read", "organization_policy"),
+  async (req, res) => {
+    try {
+      const policy = await OrganizationPolicy.findOne({ name: "default" })
+        .select("partners")
+        .populate("partners.employeeId", "fullName email employeeCode")
+        .lean();
+      return res.json({ partners: policy?.partners || [] });
+    } catch (error) {
+      console.error("Error fetching partners:", error);
+      return res.status(500).json({ error: "Failed to fetch partners" });
+    }
+  },
+);
+
+router.post(
+  "/partners",
+  requireAuth,
+  requireCeoOrAdmin,
+  strictLimiter,
+  async (req, res) => {
+    try {
+      const next = sanitizePartnersForSave([req.body]);
+      if (next.length === 0) {
+        return res.status(400).json({ error: "Partner name is required" });
+      }
+      const policy = await OrganizationPolicy.findOne({ name: "default" });
+      if (!policy) return res.status(404).json({ error: "Organization policy not found" });
+      policy.partners.push(next[0]);
+      await policy.save();
+      await policy.populate("partners.employeeId", "fullName email employeeCode");
+      return res.status(201).json({ partners: policy?.partners || [] });
+    } catch (error) {
+      console.error("Error creating partner:", error);
+      return res.status(500).json({ error: "Failed to create partner" });
+    }
+  },
+);
+
+router.put(
+  "/partners/:partnerId",
+  requireAuth,
+  requireCeoOrAdmin,
+  strictLimiter,
+  async (req, res) => {
+    try {
+      const next = sanitizePartnersForSave([req.body]);
+      if (next.length === 0) {
+        return res.status(400).json({ error: "Partner name is required" });
+      }
+      const policy = await OrganizationPolicy.findOne({ name: "default" });
+      if (!policy) return res.status(404).json({ error: "Organization policy not found" });
+      const partner = policy.partners.id(req.params.partnerId);
+      if (!partner) return res.status(404).json({ error: "Partner not found" });
+      Object.assign(partner, next[0]);
+      await policy.save();
+      await policy.populate("partners.employeeId", "fullName email employeeCode");
+      return res.json({ partners: policy.partners });
+    } catch (error) {
+      console.error("Error updating partner:", error);
+      return res.status(500).json({ error: "Failed to update partner" });
+    }
+  },
+);
+
+router.delete(
+  "/partners/:partnerId",
+  requireAuth,
+  requireCeoOrAdmin,
+  strictLimiter,
+  async (req, res) => {
+    try {
+      const policy = await OrganizationPolicy.findOne({ name: "default" });
+      if (!policy) return res.status(404).json({ error: "Organization policy not found" });
+      const partner = policy.partners.id(req.params.partnerId);
+      if (!partner) return res.status(404).json({ error: "Partner not found" });
+      partner.deleteOne();
+      await policy.save();
+      await policy.populate("partners.employeeId", "fullName email employeeCode");
+      return res.json({ partners: policy.partners });
+    } catch (error) {
+      console.error("Error deleting partner:", error);
+      return res.status(500).json({ error: "Failed to delete partner" });
+    }
+  },
+);
 
 export default router;

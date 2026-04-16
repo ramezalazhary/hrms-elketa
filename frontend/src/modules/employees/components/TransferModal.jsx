@@ -26,24 +26,24 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl rounded-2xl bg-white p-6 md:p-8 shadow-2xl relative overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
-        <div className="absolute right-0 top-0 -mr-16 -mt-16 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="w-full max-w-2xl rounded-2xl bg-white p-6 md:p-8 shadow-2xl relative overflow-hidden border border-zinc-200 animate-in zoom-in-95 duration-200">
+        <div className="absolute right-0 top-0 -mr-16 -mt-16 h-48 w-48 rounded-full bg-zinc-500/10 blur-3xl" />
         
         <div className="relative flex items-start justify-between mb-8">
           <div className="flex gap-4">
-            <div className="flex items-center justify-center shrink-0 w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 shadow-sm border border-indigo-100/50">
+            <div className="flex items-center justify-center shrink-0 w-12 h-12 rounded-full bg-zinc-50 text-zinc-600 shadow-sm border border-zinc-100/50">
               <ArrowRightLeft className="h-6 w-6" strokeWidth={2} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-slate-900 leading-none">Transfer Employee</h2>
-              <p className="mt-1.5 text-sm text-slate-500">Record a structural or departmental change for <strong>{employee.fullName}</strong>.</p>
+              <h2 className="text-xl font-bold text-zinc-900 leading-none">Transfer Employee</h2>
+              <p className="mt-1.5 text-sm text-zinc-500">Record a structural or departmental change for <strong>{employee.fullName}</strong>.</p>
             </div>
           </div>
           <button 
             type="button" 
             onClick={onClose}
-            className="flex items-center justify-center h-8 w-8 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition -mr-2"
+            className="flex items-center justify-center h-8 w-8 rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition -mr-2"
           >
             <X className="h-5 w-5" />
           </button>
@@ -54,14 +54,14 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
             
             {/* Target Department */}
             <div className="md:col-span-2">
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-                <Building2 className="h-3.5 w-3.5 text-indigo-500" /> Target Department <span className="text-rose-500">*</span>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 uppercase tracking-wider mb-2">
+                <Building2 className="h-3.5 w-3.5 text-zinc-500" /> Target Department <span className="text-rose-500">*</span>
               </label>
               <select
                 required
                 value={toDepartment}
                 onChange={(e) => setToDepartment(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm transition focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200/80"
               >
                 <option value="" disabled>Select a department...</option>
                 {departments.map(d => (
@@ -72,8 +72,8 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
 
             {/* New Job Title */}
             <div>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-                <Briefcase className="h-3.5 w-3.5 text-indigo-400" /> New Job Title
+              <label className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 uppercase tracking-wider mb-2">
+                <Briefcase className="h-3.5 w-3.5 text-zinc-400" /> New Job Title
               </label>
               {(() => {
                 const selectedDeptObj = departments.find(d => d.name === toDepartment);
@@ -88,7 +88,7 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
                     <select
                       value={newPosition}
                       onChange={(e) => setNewPosition(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm shadow-sm transition focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200/80"
                     >
                       <option value="">Select a position...</option>
                       {uniquePositions.map(p => (
@@ -104,7 +104,7 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
                     placeholder={employee.position || "e.g. Senior Manager"}
                     value={newPosition}
                     onChange={(e) => setNewPosition(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50 disabled:bg-slate-50"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm shadow-sm transition focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200/80 disabled:opacity-50 disabled:bg-zinc-50"
                     disabled={!toDepartment}
                   />
                 );
@@ -113,29 +113,29 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
 
             {/* New Code */}
             <div>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-                <Badge className="h-3.5 w-3.5 text-indigo-400" /> New Employee Code
+              <label className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 uppercase tracking-wider mb-2">
+                <Badge className="h-3.5 w-3.5 text-zinc-400" /> New Employee Code
               </label>
               <input
                 type="text"
                 placeholder={`Current: ${employee.employeeCode || "N/A"}`}
                 value={newEmployeeCode}
                 onChange={(e) => setNewEmployeeCode(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-mono shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-mono shadow-sm transition focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200/80"
               />
             </div>
 
             {/* Base Salary Change */}
-            <div className="md:col-span-2 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
-                <DollarSign className="h-4 w-4 text-emerald-500 p-0.5 rounded-full bg-emerald-100" /> Financial Details
+            <div className="md:col-span-2 rounded-xl border border-zinc-100 bg-zinc-50/50 p-4">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 uppercase tracking-wider mb-3">
+                <DollarSign className="h-4 w-4 rounded-full bg-zinc-200/80 p-0.5 text-zinc-700" /> Financial Details
               </div>
               
               <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-[11px] font-semibold text-slate-500">New Base Salary</label>
-                    <span className="text-[10px] font-bold text-slate-400">Current: {new Intl.NumberFormat("en-EG").format(currentSalary)} EGP</span>
+                    <label className="block text-[11px] font-semibold text-zinc-500">New Base Salary</label>
+                    <span className="text-[10px] font-bold text-zinc-400">Current: {new Intl.NumberFormat("en-EG").format(currentSalary)} EGP</span>
                   </div>
                   <div className="relative">
                     <input
@@ -145,9 +145,9 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
                       placeholder={currentSalary}
                       value={newSalary}
                       onChange={(e) => setNewSalary(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 pl-8 text-sm font-semibold shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 pl-8 text-sm font-semibold shadow-sm transition focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200/80"
                     />
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-sm">
                       £
                     </span>
                   </div>
@@ -158,8 +158,8 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
                       const percent = ((diff / currentSalary) * 100).toFixed(1).replace(/\.0$/, '');
                       const isIncrease = diff > 0;
                       return (
-                        <div className={`mt-2 flex items-center gap-1.5 text-[10px] font-bold ${isIncrease ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          <span className={`px-1.5 py-0.5 rounded ${isIncrease ? 'bg-emerald-100/50' : 'bg-rose-100/50'}`}>
+                        <div className={`mt-2 flex items-center gap-1.5 text-[10px] font-bold ${isIncrease ? "text-zinc-800" : "text-rose-600"}`}>
+                          <span className={`rounded px-1.5 py-0.5 ${isIncrease ? "bg-zinc-100 border border-zinc-200/80" : "bg-rose-100/50"}`}>
                             {isIncrease ? "+" : ""}{percent}%
                           </span>
                           <span>
@@ -172,19 +172,19 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
                   })()}
                 </div>
                 
-                <div className="flex-1 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 pt-3 flex items-start gap-3 mt-1 sm:mt-5 transition-colors hover:bg-indigo-50 hover:border-indigo-200">
+                <div className="flex-1 rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 pt-3 flex items-start gap-3 mt-1 sm:mt-5 transition-colors hover:bg-zinc-50 hover:border-zinc-200">
                   <input 
                     type="checkbox" 
                     id="resetBtn"
                     checked={resetNextReviewDate}
                     onChange={(e) => setResetNextReviewDate(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
+                    className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-zinc-600 focus:ring-zinc-600 cursor-pointer"
                   />
                   <div className="flex-1">
-                    <label htmlFor="resetBtn" className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-900 cursor-pointer uppercase tracking-wide">
+                    <label htmlFor="resetBtn" className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-900 cursor-pointer uppercase tracking-wide">
                       Reset next review date <Calendar className="h-3 w-3" />
                     </label>
-                    <p className="text-[10px] text-indigo-700/70 mt-0.5 font-medium leading-tight">
+                    <p className="text-[10px] text-zinc-700/70 mt-0.5 font-medium leading-tight">
                       Sets the next salary review to exactly one year from the transfer date.
                     </p>
                   </div>
@@ -194,31 +194,31 @@ export function TransferModal({ employee, departments, onClose, onSubmit }) {
 
             {/* Notes */}
             <div className="md:col-span-2">
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-                <FileText className="h-3.5 w-3.5 text-indigo-400" /> Transfer Notes & Reason
+              <label className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 uppercase tracking-wider mb-2">
+                <FileText className="h-3.5 w-3.5 text-zinc-400" /> Transfer Notes & Reason
               </label>
               <textarea
                 rows={3}
                 placeholder="Briefly state the reason for this transfer or structural change..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
+                className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm shadow-sm transition focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200/80 resize-none"
               />
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-zinc-600 hover:bg-zinc-100 transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!toDepartment}
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 transition hover:shadow-xl hover:shadow-indigo-500/40 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+              className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100"
             >
               <Check className="h-4 w-4" /> Process Transfer
             </button>

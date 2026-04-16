@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Layout } from "@/shared/components/Layout";
+import { Modal } from "@/shared/components/Modal";
 import { useToast } from "@/shared/components/ToastProvider";
 import { useAppSelector } from "@/shared/hooks/reduxHooks";
 import {
@@ -10,44 +11,21 @@ import {
 } from "../api";
 import { LeaveBalanceCreditHistory } from "../components/LeaveBalanceCreditHistory";
 import { normaliseRoleKey } from "@/shared/components/EntityBadges";
-import { Loader2, Check, X, ChevronDown, ChevronUp, Clock, History } from "lucide-react";
+import { canApproveLeaves } from "@/shared/utils/accessControl";
+import { Loader2, Check, X, Clock } from "lucide-react";
+import { fmtDate, fmtDateTime, fmtDays, fmtMins } from "../utils/leaveFormatters";
+import { LeaveSurface } from "../components/leave/LeaveSurface";
+import { LeaveStatusPill } from "../components/leave/LeaveStatusPill";
+import { ApprovalTimeline, AuditTimeline } from "../components/leave/ApprovalTimeline";
+import "../styles/leaveTheme.css";
 
-const HR_ROLES = new Set(["HR_STAFF", "HR_MANAGER", "ADMIN"]);
+const HR_ROLES = new Set(["HR", "HR_STAFF", "HR_MANAGER", "ADMIN"]);
+const FORCE_APPROVER_ROLES = new Set(["HR_MANAGER", "ADMIN"]);
 
 function employeeKey(r) {
   const id = r.employeeId;
   if (id && typeof id === "object" && id._id != null) return String(id._id);
   return String(id ?? "");
-}
-
-function fmtDays(n) {
-  const x = Number(n);
-  if (Number.isNaN(x)) return "—";
-  return Math.abs(x % 1) < 1e-9 ? String(x) : x.toFixed(1);
-}
-
-function fmtMins(m) {
-  const x = Number(m);
-  if (Number.isNaN(x)) return "—";
-  if (x >= 60 && x % 60 === 0) return `${x / 60} h`;
-  return `${x} min`;
-}
-
-function fmtDate(d) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function fmtDateTime(d) {
-  if (!d) return "—";
-  return new Date(d).toLocaleString(undefined, {
-    day: "numeric", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
 }
 
 function stepLabel(role) {
@@ -56,29 +34,19 @@ function stepLabel(role) {
   return role || "—";
 }
 
-function ApprovalPipeline({ approvals }) {
-  if (!approvals?.length) return null;
-  return (
-    <div className="mt-2 flex items-center gap-1 text-xs">
-      {approvals.map((a, i) => {
-        const bg =
-          a.status === "APPROVED" ? "bg-emerald-100 text-emerald-800 border-emerald-200" :
-          a.status === "REJECTED" ? "bg-rose-100 text-rose-800 border-rose-200" :
-          "bg-slate-100 text-slate-600 border-slate-200";
-        return (
-          <div key={i} className="flex items-center gap-1">
-            {i > 0 && <span className="text-slate-300">→</span>}
-            <span className={`rounded-md border px-2 py-0.5 font-medium ${bg}`}>
-              {a.role === "MANAGEMENT" ? "Mgmt" : a.role} · {a.status}
-            </span>
-            {a.processedBy && (
-              <span className="text-slate-400 text-[10px]">{a.processedBy}</span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
+function formatLeaveActionError(err, fallback) {
+  const raw = String(err?.error || err?.message || "").trim();
+  if (!raw) return fallback;
+  if (raw.includes("Only HR_MANAGER or ADMIN can resolve escalated requests")) {
+    return "Only HR Manager or Admin can resolve escalated requests.";
+  }
+  if (raw.toLowerCase().includes("escalated excuse requires excess deduction")) {
+    return "Escalated excuse approval needs deduction method and amount.";
+  }
+  if (raw.toLowerCase().includes("modified concurrently")) {
+    return "Request changed by another approver. Reload and try again.";
+  }
+  return raw;
 }
 
 function AuditTrail({ requestId }) {
@@ -97,43 +65,7 @@ function AuditTrail({ requestId }) {
     finally { setLoading(false); }
   };
 
-  return (
-    <div className="mt-2">
-      <button
-        type="button" onClick={load}
-        className="inline-flex items-center gap-1 text-xs font-medium text-indigo-700 hover:underline"
-      >
-        <History className="h-3 w-3" />
-        {loading ? "Loading..." : open ? "Hide audit trail" : "View audit trail"}
-      </button>
-      {open && logs && (
-        <div className="mt-1 space-y-1">
-          {logs.length === 0 && <p className="text-xs text-slate-400">No history entries.</p>}
-          {logs.map((log, i) => (
-            <div key={i} className="rounded border border-slate-100 bg-slate-50/60 px-2 py-1 text-[11px] text-slate-600">
-              <span className="font-semibold text-slate-800">{log.operation}</span>
-              {" by "}
-              <span className="font-medium">{log.performedBy}</span>
-              {" — "}
-              <span>{fmtDateTime(log.performedAt || log.createdAt)}</span>
-              {log.newValues?.comment && (
-                <span className="ml-1 text-slate-500">"{log.newValues.comment}"</span>
-              )}
-              {log.newValues?.reason && (
-                <span className="ml-1 text-slate-500">Reason: "{log.newValues.reason}"</span>
-              )}
-              {log.newValues?.forceApproved && (
-                <span className="ml-1 font-medium text-amber-700">[HR force-approved]</span>
-              )}
-              {log.newValues?.onBehalf && (
-                <span className="ml-1 font-medium text-blue-700">[on behalf of {log.newValues.targetEmployee}]</span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  return <AuditTimeline logs={logs} loading={loading} open={open} onToggle={load} />;
 }
 
 function eligibilityBlock(r) {
@@ -158,32 +90,37 @@ function eligibilityBlock(r) {
   );
 }
 
-const STATUS_BADGE = {
-  PENDING: "bg-amber-100 text-amber-800",
-  APPROVED: "bg-emerald-100 text-emerald-800",
-  REJECTED: "bg-rose-100 text-rose-800",
-  CANCELLED: "bg-slate-200 text-slate-600",
-};
-
 export function LeaveApprovalsPage() {
   const { showToast } = useToast();
   const currentUser = useAppSelector((s) => s.identity.currentUser);
   const roleKey = currentUser ? normaliseRoleKey(currentUser.role) : "EMPLOYEE";
   const isHr = currentUser && HR_ROLES.has(roleKey);
+  const canDirectRecord = currentUser && FORCE_APPROVER_ROLES.has(roleKey);
+  const canResolveEscalation = canDirectRecord;
+  const canTakeActions = canApproveLeaves(currentUser);
+  // Allow manager-history workflow for canonical manager/team-leader roles and
+  // for override-based non-HR approvers who can act on queue items.
+  const hasManagementRole = roleKey === "TEAM_LEADER" || roleKey === "MANAGER";
   /** Department head or team leader (not HR) — can see team/department leave history. */
   const isMgmtApprover =
     currentUser &&
     !isHr &&
-    (roleKey === "TEAM_LEADER" || roleKey === "MANAGER");
+    (hasManagementRole || canTakeActions);
+  const preferredTab = canTakeActions ? "queue" : (isHr ? "all" : (isMgmtApprover ? "history" : "all"));
 
-  const [tab, setTab] = useState("queue");
+  const [tab, setTab] = useState(() => {
+    if (canTakeActions) return "queue";
+    if (isHr) return "all";
+    if (isMgmtApprover) return "history";
+    return "all";
+  });
   const [loading, setLoading] = useState(true);
   const [list, setList] = useState([]);
   const [rejectId, setRejectId] = useState(null);
   const [rejectComment, setRejectComment] = useState("");
   const [acting, setActing] = useState(false);
   const [balanceByEmployeeId, setBalanceByEmployeeId] = useState({});
-  const [expandedId, setExpandedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
 
   const [excessModal, setExcessModal] = useState(null);
   const [excessMethod, setExcessMethod] = useState("SALARY");
@@ -192,9 +129,20 @@ export function LeaveApprovalsPage() {
   const [allFilter, setAllFilter] = useState({ status: "", kind: "" });
 
   const load = useCallback(async () => {
+    if (!currentUser) {
+      setList([]);
+      setBalanceByEmployeeId({});
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       if (tab === "queue") {
+        if (!canTakeActions) {
+          setList([]);
+          setBalanceByEmployeeId({});
+          return;
+        }
         const data = await listLeaveRequestsApi({ queue: "1", limit: "100" });
         setList(data.requests || []);
         setBalanceByEmployeeId(data.balanceByEmployeeId || {});
@@ -221,9 +169,31 @@ export function LeaveApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [showToast, tab, allFilter.status, allFilter.kind, isHr, isMgmtApprover]);
+  }, [showToast, tab, allFilter.status, allFilter.kind, isHr, isMgmtApprover, canTakeActions, currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const validTabs = new Set();
+    if (canTakeActions) validTabs.add("queue");
+    if (isHr) validTabs.add("all");
+    if (isMgmtApprover) validTabs.add("history");
+    if (!validTabs.size) validTabs.add("all");
+
+    // Auto-recover only if current tab is invalid for this user state.
+    // Do not force-reset when user intentionally switches between valid tabs
+    // (e.g. manager/team leader queue <-> history).
+    if (!validTabs.has(tab) && tab !== preferredTab) {
+      setTab(preferredTab);
+    }
+  }, [tab, preferredTab, currentUser, canTakeActions, isHr, isMgmtApprover]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (list.length && !list.some((r) => r._id === selectedId)) {
+      setSelectedId(list[0]._id);
+    }
+    if (!list.length) setSelectedId(null);
+  }, [list, selectedId]);
 
   const needsExcessDecision = (r) =>
     r.kind === "EXCUSE" && r.quotaExceeded && r.status === "PENDING" && !r.excessDeductionMethod;
@@ -250,7 +220,7 @@ export function LeaveApprovalsPage() {
       showToast("Approved", "success");
       void load();
     } catch (err) {
-      showToast(err?.error || err?.message || "Action failed", "error");
+      showToast(formatLeaveActionError(err, "Action failed"), "error");
     } finally { setActing(false); }
   };
 
@@ -266,7 +236,7 @@ export function LeaveApprovalsPage() {
       showToast("Recorded directly and approved", "success");
       void load();
     } catch (err) {
-      showToast(err?.error || err?.message || "Action failed", "error");
+      showToast(formatLeaveActionError(err, "Action failed"), "error");
     } finally { setActing(false); }
   };
 
@@ -289,7 +259,7 @@ export function LeaveApprovalsPage() {
       setExcessModal(null);
       void load();
     } catch (err) {
-      showToast(err?.error || err?.message || "Action failed", "error");
+      showToast(formatLeaveActionError(err, "Action failed"), "error");
     } finally { setActing(false); }
   };
 
@@ -303,7 +273,7 @@ export function LeaveApprovalsPage() {
       setRejectId(null); setRejectComment("");
       void load();
     } catch (err) {
-      showToast(err?.error || err?.message || "Action failed", "error");
+      showToast(formatLeaveActionError(err, "Action failed"), "error");
     } finally { setActing(false); }
   };
 
@@ -325,20 +295,20 @@ export function LeaveApprovalsPage() {
       const ifCancelled = r.status === "PENDING" && days > 0 ? rem + days : null;
       const insufficientBalance = r.status === "PENDING" && (rem <= 0 || rem < days);
       return (
-        <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-600 space-y-0.5">
-          <p className="font-medium text-slate-700">Vacation balance</p>
-          <p>Entitlement {fmtDays(v.entitlementDays)} d · approved {fmtDays(v.approvedDays)} · pending {fmtDays(v.pendingDays)} · <span className="font-semibold text-slate-800">left {fmtDays(rem)} d</span></p>
-          {Number(v.bonusDays) > 0 && <p className="text-teal-800 font-medium">Includes {fmtDays(v.bonusDays)} bonus day(s)</p>}
+        <div className="mt-2 rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2 text-xs text-zinc-600 space-y-0.5">
+          <p className="font-medium text-zinc-700">Vacation balance</p>
+          <p>Entitlement {fmtDays(v.entitlementDays)} d · approved {fmtDays(v.approvedDays)} · pending {fmtDays(v.pendingDays)} · <span className="font-semibold text-zinc-800">left {fmtDays(rem)} d</span></p>
+          {Number(v.bonusDays) > 0 && <p className="font-medium text-zinc-800">Includes {fmtDays(v.bonusDays)} bonus day(s)</p>}
           {insufficientBalance && (
             <div className="mt-1.5 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-rose-800 font-medium">
               Insufficient balance — if approved, this will be recorded as unpaid leave (salary deduction applies).
             </div>
           )}
           {ifCancelled != null && !insufficientBalance && (
-            <p className="text-slate-500">If withdrawn/rejected: left would be <strong className="text-slate-700">{fmtDays(ifCancelled)} d</strong></p>
+            <p className="text-zinc-500">If withdrawn/rejected: left would be <strong className="text-zinc-700">{fmtDays(ifCancelled)} d</strong></p>
           )}
           {v.credits?.length > 0 && (
-            <LeaveBalanceCreditHistory credits={v.credits} compact maxRows={5} className="mt-2 border-t border-slate-200/80 pt-2" />
+            <LeaveBalanceCreditHistory credits={v.credits} compact maxRows={5} className="mt-2 border-t border-zinc-200/80 pt-2" />
           )}
         </div>
       );
@@ -348,9 +318,9 @@ export function LeaveApprovalsPage() {
     const excuseExhausted = r.status === "PENDING" && (remM <= 0 || remM < mins);
     const countExhausted = r.status === "PENDING" && ex.excusesAllowedInPeriod > 0 && ex.excusesUsedInPeriod >= ex.excusesAllowedInPeriod;
     return (
-      <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-600 space-y-0.5">
-        <p className="font-medium text-slate-700">Excuse balance (monthly cap)</p>
-        <p>Cap {fmtMins(ex.entitlementMinutes)} · used {fmtMins(ex.approvedMinutes)} · pending {fmtMins(ex.pendingMinutes)} · <span className="font-semibold text-slate-800">left {fmtMins(remM)}</span></p>
+      <div className="mt-2 rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2 text-xs text-zinc-600 space-y-0.5">
+        <p className="font-medium text-zinc-700">Excuse balance (monthly cap)</p>
+        <p>Cap {fmtMins(ex.entitlementMinutes)} · used {fmtMins(ex.approvedMinutes)} · pending {fmtMins(ex.pendingMinutes)} · <span className="font-semibold text-zinc-800">left {fmtMins(remM)}</span></p>
         {ex.excusesAllowedInPeriod > 0 && (
           <p>Excuses used this period: {ex.excusesUsedInPeriod} / {ex.excusesAllowedInPeriod}</p>
         )}
@@ -363,101 +333,62 @@ export function LeaveApprovalsPage() {
     );
   };
 
-  const requestRow = (r) => {
-    const isExpanded = expandedId === r._id;
-    return (
-      <li key={r._id} className="px-4 py-4 space-y-1">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-medium text-slate-900">{r.employeeEmail}</p>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_BADGE[r.status] || "bg-slate-100 text-slate-600"}`}>
-                {r.status === "PENDING" && r.preEligibility
-                  ? "PENDING (RECORDED)"
-                  : r.status}
-              </span>
-              {r.onBehalf && <span className="rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-[10px] font-medium">On behalf</span>}
-              {r.status === "APPROVED" && r.effectivePaymentType === "UNPAID" && (
-                <span className="rounded-full bg-rose-100 text-rose-700 px-2 py-0.5 text-[10px] font-semibold">UNPAID</span>
-              )}
-              {r.status === "APPROVED" && r.effectivePaymentType === "PAID" && (
-                <span className="rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-[10px] font-semibold">PAID</span>
-              )}
-              {r.quotaExceeded && (
-                <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-semibold">Quota exceeded</span>
-              )}
-            </div>
-            <p className="text-sm text-slate-600 mt-0.5">
-              {r.kind === "VACATION"
-                ? `${r.leaveType || "ANNUAL"} · ${fmtDate(r.startDate)} – ${fmtDate(r.endDate)} (${r.computed?.days || 0} d)`
-                : `Excuse · ${fmtDate(r.excuseDate)} ${r.startTime}–${r.endTime} (${r.computed?.minutes || 0} min)`}
-            </p>
-            {r.status === "PENDING" && (
-              <p className="text-xs text-teal-700 font-medium mt-1">
-                <Clock className="inline h-3 w-3 mr-0.5" />
-                Waiting for: {nextStep(r)}
-              </p>
-            )}
-            {r.quotaExceeded && r.excessDeductionMethod && (
-              <p className="text-xs text-amber-700 mt-1 font-medium">
-                Deduction: {r.excessDeductionMethod === "SALARY" ? "Salary" : "Vacation balance"} — {r.excessDeductionAmount} {r.excessDeductionMethod === "SALARY" ? "day(s) fraction" : "day(s)"}
-                {r.status === "PENDING" && " (set by HR)"}
-              </p>
-            )}
-            {r.cancellationReason && (
-              <p className="text-xs text-rose-700 mt-1">Cancel reason: {r.cancellationReason}</p>
-            )}
-            <ApprovalPipeline approvals={r.approvals} />
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button type="button" onClick={() => setExpandedId(isExpanded ? null : r._id)}
-              className="p-1 text-slate-400 hover:text-slate-600">
-              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-            {r.status === "PENDING" && tab === "queue" && (
-              <>
-                <button type="button" disabled={acting} onClick={() => approve(r._id)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm text-white hover:bg-emerald-700 disabled:opacity-50">
-                  <Check className="h-4 w-4" /> Approve
-                </button>
-                <button type="button" disabled={acting}
-                  onClick={() => { setRejectId(r._id); setRejectComment(""); }}
-                  className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50 disabled:opacity-50">
-                  <X className="h-4 w-4" /> Reject
-                </button>
-                {isHr && (
-                  <button type="button" disabled={acting} onClick={() => directRecord(r._id)}
-                    title="Skip remaining steps and approve immediately"
-                    className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-white px-3 py-1.5 text-sm text-teal-700 hover:bg-teal-50 disabled:opacity-50">
-                    <Check className="h-4 w-4" /> Record directly
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+  const selectedRequest = useMemo(
+    () => list.find((r) => r._id === selectedId) || null,
+    [list, selectedId],
+  );
 
-        {isExpanded && (
-          <div className="mt-2 space-y-2">
-            {eligibilityBlock(r)}
-            {balanceLines(r)}
-            <AuditTrail requestId={r._id} />
-          </div>
-        )}
-      </li>
+  const requestSummaryRow = (r) => {
+    const active = selectedId === r._id;
+    const rowEmployeeId = String(r?.employeeId?._id ?? r?.employeeId ?? "");
+    const meId = String(currentUser?.id ?? "");
+    const mineById = meId && rowEmployeeId && meId === rowEmployeeId;
+    const mineByEmail =
+      String(r?.employeeEmail || "").trim().toLowerCase() ===
+      String(currentUser?.email || "").trim().toLowerCase();
+    const isMine = mineById || mineByEmail;
+    let ownerBadge = "HR Queue Request";
+    let ownerBadgeClass = "bg-violet-100 text-violet-800";
+    if (isMine) {
+      ownerBadge = "My Request";
+      ownerBadgeClass = "bg-blue-100 text-blue-800";
+    } else if (isMgmtApprover) {
+      ownerBadge = "Team Request";
+      ownerBadgeClass = "bg-emerald-100 text-emerald-800";
+    }
+    return (
+      <button
+        key={r._id}
+        type="button"
+        onClick={() => setSelectedId(r._id)}
+        className={`w-full rounded-xl border px-3 py-3 text-left ${active ? "border-zinc-900 bg-zinc-50" : "border-zinc-200 bg-white"}`}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium text-zinc-900">{r.employeeEmail}</p>
+          <LeaveStatusPill status={r.status} />
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${ownerBadgeClass}`}>{ownerBadge}</span>
+        </div>
+        <p className="mt-1 text-xs text-zinc-600">
+          {r.kind === "VACATION"
+            ? `${fmtDate(r.startDate)} to ${fmtDate(r.endDate)}`
+            : `${fmtDate(r.excuseDate)} ${r.startTime}-${r.endTime}`}
+        </p>
+      </button>
     );
   };
 
   return (
     <Layout
       title="Leave approvals"
-      description="HR first, then manager or team leader. Expand rows to see balance, eligibility, and audit trail."
+      description="HR and management decide. If decisions conflict, the request escalates to HR Manager/Admin."
     >
-      <div className="max-w-5xl space-y-4">
-        <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-xs text-indigo-800 leading-relaxed">
+      <div className="leave-ui max-w-6xl space-y-4">
+        <div className="rounded-[20px] bg-zinc-50/90 px-4 py-3 text-xs leading-relaxed text-zinc-800 ring-1 ring-zinc-200/80">
           <strong>How the approval pipeline works:</strong> When an employee submits a leave request it first
           goes to <span className="font-semibold">HR</span> for review, then to their
           <span className="font-semibold"> manager or team leader</span> for final approval.
+          {" "}If one side approves and the other rejects, the request is marked
+          <span className="font-semibold"> ESCALATED</span> for final decision by HR Manager/Admin.
           {isHr
             ? " As HR, you review the first step. Use the \"All Requests\" tab to see every request across the company."
             : isMgmtApprover
@@ -466,26 +397,30 @@ export function LeaveApprovalsPage() {
         </div>
 
         {isHr && (
-          <div className="flex gap-2 border-b border-slate-200 pb-2">
-            <button type="button" onClick={() => setTab("queue")}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${tab === "queue" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
-              Pending Queue
-            </button>
+          <div className="inline-flex w-full max-w-md gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 sm:w-auto">
+            {canTakeActions && (
+              <button type="button" onClick={() => setTab("queue")}
+                className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "queue" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
+                Pending queue
+              </button>
+            )}
             <button type="button" onClick={() => setTab("all")}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${tab === "all" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
-              All Requests
+              className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "all" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
+              All requests
             </button>
           </div>
         )}
 
         {isMgmtApprover && (
-          <div className="flex gap-2 border-b border-slate-200 pb-2">
-            <button type="button" onClick={() => setTab("queue")}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${tab === "queue" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
-              Pending queue
-            </button>
+          <div className="inline-flex w-full max-w-lg gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 sm:w-auto">
+            {canTakeActions && (
+              <button type="button" onClick={() => setTab("queue")}
+                className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "queue" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
+                Pending queue
+              </button>
+            )}
             <button type="button" onClick={() => setTab("history")}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${tab === "history" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+              className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "history" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
               Team &amp; department history
             </button>
           </div>
@@ -494,15 +429,16 @@ export function LeaveApprovalsPage() {
         {(tab === "all" || tab === "history") && (
           <div className="flex flex-wrap gap-2">
             <select value={allFilter.status} onChange={(e) => setAllFilter((p) => ({ ...p, status: e.target.value }))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
+              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm">
               <option value="">All statuses</option>
               <option value="PENDING">Pending</option>
+              <option value="ESCALATED">Escalated</option>
               <option value="APPROVED">Approved</option>
               <option value="REJECTED">Rejected</option>
               <option value="CANCELLED">Cancelled</option>
             </select>
             <select value={allFilter.kind} onChange={(e) => setAllFilter((p) => ({ ...p, kind: e.target.value }))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
+              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm">
               <option value="">All types</option>
               <option value="VACATION">Vacation</option>
               <option value="EXCUSE">Excuse</option>
@@ -510,74 +446,125 @@ export function LeaveApprovalsPage() {
           </div>
         )}
 
-        {rejectId && (
-          <form onSubmit={submitReject} className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 space-y-2">
-            <p className="text-sm font-medium text-rose-900">Reject — comment required</p>
-            <textarea value={rejectComment} onChange={(e) => setRejectComment(e.target.value)}
-              rows={3} className="w-full rounded-lg border border-rose-200 px-3 py-2 text-sm"
-              placeholder="Reason for rejection" required />
-            <div className="flex gap-2">
-              <button type="submit" disabled={acting}
-                className="rounded-lg bg-rose-700 px-3 py-1.5 text-sm text-white hover:bg-rose-800 disabled:opacity-50">
-                Confirm reject
-              </button>
-              <button type="button" onClick={() => { setRejectId(null); setRejectComment(""); }}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm">Cancel</button>
-            </div>
-          </form>
-        )}
-
-        {excessModal && (
-          <form onSubmit={submitExcessApproval} className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
-            <p className="text-sm font-semibold text-amber-900">Excuse quota exceeded — choose deduction method</p>
-            <p className="text-xs text-amber-800">This employee has exhausted their excuse quota. Choose how to handle the excess.</p>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="excessMethod" value="SALARY"
-                  checked={excessMethod === "SALARY"} onChange={() => setExcessMethod("SALARY")} />
-                <span>Deduct from salary <span className="text-xs text-slate-500">(day-fraction deducted from payroll)</span></span>
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="excessMethod" value="VACATION_BALANCE"
-                  checked={excessMethod === "VACATION_BALANCE"} onChange={() => setExcessMethod("VACATION_BALANCE")} />
-                <span>Deduct from vacation balance <span className="text-xs text-slate-500">(days subtracted from leave entitlement)</span></span>
-              </label>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Deduction amount ({excessMethod === "SALARY" ? "day-fraction, e.g. 0.25 = quarter day" : "days, e.g. 0.5 = half day"})
-              </label>
-              <input type="number" step="any" min="0.01" value={excessAmount}
-                onChange={(e) => setExcessAmount(e.target.value)}
-                className="w-40 rounded-lg border border-slate-200 px-3 py-1.5 text-sm" required />
-            </div>
-            <div className="flex gap-2">
-              <button type="submit" disabled={acting}
-                className="rounded-lg bg-amber-700 px-3 py-1.5 text-sm text-white hover:bg-amber-800 disabled:opacity-50">
-                Approve with deduction
-              </button>
-              <button type="button" onClick={() => setExcessModal(null)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm">Cancel</button>
-            </div>
-          </form>
-        )}
-
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          {loading ? (
-            <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>
-          ) : list.length === 0 ? (
-            <p className="py-12 text-center text-sm text-slate-500">
-              {tab === "queue"
-                ? "No pending items in your queue."
-                : tab === "history"
-                  ? "No leave requests match the filters for your team or department."
-                  : "No requests match the current filters."}
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-100">{list.map(requestRow)}</ul>
-          )}
+        <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+          <LeaveSurface className="p-3">
+            {loading ? (
+              <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-500" /></div>
+            ) : list.length === 0 ? (
+              <p className="py-12 text-center text-sm text-zinc-500">No requests for current filters.</p>
+            ) : (
+              <div className="space-y-2">{list.map(requestSummaryRow)}</div>
+            )}
+          </LeaveSurface>
+          <LeaveSurface elevated className="p-5">
+            {!selectedRequest ? (
+              <p className="text-sm text-zinc-500">Select a request from the left panel.</p>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-semibold text-zinc-900">{selectedRequest.employeeEmail}</h3>
+                  <LeaveStatusPill status={selectedRequest.status} />
+                  {selectedRequest.onBehalf ? <LeaveStatusPill status="PENDING" label="On behalf" /> : null}
+                </div>
+                <p className="text-sm text-zinc-600">
+                  {selectedRequest.kind === "VACATION"
+                    ? `${selectedRequest.leaveType || "ANNUAL"} · ${fmtDate(selectedRequest.startDate)} – ${fmtDate(selectedRequest.endDate)}`
+                    : `Excuse · ${fmtDate(selectedRequest.excuseDate)} ${selectedRequest.startTime}–${selectedRequest.endTime}`}
+                </p>
+                {(selectedRequest.status === "PENDING" || selectedRequest.status === "ESCALATED") ? (
+                  <p className="text-xs font-medium text-zinc-700">
+                    <Clock className="mr-1 inline h-3 w-3" />
+                    {selectedRequest.status === "ESCALATED"
+                      ? "Escalated and waiting for HR Manager/Admin resolution"
+                      : `Waiting for ${nextStep(selectedRequest)}`}
+                  </p>
+                ) : null}
+                <ApprovalTimeline approvals={selectedRequest.approvals} />
+                {eligibilityBlock(selectedRequest)}
+                {balanceLines(selectedRequest)}
+                {selectedRequest.status === "PENDING" || (selectedRequest.status === "ESCALATED" && canResolveEscalation) ? (
+                  tab === "queue" && canTakeActions ? (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <button
+                        type="button"
+                        disabled={acting}
+                        onClick={() => approve(selectedRequest._id)}
+                        className="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                      >
+                        <Check className="h-4 w-4" />
+                        {selectedRequest.status === "ESCALATED" ? "Resolve approve" : "Approve"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={acting}
+                        onClick={() => { setRejectId(selectedRequest._id); setRejectComment(""); }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm text-rose-700 disabled:opacity-50"
+                      >
+                        <X className="h-4 w-4" />
+                        {selectedRequest.status === "ESCALATED" ? "Resolve reject" : "Reject"}
+                      </button>
+                      {canDirectRecord && selectedRequest.status === "PENDING" ? (
+                        <button
+                          type="button"
+                          disabled={acting}
+                          onClick={() => directRecord(selectedRequest._id)}
+                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 disabled:opacity-50"
+                        >
+                          Record directly
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null
+                ) : null}
+                <AuditTrail requestId={selectedRequest._id} />
+              </div>
+            )}
+          </LeaveSurface>
         </div>
       </div>
+
+      <Modal open={Boolean(rejectId)} title="Reject request" onClose={() => { setRejectId(null); setRejectComment(""); }}>
+        <form onSubmit={submitReject} className="space-y-3">
+          <textarea
+            value={rejectComment}
+            onChange={(e) => setRejectComment(e.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-rose-200 px-3 py-2 text-sm"
+            placeholder="Reason for rejection"
+            required
+          />
+          <button type="submit" disabled={acting} className="rounded-lg bg-rose-700 px-3 py-2 text-sm text-white disabled:opacity-50">
+            Confirm reject
+          </button>
+        </form>
+      </Modal>
+
+      <Modal open={Boolean(excessModal)} title="Excuse deduction" onClose={() => setExcessModal(null)}>
+        <form onSubmit={submitExcessApproval} className="space-y-3">
+          <div className="space-y-2 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="radio" value="SALARY" checked={excessMethod === "SALARY"} onChange={() => setExcessMethod("SALARY")} />
+              Deduct from salary
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" value="VACATION_BALANCE" checked={excessMethod === "VACATION_BALANCE"} onChange={() => setExcessMethod("VACATION_BALANCE")} />
+              Deduct from vacation balance
+            </label>
+          </div>
+          <input
+            type="number"
+            step="any"
+            min="0.01"
+            value={excessAmount}
+            onChange={(e) => setExcessAmount(e.target.value)}
+            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+            required
+          />
+          <button type="submit" disabled={acting} className="rounded-lg bg-amber-700 px-3 py-2 text-sm text-white disabled:opacity-50">
+            Approve with deduction
+          </button>
+        </form>
+      </Modal>
     </Layout>
   );
 }

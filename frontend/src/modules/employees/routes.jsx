@@ -1,33 +1,42 @@
 import { Navigate } from 'react-router-dom'
-import { RequireRole } from '@/shared/routing/RequireRole'
+import { RequireEmployeeRead } from '@/shared/routing/RequireEmployeeRead'
+import { RequireLeaveApprover } from '@/shared/routing/RequireLeaveApprover'
+import { RequireBonusApprover } from '@/shared/routing/RequireBonusApprover'
+import { RequireOnboardingAccess } from "@/shared/routing/RequireOnboardingAccess";
+import { RequireEmployeeManage } from "@/shared/routing/RequireEmployeeManage";
 import { CreateEmployeePage } from './pages/CreateEmployeePage'
 import { EditEmployeePage } from './pages/EditEmployeePage'
 import { EmployeeProfilePage } from './pages/EmployeeProfilePage'
 import { EmployeesListPage } from './pages/EmployeesListPage'
 
 import { OnboardingApprovalsPage } from './pages/OnboardingApprovalsPage'
-import { TimeOffPage } from './pages/TimeOffPage'
 import { LeaveApprovalsPage } from './pages/LeaveApprovalsPage'
-import { BulkLeaveBalanceCreditPage } from './pages/BulkLeaveBalanceCreditPage'
 import { BonusApprovalsPage } from './pages/BonusApprovalsPage'
+import { TimeOffPage } from './pages/TimeOffPage'
 
 export const employeesRoutes = [
-  { path: '/employees/time-off', element: <TimeOffPage /> },
-  { path: '/employees/time-off/approvals', element: <LeaveApprovalsPage /> },
+  {
+    path: '/employees/time-off',
+    element: <TimeOffPage />,
+  },
+  {
+    path: '/employees/time-off/approvals',
+    element: (
+      <RequireLeaveApprover>
+        <LeaveApprovalsPage />
+      </RequireLeaveApprover>
+    ),
+  },
   {
     path: '/employees/time-off/bulk-credit',
-    element: (
-      <RequireRole roles={['HR_STAFF', 'HR_MANAGER', 'ADMIN']}>
-        <BulkLeaveBalanceCreditPage />
-      </RequireRole>
-    ),
+    element: <Navigate to="/leave-operations" replace />,
   },
   {
     path: '/employees/bonus-approvals',
     element: (
-      <RequireRole roles={['HR_STAFF', 'HR_MANAGER', 'ADMIN']}>
+      <RequireBonusApprover>
         <BonusApprovalsPage />
-      </RequireRole>
+      </RequireBonusApprover>
     ),
   },
   {
@@ -45,34 +54,41 @@ export const employeesRoutes = [
   { 
     path: '/employees', 
     element: (
-      <RequireRole roles={["HR_STAFF", "HR_MANAGER", "ADMIN"]}>
+      <RequireEmployeeRead>
         <EmployeesListPage />
-      </RequireRole>
+      </RequireEmployeeRead>
     ) 
   },
   {
     path: '/employees/onboarding',
     element: (
-      <RequireRole roles={["HR_STAFF", "HR_MANAGER", "ADMIN"]}>
+      <RequireOnboardingAccess>
         <OnboardingApprovalsPage />
-      </RequireRole>
+      </RequireOnboardingAccess>
     ),
   },
   {
     path: '/employees/create',
     element: (
-      <RequireRole roles={["HR_STAFF", "HR_MANAGER", "ADMIN"]}>
+      <RequireEmployeeManage>
         <CreateEmployeePage />
-      </RequireRole>
+      </RequireEmployeeManage>
     ),
   },
   {
     path: '/employees/:employeeId/edit',
     element: (
-      <RequireRole roles={["HR_STAFF", "HR_MANAGER", "ADMIN"]}>
+      <RequireEmployeeManage>
         <EditEmployeePage />
-      </RequireRole>
+      </RequireEmployeeManage>
     ),
   },
-  { path: '/employees/:employeeId', element: <EmployeeProfilePage /> },
+  {
+    path: '/employees/:employeeId',
+    element: (
+      <RequireEmployeeRead>
+        <EmployeeProfilePage />
+      </RequireEmployeeRead>
+    ),
+  },
 ]

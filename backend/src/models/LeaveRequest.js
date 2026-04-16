@@ -49,7 +49,7 @@ const LeaveRequestSchema = new Schema(
 
     status: {
       type: String,
-      enum: ["PENDING", "APPROVED", "REJECTED", "CANCELLED"],
+      enum: ["PENDING", "ESCALATED", "APPROVED", "REJECTED", "CANCELLED"],
       default: "PENDING",
       index: true,
     },
@@ -85,6 +85,10 @@ const LeaveRequestSchema = new Schema(
     cancelledBy: { type: String },
     cancelledAt: { type: Date },
     cancellationReason: { type: String },
+    escalatedAt: { type: Date },
+    escalatedBy: { type: String },
+    escalationReason: { type: String },
+    finalResolver: { type: String },
 
     /** Set at approval time: PAID = deducted from balance; UNPAID = salary deduction instead. */
     effectivePaymentType: {
@@ -93,7 +97,7 @@ const LeaveRequestSchema = new Schema(
     },
     unpaidReason: {
       type: String,
-      enum: ["NO_BALANCE", "NOT_ELIGIBLE", "HR_OVERRIDE"],
+      enum: ["NO_BALANCE", "NOT_ELIGIBLE", "HR_OVERRIDE", "EXCESS_EXCUSE_SALARY"],
     },
     /** For excuses: true when employee had exhausted their excuse quota (set at submission and/or approval). */
     quotaExceeded: { type: Boolean, default: false },

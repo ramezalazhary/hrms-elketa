@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { useAppSelector } from "@/shared/hooks/reduxHooks";
-import { normaliseRoleKey } from "@/shared/components/EntityBadges";
+import {
+  ACCESS_LEVEL,
+  canManageHolidays,
+  getAccessLevelLabel,
+  getHolidaysAccessLevel,
+} from "@/shared/utils/accessControl";
 import {
   getHolidaysApi,
   createHolidayApi,
@@ -79,10 +84,11 @@ const EMPTY_FORM = {
   targetEmployeeId: "",
 };
 
-export function HolidaysPage() {
+export function HolidaysPage({ embedded = false }) {
   const { currentUser } = useAppSelector((state) => state.identity);
-  const currentRole = normaliseRoleKey(currentUser?.role);
-  const canManage = currentRole === "ADMIN" || currentRole === "HR_MANAGER";
+  const canManage = canManageHolidays(currentUser);
+  const holidaysAccessLevel = getHolidaysAccessLevel(currentUser);
+  const canDeleteHoliday = holidaysAccessLevel === ACCESS_LEVEL.ADMIN;
   const { showToast } = useToast();
 
   const [filterYear, setFilterYear] = useState(String(CURRENT_YEAR));
@@ -204,23 +210,8 @@ export function HolidaysPage() {
     }
   }, [deleteTarget, fetchHolidays, showToast]);
 
-  return (
-    <Layout
-      title="Company Holidays"
-      description="Declare paid days off for the whole company, a department, or individual employees. These days are never counted as absence and carry no deduction."
-      actions={
-        canManage && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98]"
-          >
-            <Plus className="h-4 w-4" />
-            Declare Holiday
-          </button>
-        )
-      }
-    >
+  const content = (
+    <>
       {/* Filters */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <select
@@ -313,14 +304,16 @@ export function HolidaysPage() {
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget(h)}
-                              className="rounded-md p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-600"
-                              title="Delete"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            {canDeleteHoliday && (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteTarget(h)}
+                                className="rounded-md p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-600"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       )}
@@ -521,6 +514,53 @@ export function HolidaysPage() {
           </div>
         </div>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <section className="space-y-4">
+        <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200/80 bg-zinc-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900">Company holidays</h2>
+            <p className="mt-1 text-xs text-zinc-500">
+              Access: {getAccessLevelLabel(holidaysAccessLevel)}. Declared holidays are not counted as absence.
+            </p>
+          </div>
+          {canManage && (
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-zinc-800"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Declare holiday
+            </button>
+          )}
+        </div>
+        {content}
+      </section>
+    );
+  }
+
+  return (
+    <Layout
+      title="Company Holidays"
+      description={`Access: ${getAccessLevelLabel(holidaysAccessLevel)} · Declare paid days off for the whole company, a department, or individual employees. These days are never counted as absence and carry no deduction.`}
+      actions={
+        canManage && (
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98]"
+          >
+            <Plus className="h-4 w-4" />
+            Declare Holiday
+          </button>
+        )
+      }
+    >
+      {content}
     </Layout>
   );
 }

@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { useAppSelector } from "@/shared/hooks/reduxHooks";
-import { normaliseRoleKey } from "@/shared/components/EntityBadges";
+import {
+  ACCESS_LEVEL,
+  getAdvancesAccessLevel,
+  hasAccessLevel,
+} from "@/shared/utils/accessControl";
 import {
   getAdvancesApi,
   createAdvanceApi,
@@ -44,11 +48,6 @@ const PAYMENT_TYPE_LABELS = {
   ONE_TIME: "مرة واحدة",
   INSTALLMENTS: "تقسيط",
 };
-
-function isHR(role) {
-  const r = normaliseRoleKey(role);
-  return ["ADMIN", "HR_MANAGER", "HR_STAFF"].includes(r);
-}
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.PENDING;
@@ -576,7 +575,8 @@ function CreateAdvanceModal({ onClose, onCreated }) {
 export function AdvancesPage() {
   const { showToast } = useToast();
   const currentUser = useAppSelector((state) => state.identity.currentUser);
-  const hrUser = isHR(currentUser?.role);
+  const advancesAccessLevel = getAdvancesAccessLevel(currentUser);
+  const canManageAdvances = hasAccessLevel(advancesAccessLevel, ACCESS_LEVEL.EDIT);
 
   const [advances, setAdvances] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -659,7 +659,7 @@ export function AdvancesPage() {
               <p className="text-sm text-zinc-500">إنشاء واعتماد وتتبع سلف الموظفين</p>
             </div>
           </div>
-          {hrUser && (
+          {canManageAdvances && (
             <button
               className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 transition"
               onClick={() => setShowCreateModal(true)}
@@ -720,7 +720,7 @@ export function AdvancesPage() {
               <AdvanceCard
                 key={adv.id || adv._id}
                 adv={adv}
-                isHrUser={hrUser}
+                isHrUser={canManageAdvances}
                 onApprove={setApproveTarget}
                 onReject={handleReject}
                 onCancel={handleCancel}

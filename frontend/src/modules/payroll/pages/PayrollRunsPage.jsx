@@ -2,6 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
+import { useAppSelector } from "@/shared/hooks/reduxHooks";
+import {
+  ACCESS_LEVEL,
+  canManagePayroll,
+  getAccessLevelLabel,
+  getPayrollAccessLevel,
+} from "@/shared/utils/accessControl";
 import {
   getPayrollRunsApi,
   createPayrollRunApi,
@@ -41,6 +48,10 @@ const STATUS_ICONS = {
 export function PayrollRunsPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const currentUser = useAppSelector((s) => s.identity.currentUser);
+  const payrollAccessLevel = getPayrollAccessLevel(currentUser);
+  const canManageRuns = canManagePayroll(currentUser);
+  const canDeleteRuns = payrollAccessLevel === ACCESS_LEVEL.ADMIN;
   const payrollDp = usePayrollDecimalPlaces();
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -95,7 +106,10 @@ export function PayrollRunsPage() {
   const fmt = (n) => formatPayrollEgp(n, payrollDp);
 
   return (
-    <Layout>
+    <Layout
+      title="Payroll"
+      description={`Access: ${getAccessLevelLabel(payrollAccessLevel)} · Monthly payroll runs`}
+    >
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -110,31 +124,33 @@ export function PayrollRunsPage() {
           </div>
 
           {/* Create new run */}
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-              value={newMonth}
-              onChange={(e) => setNewMonth(Number(e.target.value))}
-            >
-              {MONTHS.map((m, i) => (
-                <option key={i} value={i + 1}>{m}</option>
-              ))}
-            </select>
-            <input
-              type="number"
-              className="w-20 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-              value={newYear}
-              onChange={(e) => setNewYear(Number(e.target.value))}
-            />
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
-              onClick={handleCreate}
-              disabled={creating}
-            >
-              {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              New Run
-            </button>
-          </div>
+          {canManageRuns ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                value={newMonth}
+                onChange={(e) => setNewMonth(Number(e.target.value))}
+              >
+                {MONTHS.map((m, i) => (
+                  <option key={i} value={i + 1}>{m}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                className="w-20 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                value={newYear}
+                onChange={(e) => setNewYear(Number(e.target.value))}
+              />
+              <button
+                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
+                onClick={handleCreate}
+                disabled={creating}
+              >
+                {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                New Run
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {/* Year filter */}
@@ -199,7 +215,7 @@ export function PayrollRunsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {run.status === "DRAFT" && (
+                    {canDeleteRuns && run.status === "DRAFT" && (
                       <button
                         className="rounded-lg p-2 text-zinc-400 hover:bg-red-50 hover:text-red-600 transition"
                         onClick={(e) => handleDelete(rid, e)}

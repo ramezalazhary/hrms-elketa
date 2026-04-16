@@ -6,129 +6,115 @@ import * as XLSX from "xlsx";
 import { Attendance } from "../models/Attendance.js";
 import { LeaveRequest } from "../models/LeaveRequest.js";
 import { Employee } from "../models/Employee.js";
-import { Department } from "../models/Department.js";
-import { Team } from "../models/Team.js";
 import { requireAuth } from "../middleware/auth.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
+import { enforceScope } from "../middleware/enforceScope.js";
 import mongoose from "mongoose";
 import { createAuditLog } from "../services/auditService.js";
-import { normalizeRole, ROLE } from "../utils/roles.js";
 import {
   parseTimeToMinutes,
   excuseCoversLateCheckIn,
   computeMidDayExcuseCredit,
 } from "../utils/excuseAttendance.js";
 import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
+import { CompanyHoliday } from "../models/CompanyHoliday.js";
 import { computeMonthlyAnalysis } from "../services/attendanceAnalysisService.js";
 import { mapSummaryForMonthlyReportApi } from "../utils/monthlyReportPublicDto.js";
+import { parseAttendanceClock } from "../utils/attendanceClockParse.js";
+import {
+  calculateTimingStatus,
+  countMonthlyGraceUsesBeforeTarget,
+  effectiveLateGraceAddMinutes,
+} from "../utils/attendanceTimingCore.js";
+import {
+  fiscalMonthRangeContainingUtcDate,
+  getCompanyMonthStartDay,
+} from "../services/leavePolicyService.js";
+import { resolveEmployeeScopeIds, resolveTargetEmployee } from "../services/scopeService.js";
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const upload = multer({ storage: multer.memoryStorage() });
 
-/**
- ** Helper to parse various time formats (String "HH:mm", "HH:mm:ss", "HH:mm AM/PM", or Date object).
- */
-const parseTime = (timeStr) => {
-  if (timeStr === undefined || timeStr === null || timeStr === "") return null;
-
-  if (timeStr instanceof Date)
-    return {
-      h: timeStr.getHours(),
-      m: timeStr.getMinutes(),
-      s: timeStr.getSeconds(),
-    };
-
-  // Handle Excel numeric time (fractional day)
-  if (typeof timeStr === "number") {
-    const totalSeconds = Math.round(timeStr * 86400);
-    return {
-      h: Math.floor(totalSeconds / 3600),
-      m: Math.floor((totalSeconds % 3600) / 60),
-      s: totalSeconds % 60,
-    };
-  }
-
-  const str = timeStr.toString().trim().toUpperCase();
-  // Regex for HH:mm:ss AM/PM
-  const match = str.match(/(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i);
-  if (!match) return null;
-
-  let h = parseInt(match[1]);
-  const m = parseInt(match[2]);
-  const s = match[3] ? parseInt(match[3]) : 0;
-  const ampm = match[4];
-
-  if (ampm === "PM" && h < 12) h += 12;
-  if (ampm === "AM" && h === 12) h = 0;
-
-  return { h, m, s };
-};
-
-/**
- * Calculates total work hours and attendance status based on times and policy.
- * @param {string} checkIn
- * @param {string} checkOut
- * @param {Object} policy - { standardStartTime, standardEndTime, gracePeriod }
- */
-const calculateStatus = (
-  checkIn,
-  checkOut,
-  policy = { standardStartTime: "09:00", standardEndTime: "17:00", gracePeriod: 15 },
-) => {
-  const t1 = parseTime(checkIn);
-  const t2 = parseTime(checkOut);
-  const shiftStart = parseTime(policy.standardStartTime || "09:00");
-  const shiftEnd = parseTime(policy.standardEndTime || "17:00");
-  const graceMinutes = policy.gracePeriod ?? 15;
-
-  const format24h = (t) => {
-    if (!t) return null;
-    return `${t.h.toString().padStart(2, "0")}:${t.m.toString().padStart(2, "0")}:${t.s.toString().padStart(2, "0")}`;
-  };
-
-  if (t1 && !t2) {
-    return {
-      t1, t2: null, totalHours: 0, status: "INCOMPLETE",
-      checkInStr: format24h(t1), checkOutStr: null,
-    };
-  }
-
-  const totalHours =
-    t1 && t2
-      ? parseFloat(
-          (
-            t2.h + t2.m / 60 + t2.s / 3600 -
-            (t1.h + t1.m / 60 + t1.s / 3600)
-          ).toFixed(2),
-        )
-      : 0;
-
-  let status = "PRESENT";
-
-  if (t1 && shiftStart) {
-    const checkInMinutes = t1.h * 60 + t1.m;
-    const limitMinutes = shiftStart.h * 60 + shiftStart.m + graceMinutes;
-    if (checkInMinutes > limitMinutes) {
-      status = "LATE";
+async function resolveAttendanceTargetEmployee(req) {
+  if (req.params?.id && mongoose.Types.ObjectId.isValid(String(req.params.id))) {
+    const attendance = await Attendance.findById(req.params.id)
+      .select("employeeId")
+      .lean();
+    if (attendance?.employeeId) {
+      return Employee.findById(attendance.employeeId)
+        .select("_id departmentId teamId role email")
+        .lean();
     }
   }
+  return resolveTargetEmployee(req);
+}
 
-  if (status === "PRESENT" && t2 && shiftEnd) {
-    const checkOutMinutes = t2.h * 60 + t2.m;
-    const endMinutes = shiftEnd.h * 60 + shiftEnd.m;
-    if (checkOutMinutes < endMinutes) {
-      status = "EARLY_DEPARTURE";
-    }
+
+/** @deprecated use parseAttendanceClock — kept alias for local call sites */
+const parseTime = parseAttendanceClock;
+
+/**
+ * Calculates total work hours and attendance status from punch times vs shift policy.
+ * Delegates to {@link calculateTimingStatus} so analysis + routes share one implementation.
+ * @param {{ lateGraceAddMinutes?: number }} [timingOptions] — optional override for monthly grace exhaustion
+ */
+const calculateStatus = (checkIn, checkOut, policy, timingOptions = {}) => {
+  return calculateTimingStatus(checkIn, checkOut, policy, timingOptions);
+};
+
+/** UTC calendar day key `YYYY-MM-DD` for grouping batched leave rows. */
+function utcDayKeyFromDate(d) {
+  const x = new Date(d);
+  x.setUTCHours(0, 0, 0, 0);
+  return x.toISOString().slice(0, 10);
+}
+
+/**
+ * One batched load of EXCUSE + VACATION rows for an employee across attendance row dates
+ * (used by GET /employee/:id to avoid per-day duplicate queries).
+ */
+async function prefetchLeaveBundleForEmployee(employeeId, attendanceDocs) {
+  if (!employeeId || !attendanceDocs?.length) return null;
+  const times = attendanceDocs.map((r) => new Date(r.date).getTime());
+  const min = new Date(Math.min(...times));
+  const max = new Date(Math.max(...times));
+  min.setUTCHours(0, 0, 0, 0);
+  const rangeEndExclusive = new Date(max);
+  rangeEndExclusive.setUTCHours(0, 0, 0, 0);
+  rangeEndExclusive.setUTCDate(rangeEndExclusive.getUTCDate() + 1);
+
+  const excuseRows = await LeaveRequest.find({
+    employeeId,
+    kind: "EXCUSE",
+    status: "APPROVED",
+    excuseDate: { $gte: min, $lt: rangeEndExclusive },
+  }).lean();
+
+  const excusesByDayKey = new Map();
+  for (const ex of excuseRows) {
+    const key = utcDayKeyFromDate(ex.excuseDate);
+    if (!excusesByDayKey.has(key)) excusesByDayKey.set(key, []);
+    excusesByDayKey.get(key).push(ex);
   }
 
-  return {
-    t1, t2, totalHours, status,
-    checkInStr: format24h(t1), checkOutStr: format24h(t2),
-  };
-};
+  const vacations = await LeaveRequest.find({
+    employeeId,
+    kind: "VACATION",
+    status: "APPROVED",
+    startDate: { $lt: rangeEndExclusive },
+    endDate: { $gte: min },
+  })
+    .select("_id startDate endDate")
+    .lean();
+
+  return { excusesByDayKey, vacations };
+}
 
 /**
  * If status would be LATE, an approved excuse on that day may clear lateness.
+ * @param {import("mongoose").Types.ObjectId | string} employeeId
+ * @param {Array<object> | undefined} prefetchedExcusesForDay — when set (including `[]`), skips DB read for that day.
  * @returns {Promise<import("mongoose").Types.ObjectId | null>}
  */
 async function findApprovedExcuseCoveringLate(
@@ -136,11 +122,16 @@ async function findApprovedExcuseCoveringLate(
   normalizedDate,
   checkInStr,
   policy,
+  prefetchedExcusesForDay = undefined,
+  effectiveGraceMinutes = undefined,
 ) {
   const shiftStartMin = parseTimeToMinutes(
     policy.standardStartTime || "09:00",
   );
-  const grace = policy.gracePeriod ?? 15;
+  const grace =
+    effectiveGraceMinutes !== undefined && effectiveGraceMinutes !== null
+      ? effectiveGraceMinutes
+      : (policy.gracePeriod ?? policy.gracePeriodMinutes ?? 15);
   const checkInMin = parseTimeToMinutes(checkInStr);
   if (shiftStartMin == null || checkInMin == null) return null;
 
@@ -148,12 +139,14 @@ async function findApprovedExcuseCoveringLate(
   const dayEnd = new Date(dayStart);
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-  const excuses = await LeaveRequest.find({
-    employeeId,
-    kind: "EXCUSE",
-    status: "APPROVED",
-    excuseDate: { $gte: dayStart, $lt: dayEnd },
-  }).lean();
+  const excuses = prefetchedExcusesForDay !== undefined
+    ? prefetchedExcusesForDay
+    : await LeaveRequest.find({
+      employeeId,
+      kind: "EXCUSE",
+      status: "APPROVED",
+      excuseDate: { $gte: dayStart, $lt: dayEnd },
+    }).lean();
 
   for (const ex of excuses) {
     const es = parseTimeToMinutes(ex.startTime);
@@ -172,12 +165,29 @@ async function findApprovedExcuseCoveringLate(
  * For a specific day, resolve approved absence coverage:
  * - Approved VACATION covering that day => ON_LEAVE
  * - Approved EXCUSE on that day without time window => EXCUSED (full-day excuse)
+ * @param {{ vacations: object[], dayExcuses: object[] } | undefined} prefetched — when set, skips DB reads.
  */
-async function findApprovedLeaveCoverage(employeeId, normalizedDate) {
+async function findApprovedLeaveCoverage(employeeId, normalizedDate, prefetched = undefined) {
   const dayStart = new Date(normalizedDate);
   dayStart.setUTCHours(0, 0, 0, 0);
   const dayEnd = new Date(dayStart);
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+  if (prefetched) {
+    const vacation = prefetched.vacations.find(
+      (v) => v.startDate < dayEnd && v.endDate >= dayStart,
+    );
+    if (vacation?._id) {
+      return { status: "ON_LEAVE", leaveRequestId: vacation._id };
+    }
+    const excuse = prefetched.dayExcuses.find(
+      (ex) => ex._id && !ex.startTime && !ex.endTime,
+    );
+    if (excuse?._id) {
+      return { status: "EXCUSED", leaveRequestId: excuse._id };
+    }
+    return null;
+  }
 
   const vacation = await LeaveRequest.findOne({
     employeeId,
@@ -216,10 +226,20 @@ async function resolveAttendancePolicy() {
     const orgPolicy = await OrganizationPolicy.findOne({ name: "default" }).lean();
     const ar = orgPolicy?.attendanceRules;
     if (ar && ar.standardStartTime) {
+      const g = ar.gracePeriodMinutes ?? 15;
       return {
         standardStartTime: ar.standardStartTime,
         standardEndTime: ar.standardEndTime || "17:00",
-        gracePeriod: ar.gracePeriodMinutes ?? 15,
+        gracePeriod: g,
+        gracePeriodMinutes: g,
+        weeklyRestDays: ar.weeklyRestDays,
+        monthlyGraceUsesEnabled: ar.monthlyGraceUsesEnabled === true,
+        monthlyGraceUsesAllowed: (() => {
+          const n = Number(ar.monthlyGraceUsesAllowed);
+          if (!Number.isFinite(n)) return 0;
+          return Math.max(0, Math.min(31, Math.floor(n)));
+        })(),
+        companyMonthStartDay: getCompanyMonthStartDay(orgPolicy),
       };
     }
   } catch (_) { /* fall through to system defaults */ }
@@ -227,6 +247,11 @@ async function resolveAttendancePolicy() {
     standardStartTime: "09:00",
     standardEndTime: "17:00",
     gracePeriod: 15,
+    gracePeriodMinutes: 15,
+    weeklyRestDays: undefined,
+    monthlyGraceUsesEnabled: false,
+    monthlyGraceUsesAllowed: 0,
+    companyMonthStartDay: 1,
   };
 }
 
@@ -234,7 +259,12 @@ async function resolveAttendancePolicy() {
  * Find approved mid-day excuses for a date and compute credited minutes.
  * Also returns whether the excuse covers through end of day.
  */
-async function resolveMidDayExcuseCredit(employeeId, normalizedDate, policy) {
+async function resolveMidDayExcuseCredit(
+  employeeId,
+  normalizedDate,
+  policy,
+  prefetchedExcusesForDay = undefined,
+) {
   const shiftStartMin = parseTimeToMinutes(policy.standardStartTime || "09:00");
   const shiftEndMin = parseTimeToMinutes(policy.standardEndTime || "17:00");
   const grace = policy.gracePeriod ?? 15;
@@ -246,58 +276,298 @@ async function resolveMidDayExcuseCredit(employeeId, normalizedDate, policy) {
   const dayEnd = new Date(dayStart);
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-  const excuses = await LeaveRequest.find({
-    employeeId,
-    kind: "EXCUSE",
-    status: "APPROVED",
-    excuseDate: { $gte: dayStart, $lt: dayEnd },
-  }).lean();
+  const excuses = prefetchedExcusesForDay !== undefined
+    ? prefetchedExcusesForDay
+    : await LeaveRequest.find({
+      employeeId,
+      kind: "EXCUSE",
+      status: "APPROVED",
+      excuseDate: { $gte: dayStart, $lt: dayEnd },
+    }).lean();
 
   if (excuses.length === 0) return { creditMinutes: 0, coversEndOfDay: false };
   return computeMidDayExcuseCredit(excuses, shiftStartMin, shiftEndMin, grace);
 }
 
-async function resolveAttendanceAccess(user) {
-  const role = normalizeRole(user.role);
-  if (role === ROLE.ADMIN || role === ROLE.HR_MANAGER || role === ROLE.HR_STAFF) {
-    return {
-      scope: "all",
-      actions: ["view", "create", "edit", "delete", "import"],
-    };
-  }
+function resolveExcuseAllowanceMinutes(excuseDoc) {
+  const computedMinutes = Number(excuseDoc?.computed?.minutes) || 0;
+  const policyRules = excuseDoc?.policySnapshot?.excuseRules || {};
+  const maxHours = Number(policyRules.maxHoursPerExcuse);
+  const maxMinutesPerRequest = Number(policyRules.maxMinutesPerRequest);
+  const policyMinutes = Number.isFinite(maxHours) && maxHours > 0
+    ? maxHours * 60
+    : (Number.isFinite(maxMinutesPerRequest) && maxMinutesPerRequest > 0
+      ? maxMinutesPerRequest
+      : 0);
+  return Math.max(0, computedMinutes, policyMinutes);
+}
 
-  const hrDept = await Department.findOne({ code: "HR" })
-    || await Department.findOne({ name: "HR" });
-  if (hrDept && hrDept.head === user.email) {
-    return {
-      scope: "all",
-      actions: ["view", "create", "edit", "delete", "import"],
-    };
-  }
+function mapExcuseOverageToDeductionFraction(overageMinutes, workdayMinutes = 8 * 60) {
+  if (!Number.isFinite(overageMinutes) || overageMinutes <= 0) return 0;
+  const quarter = workdayMinutes / 4;
+  const half = workdayMinutes / 2;
+  if (overageMinutes > half) return 0.5;
+  if (overageMinutes > quarter) return 0.25;
+  return 0;
+}
 
-  const isDeptHead = await Department.findOne({ head: user.email });
-  if (isDeptHead || role === ROLE.MANAGER) {
-    return { scope: "department", actions: ["view", "edit"] };
-  }
+function normalizeDecisionSource(value) {
+  const v = String(value || "").toUpperCase();
+  return v === "SALARY" || v === "VACATION_BALANCE" ? v : undefined;
+}
 
-  // Team Leader check — search BOTH embedded AND standalone Team collection
-  const managedTeamNames = [];
-  const deptsWithTeams = await Department.find({ "teams.leaderEmail": user.email });
-  deptsWithTeams.forEach((d) => {
-    d.teams.forEach((t) => {
-      if (t.leaderEmail === user.email) managedTeamNames.push(t.name);
+/**
+ * Single source of truth for a row: `calculateStatus` from clock times + policy,
+ * then approved late excuse, mid-day credit, and leave coverage.
+ * Client-supplied `status` must not override this chain (use only for display after recompute).
+ */
+async function finalizeAttendanceTimingStatus({
+  employeeId,
+  normalizedDate,
+  checkIn,
+  checkOut,
+  policy,
+  leavePrefetch = null,
+  existingDecision = null,
+}) {
+  const baseGrace = policy.gracePeriod ?? policy.gracePeriodMinutes ?? 15;
+  const monthlyAllowed = Math.floor(Number(policy.monthlyGraceUsesAllowed)) || 0;
+  const monthlyOn = policy.monthlyGraceUsesEnabled === true && monthlyAllowed > 0;
+
+  let usesBefore = 0;
+  if (monthlyOn && employeeId) {
+    const monthAnchor = policy.companyMonthStartDay ?? 1;
+    const { periodStart, periodEnd } = fiscalMonthRangeContainingUtcDate(
+      normalizedDate,
+      monthAnchor,
+    );
+    const [sortedMonth, holidays, empLean] = await Promise.all([
+      Attendance.find({
+        employeeId,
+        date: { $gte: periodStart, $lt: periodEnd },
+      })
+        .sort({ date: 1 })
+        .lean(),
+      CompanyHoliday.find({
+        startDate: { $lte: periodEnd },
+        endDate: { $gte: periodStart },
+      }).lean(),
+      Employee.findById(employeeId).select("departmentId").lean(),
+    ]);
+    usesBefore = countMonthlyGraceUsesBeforeTarget({
+      sortedMonthRowsAsc: sortedMonth,
+      targetUtcMidnight: normalizedDate,
+      shiftStartStr: policy.standardStartTime || "09:00",
+      baseGraceMinutes: baseGrace,
+      monthlyGraceUsesEnabled: true,
+      monthlyGraceUsesAllowed: monthlyAllowed,
+      weeklyRestDays: policy.weeklyRestDays,
+      holidays,
+      employeeId,
+      departmentId: empLean?.departmentId,
     });
-  });
-  const standaloneTeams = await Team.find({ leaderEmail: user.email, status: "ACTIVE" });
-  standaloneTeams.forEach((t) => {
-    if (!managedTeamNames.includes(t.name)) managedTeamNames.push(t.name);
-  });
-
-  if (user.role === "TEAM_LEADER" || managedTeamNames.length > 0) {
-    return { scope: "team", actions: ["view"], teams: managedTeamNames };
   }
 
-  return { scope: "self", actions: ["view"] };
+  const lateGraceAdd = effectiveLateGraceAddMinutes({
+    monthlyGraceUsesEnabled: monthlyOn,
+    monthlyGraceUsesAllowed: monthlyAllowed,
+    graceUsesBeforeTargetDate: usesBefore,
+    baseGraceMinutes: baseGrace,
+  });
+
+  const calc = calculateStatus(checkIn, checkOut, policy, {
+    lateGraceAddMinutes: lateGraceAdd,
+  });
+  let recordStatus = calc.status;
+  let excuseLeaveRequestId;
+  let leaveRequestId = null;
+  let onApprovedLeave = false;
+  let originalStatus;
+  let excusedMinutes = 0;
+  let excessExcuse = false;
+  let excessExcuseFraction = 0;
+  let excuseOverageMinutes = 0;
+  let requiresDeductionDecision = false;
+  let deductionSource;
+  let deductionValueType;
+  let deductionValue;
+
+  const dayKey = utcDayKeyFromDate(normalizedDate);
+  const prefDayExcuses = leavePrefetch?.excusesByDayKey
+    ? (leavePrefetch.excusesByDayKey.get(dayKey) ?? [])
+    : undefined;
+  const prefLeave = leavePrefetch?.vacations
+    ? { vacations: leavePrefetch.vacations, dayExcuses: prefDayExcuses ?? [] }
+    : undefined;
+
+  if (recordStatus === "LATE" && calc.checkInStr) {
+    const excuseDoc = await findApprovedExcuseCoveringLate(
+      employeeId, normalizedDate, calc.checkInStr, policy,
+      prefDayExcuses,
+      lateGraceAdd,
+    );
+    if (excuseDoc) {
+      originalStatus = recordStatus;
+      recordStatus = "EXCUSED";
+      excuseLeaveRequestId = excuseDoc._id;
+      excusedMinutes = excuseDoc.computed?.minutes || 0;
+      const shiftStartMin = parseTimeToMinutes(policy.standardStartTime || "09:00");
+      const checkInMin = parseTimeToMinutes(calc.checkInStr);
+      const lateFromShiftStart =
+        shiftStartMin != null && checkInMin != null
+          ? Math.max(0, checkInMin - shiftStartMin)
+          : 0;
+      const allowanceMinutes = resolveExcuseAllowanceMinutes(excuseDoc);
+      const overage = Math.max(0, lateFromShiftStart - allowanceMinutes);
+
+      if (overage > 0) {
+        recordStatus = "PARTIAL_EXCUSED";
+        excuseOverageMinutes = overage;
+        excessExcuse = true;
+        excessExcuseFraction = Number(excuseDoc.excessDeductionAmount) > 0
+          ? Number(excuseDoc.excessDeductionAmount)
+          : mapExcuseOverageToDeductionFraction(overage);
+        requiresDeductionDecision = true;
+
+        // Preserve HR-resolved source/decision flags on recompute.
+        const persistedSource = normalizeDecisionSource(existingDecision?.deductionSource);
+        const persistedType = String(existingDecision?.deductionValueType || "").toUpperCase();
+        const persistedValue = Number(existingDecision?.deductionValue);
+        const persistedResolved =
+          Boolean(existingDecision?.deductionDecisionAt)
+          || (Boolean(persistedSource)
+            && (persistedType === "AMOUNT"
+              || (persistedType === "DAYS" && Number.isFinite(persistedValue) && persistedValue > 0)));
+        if (persistedResolved) {
+          deductionSource = persistedSource;
+          deductionValueType = persistedType === "AMOUNT" ? "AMOUNT" : "DAYS";
+          deductionValue = Number.isFinite(persistedValue) && persistedValue > 0
+            ? persistedValue
+            : (deductionValueType === "DAYS" ? excessExcuseFraction : undefined);
+          requiresDeductionDecision = !deductionSource || !deductionValue;
+        } else {
+          deductionValueType = "DAYS";
+          deductionValue = excessExcuseFraction;
+        }
+      } else if (excuseDoc.quotaExceeded && excuseDoc.excessDeductionMethod === "SALARY") {
+        excessExcuse = true;
+        excessExcuseFraction = excuseDoc.excessDeductionAmount
+          || (excusedMinutes / (8 * 60));
+        deductionSource = excuseDoc.excessDeductionMethod;
+      }
+    }
+  }
+
+  const midDay = await resolveMidDayExcuseCredit(
+    employeeId, normalizedDate, policy, prefDayExcuses,
+  );
+  if (midDay.creditMinutes > 0 && !excuseLeaveRequestId) {
+    excusedMinutes = midDay.creditMinutes;
+  }
+  if (recordStatus === "EARLY_DEPARTURE" && midDay.coversEndOfDay) {
+    recordStatus = "PRESENT";
+  }
+
+  if (recordStatus === "ABSENT") {
+    const covered = await findApprovedLeaveCoverage(
+      employeeId, normalizedDate, prefLeave,
+    );
+    if (covered) {
+      originalStatus = recordStatus;
+      recordStatus = covered.status;
+      leaveRequestId = covered.leaveRequestId;
+      onApprovedLeave = true;
+    }
+  }
+
+  return {
+    calc,
+    recordStatus,
+    excuseLeaveRequestId,
+    leaveRequestId,
+    onApprovedLeave,
+    originalStatus,
+    excusedMinutes,
+    excessExcuse,
+    excessExcuseFraction,
+    excuseOverageMinutes,
+    requiresDeductionDecision,
+    deductionSource,
+    deductionValueType,
+    deductionValue,
+  };
+}
+
+function attendanceEmployeeId(doc) {
+  const ref = doc?.employeeId;
+  if (!ref) return null;
+  if (typeof ref === "object" && ref._id != null) return ref._id;
+  return ref;
+}
+
+/** Recompute status/times/hours from DB row + current policy (read paths). */
+async function withAuthoritativeAttendanceFields(doc, policy, leavePrefetch = null) {
+  const plain = typeof doc?.toObject === "function" ? doc.toObject() : { ...doc };
+  const employeeId = attendanceEmployeeId(doc);
+  if (!employeeId || !plain.date) return plain;
+
+  const nd = new Date(plain.date);
+  nd.setUTCHours(0, 0, 0, 0);
+  const fin = await finalizeAttendanceTimingStatus({
+    employeeId,
+    normalizedDate: nd,
+    checkIn: plain.checkIn,
+    checkOut: plain.checkOut,
+    policy,
+    leavePrefetch,
+    existingDecision: {
+      deductionSource: plain.deductionSource,
+      deductionDecisionAt: plain.deductionDecisionAt,
+      deductionValueType: plain.deductionValueType,
+      deductionValue: plain.deductionValue,
+    },
+  });
+
+  return {
+    ...plain,
+    checkIn: fin.calc.checkInStr,
+    checkOut: fin.calc.checkOutStr,
+    totalHours: fin.calc.totalHours,
+    status: fin.recordStatus,
+    excusedMinutes: fin.excusedMinutes,
+    excuseLeaveRequestId: fin.excuseLeaveRequestId ?? null,
+    excuseCovered: Boolean(fin.excuseLeaveRequestId),
+    leaveRequestId: fin.leaveRequestId ?? null,
+    onApprovedLeave: fin.onApprovedLeave,
+    originalStatus: fin.originalStatus ?? undefined,
+    excessExcuse: fin.excessExcuse,
+    excessExcuseFraction: fin.excessExcuseFraction,
+    excuseOverageMinutes: fin.excuseOverageMinutes,
+    requiresDeductionDecision: fin.requiresDeductionDecision,
+    deductionSource: fin.deductionSource,
+    deductionValueType: fin.deductionValueType,
+    deductionValue: fin.deductionValue,
+    deductionDecisionBy: plain.deductionDecisionBy ?? undefined,
+    deductionDecisionAt: plain.deductionDecisionAt ?? undefined,
+  };
+}
+
+async function resolveAttendanceAccess(user) {
+  const scoped = await resolveEmployeeScopeIds(user);
+  if (scoped.scope === "all") {
+    return {
+      scope: "all",
+      employeeIds: null,
+      actions: ["view", "create", "edit", "delete", "import"],
+    };
+  }
+  return {
+    scope: "scoped",
+    employeeIds: Array.isArray(scoped.employeeIds)
+      ? scoped.employeeIds.map((id) => String(id))
+      : [],
+    actions: ["view"],
+  };
 }
 
 function validateReportPeriodParams(req, res) {
@@ -328,16 +598,7 @@ function validateReportPeriodParams(req, res) {
   return { year, month };
 }
 
-function canAccessMonthlyAttendanceReport(user) {
-  const role = normalizeRole(user?.role);
-  return (
-    role === ROLE.ADMIN ||
-    role === ROLE.HR_STAFF ||
-    role === ROLE.HR_MANAGER
-  );
-}
-
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, enforcePolicy("read", "attendance"), async (req, res) => {
   try {
     const access = await resolveAttendanceAccess(req.user);
     const {
@@ -351,45 +612,8 @@ router.get("/", requireAuth, async (req, res) => {
     } = req.query;
     let filter = {};
 
-    if (access.scope === "subordinates") {
-      // Direct Reports for Managers
-      const subordinateIds = await Employee.find({
-        managerId: req.user.id,
-      }).distinct("_id");
-      filter.employeeId = { $in: subordinateIds };
-    } else if (access.scope === "team") {
-      // Team Members for Team Leaders — search BOTH embedded AND standalone teams
-      const memberEmails = [];
-
-      // 1. Embedded teams in Department.teams[]
-      const departments = await Department.find({ "teams.leaderEmail": req.user.email });
-      departments.forEach((d) => {
-        d.teams
-          .filter((t) => t.leaderEmail === req.user.email)
-          .forEach((t) => memberEmails.push(...t.members));
-      });
-
-      // 2. Standalone Team collection
-      const standaloneTeams = await Team.find({ leaderEmail: req.user.email, status: "ACTIVE" });
-      standaloneTeams.forEach((t) => {
-        t.members.forEach((m) => { if (!memberEmails.includes(m)) memberEmails.push(m); });
-      });
-
-      const memberIds = await Employee.find({
-        email: { $in: memberEmails },
-      }).distinct("_id");
-      filter.employeeId = { $in: memberIds };
-    } else if (access.scope === "department") {
-      // All in Headed Department
-      const managedDeptNames = await Department.find({
-        head: req.user.email,
-      }).distinct("name");
-      const deptEmployees = await Employee.find({
-        department: { $in: managedDeptNames },
-      }).distinct("_id");
-      filter.employeeId = { $in: deptEmployees };
-    } else if (access.scope === "self") {
-      filter.employeeId = req.user.id;
+    if (access.scope !== "all") {
+      filter.employeeId = { $in: access.employeeIds };
     }
 
     // Special Filter: Today/Most Recent for Leaders
@@ -402,16 +626,10 @@ router.get("/", requireAuth, async (req, res) => {
       }
     }
     if (employeeId) {
-      if (access.scope === "self" && String(employeeId) !== String(req.user.id)) {
-        return res.status(403).json({ error: "Forbidden: Cannot view other employees" });
-      }
       if (access.scope !== "all") {
-        const scopedIds = filter.employeeId?.$in;
-        if (scopedIds) {
-          const allowed = scopedIds.some((id) => String(id) === String(employeeId));
-          if (!allowed) {
-            return res.status(403).json({ error: "Forbidden: Employee not in your scope" });
-          }
+        const allowed = access.employeeIds.some((id) => String(id) === String(employeeId));
+        if (!allowed) {
+          return res.status(403).json({ error: "Forbidden: Employee not in your scope" });
         }
       }
       filter.employeeId = employeeId;
@@ -448,18 +666,23 @@ router.get("/", requireAuth, async (req, res) => {
       .skip(skip)
       .limit(limitNum);
 
+    const policy = await resolveAttendancePolicy();
+    const attendanceOut = await Promise.all(
+      attendance.map((d) => withAuthoritativeAttendanceFields(d, policy)),
+    );
+
     res.json(
       isPaginated
         ? {
-            attendance,
-            pagination: {
-              currentPage: pageNum,
-              totalPages: Math.ceil(totalCount / limitNum),
-              totalCount,
-              limit: limitNum,
-            },
-          }
-        : attendance,
+          attendance: attendanceOut,
+          pagination: {
+            currentPage: pageNum,
+            totalPages: Math.ceil(totalCount / limitNum),
+            totalCount,
+            limit: limitNum,
+          },
+        }
+        : attendanceOut,
     );
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch attendance data" });
@@ -470,37 +693,71 @@ router.get("/", requireAuth, async (req, res) => {
  * GET /api/attendance/employee/:id
  * Fetches the last 30 days of attendance for a specific employee.
  */
-router.get("/employee/:id", requireAuth, async (req, res) => {
+router.get(
+  "/me",
+  requireAuth,
+  enforcePolicy("read", "attendance"),
+  async (req, res) => {
+    try {
+      const lastMonthCutoff = new Date();
+      lastMonthCutoff.setDate(lastMonthCutoff.getDate() - 30);
+      const attendance = await Attendance.find({
+        employeeId: req.user.id,
+        date: { $gte: lastMonthCutoff },
+      })
+        .sort({ date: -1 })
+        .limit(31);
+      const policy = await resolveAttendancePolicy();
+      const leavePrefetch = await prefetchLeaveBundleForEmployee(req.user.id, attendance);
+      const attendanceOut = await Promise.all(
+        attendance.map((d) => withAuthoritativeAttendanceFields(d, policy, leavePrefetch)),
+      );
+      return res.json(attendanceOut);
+    } catch {
+      return res.status(500).json({ error: "Failed to fetch your attendance" });
+    }
+  },
+);
+
+router.get(
+  "/employee/:id",
+  requireAuth,
+  enforcePolicy("read", "attendance"),
+  enforceScope(resolveTargetEmployee),
+  async (req, res) => {
   try {
     const access = await resolveAttendanceAccess(req.user);
-    if (access.scope === "self" && req.user.id !== req.params.id) {
-      return res
-        .status(403)
-        .json({ error: "Forbidden: Can only view self attendance" });
+    if (access.scope !== "all") {
+      const allowed = access.employeeIds.some((id) => String(id) === String(req.params.id));
+      if (!allowed) {
+        return res
+          .status(403)
+          .json({ error: "Forbidden: Employee not in your scope" });
+      }
     }
-    // TODO: Add more granular scope checks if needed (e.g., manager check)
 
     const attendance = await Attendance.find({ employeeId: req.params.id })
       .sort({ date: -1 })
       .limit(30);
-    res.json(attendance);
+    const policy = await resolveAttendancePolicy();
+    const leavePrefetch = await prefetchLeaveBundleForEmployee(req.params.id, attendance);
+    const attendanceOut = await Promise.all(
+      attendance.map((d) => withAuthoritativeAttendanceFields(d, policy, leavePrefetch)),
+    );
+    res.json(attendanceOut);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch employee attendance" });
   }
-});
+},
+);
 
-router.post("/", requireAuth, async (req, res) => {
+router.post("/", requireAuth, enforcePolicy("manage", "attendance"), async (req, res) => {
   try {
-    const access = await resolveAttendanceAccess(req.user);
-    if (!access.actions.includes("create"))
-      return res.status(403).json({ error: "Cannot create attendance" });
-
     const {
       employeeId,
       date,
       checkIn,
       checkOut,
-      status: manualStatus,
       remarks,
     } = req.body || {};
 
@@ -524,52 +781,29 @@ router.post("/", requireAuth, async (req, res) => {
     if (!employee) return res.status(404).json({ error: "Employee not found" });
 
     const policy = await resolveAttendancePolicy();
-    const calc = calculateStatus(checkIn, checkOut, policy);
-
-    let recordStatus = manualStatus || calc.status;
-    let excuseLeaveRequestId;
-    let leaveRequestId;
-    let onApprovedLeave = false;
-    let originalStatus;
-    let excusedMinutes = 0;
-    let excessExcuse = false;
-    let excessExcuseFraction = 0;
-
-    if (recordStatus === "LATE" && calc.checkInStr) {
-      const excuseDoc = await findApprovedExcuseCoveringLate(
-        employeeId, normalizedDate, calc.checkInStr, policy,
-      );
-      if (excuseDoc) {
-        originalStatus = recordStatus;
-        recordStatus = "EXCUSED";
-        excuseLeaveRequestId = excuseDoc._id;
-        excusedMinutes = excuseDoc.computed?.minutes || 0;
-        if (excuseDoc.quotaExceeded && excuseDoc.excessDeductionMethod === "SALARY") {
-          excessExcuse = true;
-          const hoursPerDay = 8;
-          excessExcuseFraction = excuseDoc.excessDeductionAmount
-            || (excusedMinutes / (hoursPerDay * 60));
-        }
-      }
-    }
-
-    const midDay = await resolveMidDayExcuseCredit(employeeId, normalizedDate, policy);
-    if (midDay.creditMinutes > 0 && !excuseLeaveRequestId) {
-      excusedMinutes = midDay.creditMinutes;
-    }
-    if (recordStatus === "EARLY_DEPARTURE" && midDay.coversEndOfDay) {
-      recordStatus = "PRESENT";
-    }
-
-    if (recordStatus === "ABSENT") {
-      const covered = await findApprovedLeaveCoverage(employeeId, normalizedDate);
-      if (covered) {
-        originalStatus = recordStatus;
-        recordStatus = covered.status;
-        leaveRequestId = covered.leaveRequestId;
-        onApprovedLeave = true;
-      }
-    }
+    const fin = await finalizeAttendanceTimingStatus({
+      employeeId,
+      normalizedDate,
+      checkIn,
+      checkOut,
+      policy,
+    });
+    const {
+      calc,
+      recordStatus,
+      excuseLeaveRequestId,
+      leaveRequestId,
+      onApprovedLeave,
+      originalStatus,
+      excusedMinutes,
+      excessExcuse,
+      excessExcuseFraction,
+      excuseOverageMinutes,
+      requiresDeductionDecision,
+      deductionSource,
+      deductionValueType,
+      deductionValue,
+    } = fin;
 
     const newRecord = new Attendance({
       employeeId,
@@ -587,6 +821,11 @@ router.post("/", requireAuth, async (req, res) => {
       lastManagedBy: req.user.id,
       excessExcuse,
       excessExcuseFraction,
+      excuseOverageMinutes,
+      requiresDeductionDecision,
+      deductionSource,
+      deductionValueType,
+      deductionValue,
       ...(excuseLeaveRequestId
         ? { excuseLeaveRequestId, excuseCovered: true }
         : {}),
@@ -603,7 +842,11 @@ router.post("/", requireAuth, async (req, res) => {
 /**
  * GET /attendance/template - Download the Excel import template
  */
-router.get("/template", requireAuth, (req, res) => {
+router.get(
+  "/template",
+  requireAuth,
+  enforcePolicy("manage", "attendance"),
+  (req, res) => {
   try {
     const templatePath = path.join(__dirname, "../AttendanceTemplate.xlsx");
     res.download(templatePath, "AttendanceImportTemplate.xlsx");
@@ -611,40 +854,18 @@ router.get("/template", requireAuth, (req, res) => {
     console.error("Template download error:", error);
     res.status(500).json({ error: "Failed to download template" });
   }
-});
+},
+);
 
 // ─── Monthly Analysis & Report (must be before /:id to avoid param capture) ──
 
-/** Full computeMonthlyAnalysis payload (includes salary-style fields). Prefer `/monthly-report` for HR UI exports without EGP. */
-router.get("/monthly-analysis", requireAuth, async (req, res) => {
-  try {
-    if (!canAccessMonthlyAttendanceReport(req.user)) {
-      return res
-        .status(403)
-        .json({ error: "Forbidden: monthly report is available for HR/Admin only" });
-    }
-    const parsed = validateReportPeriodParams(req, res);
-    if (!parsed) return;
-    const { year, month } = parsed;
-    const departmentId = req.query.departmentId || undefined;
-    const result = await computeMonthlyAnalysis(year, month, departmentId, {
-      includeDetails: true,
-    });
-    res.json(result);
-  } catch (error) {
-    console.error("GET /attendance/monthly-analysis error:", error.message);
-    res.status(500).json({ error: "Failed to compute monthly analysis" });
-  }
-});
-
 /** Attendance-focused summary: deduction amounts in days only; `approvedOvertimeUnits` from assessments; no net salary. */
-router.get("/monthly-report", requireAuth, async (req, res) => {
+router.get(
+  "/monthly-report",
+  requireAuth,
+  enforcePolicy("read", "attendance"),
+  async (req, res) => {
   try {
-    if (!canAccessMonthlyAttendanceReport(req.user)) {
-      return res
-        .status(403)
-        .json({ error: "Forbidden: monthly report is available for HR/Admin only" });
-    }
     const parsed = validateReportPeriodParams(req, res);
     if (!parsed) return;
     const { year, month } = parsed;
@@ -664,15 +885,15 @@ router.get("/monthly-report", requireAuth, async (req, res) => {
     console.error("GET /attendance/monthly-report error:", error.message);
     res.status(500).json({ error: "Failed to generate monthly report" });
   }
-});
+},
+);
 
-router.get("/monthly-report/export", requireAuth, async (req, res) => {
+router.get(
+  "/monthly-report/export",
+  requireAuth,
+  enforcePolicy("read", "attendance"),
+  async (req, res) => {
   try {
-    if (!canAccessMonthlyAttendanceReport(req.user)) {
-      return res
-        .status(403)
-        .json({ error: "Forbidden: monthly report is available for HR/Admin only" });
-    }
     const parsed = validateReportPeriodParams(req, res);
     if (!parsed) return;
     const { year, month } = parsed;
@@ -733,24 +954,23 @@ router.get("/monthly-report/export", requireAuth, async (req, res) => {
     console.error("GET /attendance/monthly-report/export error:", error.message);
     res.status(500).json({ error: "Failed to export report" });
   }
-});
+},
+);
 
 // ─── CRUD with :id param ─────────────────────────────────────────────────────
 
-router.put("/:id", requireAuth, async (req, res) => {
+router.put(
+  "/:id",
+  requireAuth,
+  enforcePolicy("manage", "attendance"),
+  enforceScope(resolveAttendanceTargetEmployee),
+  async (req, res) => {
   try {
-    const access = await resolveAttendanceAccess(req.user);
-    if (!access.actions.includes("edit"))
-      return res.status(403).json({ error: "Forbidden" });
-
-    const { checkIn, checkOut, status: manualStatus, remarks, date } = req.body;
+    const { checkIn, checkOut, remarks, date } = req.body || {};
 
     const existing = await Attendance.findById(req.params.id);
     if (!existing)
       return res.status(404).json({ error: "Record not found" });
-
-    const policy = await resolveAttendancePolicy();
-    const calc = calculateStatus(checkIn, checkOut, policy);
 
     let dateForExcuse = existing.date;
     if (date) {
@@ -759,69 +979,44 @@ router.put("/:id", requireAuth, async (req, res) => {
       dateForExcuse = nd;
     }
 
-    let recordStatus = manualStatus || calc.status;
-    let excuseLeaveRequestId = existing.excuseLeaveRequestId;
-    let leaveRequestId = existing.leaveRequestId;
-    let onApprovedLeave = Boolean(existing.onApprovedLeave);
-    let originalStatus = existing.originalStatus;
-    let excusedMinutes = 0;
-    let excessExcuse = Boolean(existing.excessExcuse);
-    let excessExcuseFraction = existing.excessExcuseFraction || 0;
+    const body = req.body || {};
+    const effectiveCheckIn = Object.prototype.hasOwnProperty.call(body, "checkIn")
+      ? checkIn
+      : existing.checkIn;
+    const effectiveCheckOut = Object.prototype.hasOwnProperty.call(body, "checkOut")
+      ? checkOut
+      : existing.checkOut;
 
-    if (recordStatus === "LATE" && calc.checkInStr) {
-      const excuseDoc = await findApprovedExcuseCoveringLate(
-        existing.employeeId, dateForExcuse, calc.checkInStr, policy,
-      );
-      if (excuseDoc) {
-        originalStatus = recordStatus;
-        recordStatus = "EXCUSED";
-        excuseLeaveRequestId = excuseDoc._id;
-        excusedMinutes = excuseDoc.computed?.minutes || 0;
-        if (excuseDoc.quotaExceeded && excuseDoc.excessDeductionMethod === "SALARY") {
-          excessExcuse = true;
-          const hoursPerDay = 8;
-          excessExcuseFraction = excuseDoc.excessDeductionAmount
-            || (excusedMinutes / (hoursPerDay * 60));
-        } else {
-          excessExcuse = false;
-          excessExcuseFraction = 0;
-        }
-      } else {
-        excuseLeaveRequestId = undefined;
-        excessExcuse = false;
-        excessExcuseFraction = 0;
-      }
-    } else if (recordStatus !== "LATE" && recordStatus !== "EXCUSED") {
-      excuseLeaveRequestId = undefined;
-      excessExcuse = false;
-      excessExcuseFraction = 0;
-    }
-
-    const midDay = await resolveMidDayExcuseCredit(existing.employeeId, dateForExcuse, policy);
-    if (midDay.creditMinutes > 0 && !excuseLeaveRequestId) {
-      excusedMinutes = midDay.creditMinutes;
-    }
-    if (recordStatus === "EARLY_DEPARTURE" && midDay.coversEndOfDay) {
-      recordStatus = "PRESENT";
-    }
-
-    if (recordStatus === "ABSENT") {
-      const covered = await findApprovedLeaveCoverage(existing.employeeId, dateForExcuse);
-      if (covered) {
-        originalStatus = "ABSENT";
-        recordStatus = covered.status;
-        leaveRequestId = covered.leaveRequestId;
-        onApprovedLeave = true;
-      } else {
-        leaveRequestId = null;
-        onApprovedLeave = false;
-        originalStatus = undefined;
-      }
-    } else if (recordStatus !== "ON_LEAVE" && recordStatus !== "EXCUSED") {
-      leaveRequestId = null;
-      onApprovedLeave = false;
-      originalStatus = undefined;
-    }
+    const policy = await resolveAttendancePolicy();
+    const fin = await finalizeAttendanceTimingStatus({
+      employeeId: existing.employeeId,
+      normalizedDate: dateForExcuse,
+      checkIn: effectiveCheckIn,
+      checkOut: effectiveCheckOut,
+      policy,
+      existingDecision: {
+        deductionSource: existing.deductionSource,
+        deductionDecisionAt: existing.deductionDecisionAt,
+        deductionValueType: existing.deductionValueType,
+        deductionValue: existing.deductionValue,
+      },
+    });
+    const {
+      calc,
+      recordStatus,
+      excuseLeaveRequestId,
+      leaveRequestId,
+      onApprovedLeave,
+      originalStatus,
+      excusedMinutes,
+      excessExcuse,
+      excessExcuseFraction,
+      excuseOverageMinutes,
+      requiresDeductionDecision,
+      deductionSource,
+      deductionValueType,
+      deductionValue,
+    } = fin;
 
     const updateData = {
       checkIn: calc.checkInStr,
@@ -838,6 +1033,15 @@ router.put("/:id", requireAuth, async (req, res) => {
       originalStatus: originalStatus || undefined,
       excessExcuse,
       excessExcuseFraction,
+      excuseOverageMinutes,
+      requiresDeductionDecision,
+      deductionSource,
+      deductionValueType,
+      deductionValue,
+      deductionDecisionBy:
+        recordStatus === "PARTIAL_EXCUSED" ? existing.deductionDecisionBy : undefined,
+      deductionDecisionAt:
+        recordStatus === "PARTIAL_EXCUSED" ? existing.deductionDecisionAt : undefined,
     };
 
     if (date) {
@@ -856,26 +1060,86 @@ router.put("/:id", requireAuth, async (req, res) => {
     console.error("PUT /attendance/:id error:", error.message, error.stack);
     res.status(500).json({ error: "Internal server error" });
   }
-});
+},
+);
+
+router.patch(
+  "/:id/deduction-source",
+  requireAuth,
+  enforcePolicy("manage", "attendance"),
+  enforceScope(resolveAttendanceTargetEmployee),
+  async (req, res) => {
+    try {
+      const { deductionSource } = req.body || {};
+      const { deductionValueType, deductionValue } = req.body || {};
+      if (!["SALARY", "VACATION_BALANCE"].includes(String(deductionSource || ""))) {
+        return res.status(400).json({
+          error: "deductionSource is required and must be SALARY or VACATION_BALANCE",
+        });
+      }
+      const normalizedType = String(deductionValueType || "").toUpperCase();
+      if (!["DAYS", "AMOUNT"].includes(normalizedType)) {
+        return res.status(400).json({
+          error: "deductionValueType is required and must be DAYS or AMOUNT",
+        });
+      }
+      const numericValue = Number(deductionValue);
+      if (!Number.isFinite(numericValue) || numericValue <= 0) {
+        return res.status(400).json({
+          error: "deductionValue must be a positive number",
+        });
+      }
+      if (deductionSource === "VACATION_BALANCE" && normalizedType !== "DAYS") {
+        return res.status(400).json({
+          error: "VACATION_BALANCE deduction must use deductionValueType DAYS",
+        });
+      }
+
+      const existing = await Attendance.findById(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Record not found" });
+
+      if (existing.status !== "PARTIAL_EXCUSED") {
+        return res.status(409).json({
+          error: "Deduction source can only be set for PARTIAL_EXCUSED records",
+        });
+      }
+
+      existing.deductionSource = deductionSource;
+      existing.deductionValueType = normalizedType;
+      existing.deductionValue = numericValue;
+      if (normalizedType === "DAYS") {
+        existing.excessExcuseFraction = numericValue;
+      }
+      existing.requiresDeductionDecision = false;
+      existing.deductionDecisionBy = req.user.id;
+      existing.deductionDecisionAt = new Date();
+      await existing.save();
+
+      const policy = await resolveAttendancePolicy();
+      const out = await withAuthoritativeAttendanceFields(existing, policy);
+      return res.json(out);
+    } catch (error) {
+      console.error("PATCH /attendance/:id/deduction-source error:", error.message);
+      return res.status(500).json({ error: "Failed to update deduction source" });
+    }
+  },
+);
 
 /**
  * DELETE /api/attendance/bulk
  * Admin only: Bulk delete records by an array of IDs.
  */
-router.delete("/bulk", requireAuth, async (req, res) => {
+router.delete(
+  "/bulk",
+  requireAuth,
+  enforcePolicy("manage", "attendance"),
+  async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
       return res
         .status(400)
         .json({ error: "No IDs provided for bulk deletion" });
-    }
-
-    const bulkRole = normalizeRole(req.user.role);
-    if (bulkRole !== ROLE.ADMIN && bulkRole !== ROLE.HR_MANAGER && bulkRole !== ROLE.HR_STAFF) {
-      return res
-        .status(403)
-        .json({ error: "Forbidden: Only Admin/HR can bulk delete." });
     }
 
     console.log(
@@ -919,14 +1183,16 @@ router.delete("/bulk", requireAuth, async (req, res) => {
     console.error("Bulk Delete Error:", error);
     res.status(500).json({ error: "Failed to perform bulk delete" });
   }
-});
+},
+);
 
-router.delete("/:id", requireAuth, async (req, res) => {
+router.delete(
+  "/:id",
+  requireAuth,
+  enforcePolicy("manage", "attendance"),
+  enforceScope(resolveAttendanceTargetEmployee),
+  async (req, res) => {
   try {
-    const access = await resolveAttendanceAccess(req.user);
-    if (!access.actions.includes("delete"))
-      return res.status(403).json({ error: "Forbidden" });
-
     // Get the attendance record before deletion for audit
     const attendanceRecord = await Attendance.findById(req.params.id).populate(
       "employeeId",
@@ -953,13 +1219,16 @@ router.delete("/:id", requireAuth, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: "Failed to delete record" });
   }
-});
+},
+);
 
-router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
+router.post(
+  "/import",
+  requireAuth,
+  enforcePolicy("manage", "attendance"),
+  upload.single("file"),
+  async (req, res) => {
   try {
-    const access = await resolveAttendanceAccess(req.user);
-    if (!access.actions.includes("import"))
-      return res.status(403).json({ error: "Forbidden" });
     if (!req.file)
       return res.status(400).json({ error: "Please upload an Excel file" });
 
@@ -1152,6 +1421,8 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
       return emp || null;
     }
 
+    const importPolicy = await resolveAttendancePolicy();
+
     for (const [, group] of grouped) {
       const { code, date, punches } = group;
 
@@ -1194,8 +1465,17 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
         continue;
       }
 
-      const policy = await resolveAttendancePolicy();
-      const calc = calculateStatus(mergedCheckIn, mergedCheckOut, policy);
+      const fin = await finalizeAttendanceTimingStatus({
+        employeeId: employee._id,
+        normalizedDate: date,
+        checkIn: mergedCheckIn,
+        checkOut: mergedCheckOut,
+        policy: importPolicy,
+        existingDecision: await Attendance.findOne({ employeeId: employee._id, date })
+          .select("deductionSource deductionDecisionAt deductionValueType deductionValue")
+          .lean(),
+      });
+      const calc = fin.calc;
 
       if (!calc.checkInStr) {
         errors.push(`${code} on ${date.toDateString()}: Invalid check-in time`);
@@ -1203,49 +1483,19 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
         continue;
       }
 
-      let impStatus = calc.status;
-      let impExcuseId;
-      let impLeaveRequestId = null;
-      let impOnApprovedLeave = false;
-      let impOriginalStatus;
-      let excusedMinutes = 0;
-      let impExcessExcuse = false;
-      let impExcessExcuseFraction = 0;
-
-      if (impStatus === "LATE" && calc.checkInStr) {
-        const excuseDoc = await findApprovedExcuseCoveringLate(
-          employee._id, date, calc.checkInStr, policy,
-        );
-        if (excuseDoc) {
-          impOriginalStatus = impStatus;
-          impStatus = "EXCUSED";
-          impExcuseId = excuseDoc._id;
-          excusedMinutes = excuseDoc.computed?.minutes || 0;
-          if (excuseDoc.quotaExceeded && excuseDoc.excessDeductionMethod === "SALARY") {
-            impExcessExcuse = true;
-            impExcessExcuseFraction = excuseDoc.excessDeductionAmount
-              || (excusedMinutes / (8 * 60));
-          }
-        }
-      }
-
-      const midDay = await resolveMidDayExcuseCredit(employee._id, date, policy);
-      if (midDay.creditMinutes > 0 && !impExcuseId) {
-        excusedMinutes = midDay.creditMinutes;
-      }
-      if (impStatus === "EARLY_DEPARTURE" && midDay.coversEndOfDay) {
-        impStatus = "PRESENT";
-      }
-
-      if (impStatus === "ABSENT") {
-        const covered = await findApprovedLeaveCoverage(employee._id, date);
-        if (covered) {
-          impOriginalStatus = "ABSENT";
-          impStatus = covered.status;
-          impLeaveRequestId = covered.leaveRequestId;
-          impOnApprovedLeave = true;
-        }
-      }
+      const impStatus = fin.recordStatus;
+      const impExcuseId = fin.excuseLeaveRequestId;
+      const impLeaveRequestId = fin.leaveRequestId;
+      const impOnApprovedLeave = fin.onApprovedLeave;
+      const impOriginalStatus = fin.originalStatus;
+      const excusedMinutes = fin.excusedMinutes;
+      const impExcessExcuse = fin.excessExcuse;
+      const impExcessExcuseFraction = fin.excessExcuseFraction;
+      const impExcuseOverageMinutes = fin.excuseOverageMinutes;
+      const impRequiresDeductionDecision = fin.requiresDeductionDecision;
+      const impDeductionSource = fin.deductionSource;
+      const impDeductionValueType = fin.deductionValueType;
+      const impDeductionValue = fin.deductionValue;
 
       try {
         const existingProtectedRow = await Attendance.findOne({
@@ -1253,7 +1503,10 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
           date,
           $or: [
             { leaveRequestId: { $ne: null }, status: "ON_LEAVE" },
-            { excuseLeaveRequestId: { $ne: null }, status: "EXCUSED" },
+            {
+              excuseLeaveRequestId: { $ne: null },
+              status: { $in: ["EXCUSED", "PARTIAL_EXCUSED"] },
+            },
           ],
         }).select("_id status").lean();
         if (existingProtectedRow) {
@@ -1261,6 +1514,10 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
           logs.push({ code: employee.employeeCode, date: date.toDateString(), status: "SKIPPED", note: `Preserved leave-synced ${existingProtectedRow.status} row` });
           continue;
         }
+
+        const existingRow = await Attendance.findOne({ employeeId: employee._id, date })
+          .select("deductionDecisionBy deductionDecisionAt deductionSource deductionValueType deductionValue status")
+          .lean();
 
         await Attendance.findOneAndUpdate(
           { employeeId: employee._id, date },
@@ -1277,6 +1534,15 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
             lastManagedBy: req.user.id,
             excessExcuse: impExcessExcuse,
             excessExcuseFraction: impExcessExcuseFraction,
+            excuseOverageMinutes: impExcuseOverageMinutes,
+            requiresDeductionDecision: impRequiresDeductionDecision,
+            deductionSource: impDeductionSource,
+            deductionValueType: impDeductionValueType,
+            deductionValue: impDeductionValue,
+            deductionDecisionBy:
+              impStatus === "PARTIAL_EXCUSED" ? existingRow?.deductionDecisionBy : undefined,
+            deductionDecisionAt:
+              impStatus === "PARTIAL_EXCUSED" ? existingRow?.deductionDecisionAt : undefined,
             ...(impExcuseId
               ? { excuseLeaveRequestId: impExcuseId, excuseCovered: true }
               : { excuseLeaveRequestId: null, excuseCovered: false }),
@@ -1329,6 +1595,7 @@ router.post("/import", requireAuth, upload.single("file"), async (req, res) => {
         process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
-});
+},
+);
 
 export default router;

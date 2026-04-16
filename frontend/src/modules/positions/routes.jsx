@@ -18,11 +18,18 @@ const EditPositionPage = lazy(() =>
 );
 
 export const positionsRoutes = [
-  { path: "/positions", element: <PositionsListPage /> },
+  {
+    path: "/positions",
+    element: (
+      <RequireRole roles={[3, "ADMIN", "HR_STAFF", "HR_MANAGER"]}>
+        <PositionsListPage />
+      </RequireRole>
+    ),
+  },
   {
     path: "/positions/create",
     element: (
-      <RequireRole roles={[3, "ADMIN", "HR_STAFF"]}>
+      <RequireRole roles={[3, "ADMIN", "HR", "HR_STAFF", "HR_MANAGER"]}>
         <CreatePositionPage />
       </RequireRole>
     ),
@@ -30,7 +37,7 @@ export const positionsRoutes = [
   {
     path: "/positions/:positionId/edit",
     element: (
-      <RequireRole roles={[3, "ADMIN", "HR_STAFF"]}>
+      <RequireRole roles={[3, "ADMIN", "HR", "HR_STAFF", "HR_MANAGER"]}>
         <EditPositionPage />
       </RequireRole>
     ),

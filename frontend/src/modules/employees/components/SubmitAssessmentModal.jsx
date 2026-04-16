@@ -131,7 +131,7 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
         className="w-full max-w-lg max-h-[min(90vh,720px)] flex flex-col bg-white rounded-2xl shadow-xl overflow-hidden border border-zinc-200"
       >
         <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50/50 shrink-0">
-          <h2 className="text-sm font-bold text-zinc-900 border-l-2 border-indigo-500 pl-2">
+          <h2 className="text-sm font-bold text-zinc-900 border-l-2 border-zinc-900 pl-2">
             Performance Review
           </h2>
           <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-widest pl-2 font-medium">
@@ -151,7 +151,7 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
                 step={0.5}
                 value={formData.daysBonus}
                 onChange={(e) => setFormData((p) => ({ ...p, daysBonus: e.target.value }))}
-                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-sm focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80 outline-none"
                 placeholder="0"
               />
               <p className="text-[9px] text-zinc-400 mt-0.5">days × daily rate</p>
@@ -166,7 +166,7 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
                 step={0.5}
                 value={formData.overtime}
                 onChange={(e) => setFormData((p) => ({ ...p, overtime: e.target.value }))}
-                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-sm focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80 outline-none"
                 placeholder="0"
               />
               <p className="text-[9px] text-zinc-400 mt-0.5">hours × daily rate</p>
@@ -181,7 +181,7 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
                 step={1}
                 value={formData.deduction}
                 onChange={(e) => setFormData((p) => ({ ...p, deduction: e.target.value }))}
-                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-sm focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80 outline-none"
                 placeholder="0"
               />
               <p className="text-[9px] text-zinc-400 mt-0.5">fixed EGP amount</p>
@@ -217,13 +217,13 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
 
           <div>
             <label className="block text-[10px] font-bold text-zinc-700 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-              <Calendar size={12} className="text-indigo-500" /> Assessment period
+              <Calendar size={12} className="text-zinc-500" /> Assessment period
             </label>
             <div className="grid grid-cols-2 gap-3">
               <select
                 value={formData.periodMonth}
                 onChange={(e) => setFormData({ ...formData, periodMonth: Number(e.target.value) })}
-                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none transition"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80 outline-none transition"
               >
                 {MONTH_NAMES.map((m, i) => (
                   <option key={i + 1} value={i + 1}>{m}</option>
@@ -232,7 +232,7 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
               <select
                 value={formData.periodYear}
                 onChange={(e) => setFormData({ ...formData, periodYear: Number(e.target.value) })}
-                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none transition"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80 outline-none transition"
               >
                 {yearOptions.map((y) => (
                   <option key={y} value={y}>{y}</option>
@@ -250,7 +250,7 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
               placeholder="Context from prior reviews, goals, incidents…"
               value={formData.notesPrevious}
               onChange={(e) => setFormData({ ...formData, notesPrevious: e.target.value })}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-4 py-3 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none transition resize-none"
+              className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-4 py-3 text-sm focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80 outline-none transition resize-none"
             />
           </div>
 
@@ -264,19 +264,19 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
               placeholder="Performance feedback for this review…"
               value={formData.feedback}
               onChange={(e) => setFormData({ ...formData, feedback: e.target.value })}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-4 py-3 text-sm focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none transition resize-none"
+              className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-4 py-3 text-sm focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80 outline-none transition resize-none"
             />
           </div>
 
-          <div className="flex items-center gap-3 p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl">
+          <div className="flex items-center gap-3 rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-3 ring-1 ring-zinc-950/[0.04]">
             <input
               type="checkbox"
               id="getThebounes"
               checked={formData.getThebounes}
               onChange={(e) => setFormData({ ...formData, getThebounes: e.target.checked })}
-              className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+              className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-200/80"
             />
-            <label htmlFor="getThebounes" className="text-xs font-bold text-emerald-800 cursor-pointer">
+            <label htmlFor="getThebounes" className="cursor-pointer text-xs font-bold text-zinc-800">
               Recommend for financial bonus
             </label>
           </div>
@@ -294,7 +294,7 @@ export function SubmitAssessmentModal({ employee, onClose, onSuccess }) {
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-sm hover:bg-indigo-700 transition disabled:opacity-50"
+            className="rounded-full bg-zinc-900 px-5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-50"
           >
             {loading ? "Submitting…" : "Submit review"}
           </button>

@@ -15,11 +15,23 @@ import {
 import { parseTimeToMinutes } from "../utils/excuseAttendance.js";
 import { weeklyRestDaySet } from "../utils/weeklyRestDays.js";
 import { resolveWorkingDaysPerMonth } from "../utils/orgPolicyWorkingDays.js";
+import { isHolidayForEmployee } from "../utils/isHolidayForEmployee.js";
+import {
+  calculateTimingStatus,
+  countMonthlyGraceUsesBeforeTarget,
+  deductionForLateWithMonthlyGraceExhaustion,
+  effectiveLateGraceAddMinutes,
+  lateMinutesForTiers,
+  lateSecondsAfterShiftStart,
+  tierIntervalsSecondsFromPolicy,
+} from "../utils/attendanceTimingCore.js";
 
 const DEFAULT_ATTENDANCE_RULES = {
   standardStartTime: "09:00",
   standardEndTime: "17:00",
   gracePeriodMinutes: 15,
+  monthlyGraceUsesEnabled: false,
+  monthlyGraceUsesAllowed: 3,
   workingDaysPerMonth: 22,
   lateDeductionTiers: [],
   absenceDeductionDays: 1,
@@ -28,34 +40,6 @@ const DEFAULT_ATTENDANCE_RULES = {
   unpaidLeaveDeductionDays: 1,
   weeklyRestDays: [5, 6],
 };
-
-/**
- * Returns true if a declared CompanyHoliday covers `dateStr` (YYYY-MM-DD) for the
- * given employee (by empId) who belongs to `deptId`.
- * Scopes: COMPANY → affects everyone; DEPARTMENT → matches deptId; EMPLOYEE → matches empId.
- *
- * @param {Array} holidays  - lean CompanyHoliday docs for the period
- * @param {string} dateStr  - ISO date string "YYYY-MM-DD"
- * @param {*} empId         - employee ObjectId or string
- * @param {*} deptId        - department ObjectId or string (nullable)
- * @returns {{ isHoliday: boolean, title?: string }}
- */
-function isHolidayForEmployee(holidays, dateStr, empId, deptId) {
-  const ts = new Date(dateStr + "T00:00:00.000Z").getTime();
-  for (const h of holidays) {
-    const start = new Date(h.startDate).setUTCHours(0, 0, 0, 0);
-    const end = new Date(h.endDate).setUTCHours(23, 59, 59, 999);
-    if (ts < start || ts > end) continue;
-    if (h.scope === "COMPANY") return { isHoliday: true, title: h.title };
-    if (h.scope === "DEPARTMENT" && deptId && String(h.targetDepartmentId) === String(deptId)) {
-      return { isHoliday: true, title: h.title };
-    }
-    if (h.scope === "EMPLOYEE" && String(h.targetEmployeeId) === String(empId)) {
-      return { isHoliday: true, title: h.title };
-    }
-  }
-  return { isHoliday: false };
-}
 
 /**
  * Resolve fiscal month date range [start, end) using company month start day.
@@ -85,26 +69,20 @@ function resolveMonthRange(year, month, companyMonthStartDay) {
   return { periodStart, periodEnd };
 }
 
-function lateMinutes(checkInStr, policy) {
-  const startMin = parseTimeToMinutes(policy.standardStartTime || "09:00");
-  const grace = policy.gracePeriodMinutes ?? 15;
-  const checkInMin = parseTimeToMinutes(checkInStr);
-  if (startMin == null || checkInMin == null) return 0;
-  const threshold = startMin + grace;
-  return checkInMin > threshold ? checkInMin - startMin : 0;
+function lateMinutes(checkInStr, policy, lateGraceAddMinutes) {
+  const baseGrace = policy.gracePeriodMinutes ?? policy.gracePeriod ?? 15;
+  const add = lateGraceAddMinutes !== undefined ? lateGraceAddMinutes : baseGrace;
+  return lateMinutesForTiers(checkInStr, policy, { lateGraceAddMinutes: add });
 }
 
-function deductionForLate(minutesLate, tiers) {
-  if (!Array.isArray(tiers) || tiers.length === 0 || minutesLate <= 0) return 0;
-  const sorted = [...tiers].sort((a, b) => a.fromMinutes - b.fromMinutes);
-  for (const tier of sorted) {
-    if (minutesLate >= tier.fromMinutes && minutesLate < tier.toMinutes) {
-      return tier.deductionDays;
-    }
-  }
-  const last = sorted[sorted.length - 1];
-  if (minutesLate >= last.toMinutes) return last.deductionDays;
-  return 0;
+/** Human-readable lateness for logs (tier matching still uses float minutes). */
+function formatLateDurationForNote(minutesLate) {
+  if (minutesLate == null || !Number.isFinite(minutesLate) || minutesLate <= 0) return "0 min";
+  const totalSec = Math.round(minutesLate * 60);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  if (s === 0) return `${m} min`;
+  return `${m} min ${s} s`;
 }
 
 /**
@@ -124,6 +102,7 @@ function expectedWorkingDates(periodStart, periodEnd, weeklyRestDays) {
   }
   return dates;
 }
+
 
 /**
  * Core analysis: builds per-employee summary + daily detail for a given month.
@@ -231,6 +210,9 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
           leaveType: null,
           effectivePaymentType: lr.effectivePaymentType,
           kind: "EXCUSE",
+          quotaExceeded: lr.quotaExceeded,
+          excessDeductionMethod: lr.excessDeductionMethod,
+          excessDeductionAmount: lr.excessDeductionAmount,
         };
       }
     }
@@ -267,6 +249,10 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
       attByDate.set(ds, rec);
     }
 
+    const empSortedMonthAsc = [...empAttendance].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
+
     let presentDays = 0;
     let lateDays = 0;
     let absentDays = 0;
@@ -274,6 +260,7 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
     let paidLeaveDays = 0;
     let unpaidLeaveDays = 0;
     let excusedDays = 0;
+    let partialExcusedDays = 0;
     let earlyDepartureDays = 0;
     let incompleteDays = 0;
     let holidayDays = 0;
@@ -285,6 +272,8 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
     let incompleteDeductionTotal = 0;
     let unpaidLeaveDeductionTotal = 0;
     let excessExcuseDeductionTotal = 0;
+    let excessExcuseAmountDeductionTotal = 0;
+    let vacationBalanceDeductionTotal = 0;
 
     const dailyRows = [];
 
@@ -320,17 +309,81 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
 
         let dayDeduction = 0;
 
-        switch (rec.status) {
+        const baseGrace = rules.gracePeriodMinutes ?? rules.gracePeriod ?? 15;
+        const monthlyAllowed = Math.floor(Number(rules.monthlyGraceUsesAllowed)) || 0;
+        const monthlyOn = rules.monthlyGraceUsesEnabled === true && monthlyAllowed > 0;
+        const usesBefore = monthlyOn
+          ? countMonthlyGraceUsesBeforeTarget({
+            sortedMonthRowsAsc: empSortedMonthAsc,
+            targetUtcMidnight: wd,
+            shiftStartStr: rules.standardStartTime || "09:00",
+            baseGraceMinutes: baseGrace,
+            monthlyGraceUsesEnabled: true,
+            monthlyGraceUsesAllowed: monthlyAllowed,
+            weeklyRestDays: rules.weeklyRestDays,
+            holidays: declaredHolidays,
+            employeeId: emp._id,
+            departmentId: emp.departmentId,
+          })
+          : 0;
+        const lateGraceAdd = effectiveLateGraceAddMinutes({
+          monthlyGraceUsesEnabled: monthlyOn,
+          monthlyGraceUsesAllowed: monthlyAllowed,
+          graceUsesBeforeTargetDate: usesBefore,
+          baseGraceMinutes: baseGrace,
+        });
+
+        let effectiveStatus = rec.status;
+        if (monthlyOn) {
+          const preserveTimingOverride =
+            rec.status === "OVERTIME"
+            || rec.status === "ON_LEAVE"
+            || rec.onApprovedLeave
+            || rec.status === "HOLIDAY"
+            || (rec.status === "EXCUSED" && rec.originalStatus === "LATE")
+            || (rec.status === "EXCUSED" && !rec.originalStatus)
+            || rec.status === "PARTIAL_EXCUSED";
+          if (!preserveTimingOverride) {
+            const core = calculateTimingStatus(rec.checkIn, rec.checkOut, rules, {
+              lateGraceAddMinutes: lateGraceAdd,
+            });
+            if (["PRESENT", "LATE", "EARLY_DEPARTURE", "INCOMPLETE"].includes(core.status)) {
+              effectiveStatus = core.status;
+            }
+          }
+        }
+
+        switch (effectiveStatus) {
           case "PRESENT":
             presentDays++;
             break;
           case "LATE": {
             lateDays++;
-            const mins = lateMinutes(rec.checkIn, rules);
-            const ded = deductionForLate(mins, rules.lateDeductionTiers);
+            const mins = lateMinutes(rec.checkIn, rules, lateGraceAdd);
+            const shiftStr = rules.standardStartTime || "09:00";
+            const ded = deductionForLateWithMonthlyGraceExhaustion(
+              rec.checkIn,
+              shiftStr,
+              rules.lateDeductionTiers,
+              baseGrace,
+              lateGraceAdd,
+            );
             lateDeductionTotal += ded;
             dayDeduction = ded;
-            notes.push(`Late by ${mins} min — ${ded} day(s) deducted`);
+            const lateSec = lateSecondsAfterShiftStart(rec.checkIn, shiftStr);
+            const firstIv = tierIntervalsSecondsFromPolicy(rules.lateDeductionTiers || [])[0];
+            const baseGraceSec = Math.max(0, Math.floor(baseGrace * 60));
+            const graceBandNote =
+              lateGraceAdd === 0 &&
+              baseGrace > 0 &&
+              lateSec > 0 &&
+              firstIv &&
+              (lateSec <= baseGraceSec || lateSec < firstIv.lo)
+                ? " (grace quota exhausted — first tier rate for early lateness)"
+                : "";
+            notes.push(
+              `Late by ${formatLateDurationForNote(mins)} after shift start — ${ded} day(s) deducted${graceBandNote}`,
+            );
             break;
           }
           case "EXCUSED": {
@@ -344,6 +397,49 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
               notes.push(`Excuse covers lateness but quota exceeded — ${frac.toFixed(2)} day(s) deducted from salary`);
             } else {
               notes.push("Lateness covered by approved excuse");
+            }
+            break;
+          }
+          case "PARTIAL_EXCUSED": {
+            partialExcusedDays++;
+            excusedDays++;
+            presentDays++;
+            const source = rec.deductionSource;
+            const validSource = source === "SALARY" || source === "VACATION_BALANCE";
+            const pendingDecision = rec.requiresDeductionDecision || !validSource;
+            const valueType = String(rec.deductionValueType || "").toUpperCase();
+            const value = Number(rec.deductionValue);
+            const fallbackDays = Number(rec.excessExcuseFraction) || 0;
+            const resolvedDays = valueType === "DAYS" && Number.isFinite(value) && value > 0
+              ? value
+              : fallbackDays;
+            const resolvedAmount = valueType === "AMOUNT" && Number.isFinite(value) && value > 0
+              ? value
+              : 0;
+
+            if (resolvedDays > 0 || resolvedAmount > 0) {
+              if (pendingDecision) {
+                notes.push(
+                  "Partial excuse overage pending HR deduction source decision (no deduction applied)",
+                );
+              } else if (source === "VACATION_BALANCE") {
+                vacationBalanceDeductionTotal += resolvedDays;
+                notes.push(`Partial excuse overage — ${resolvedDays.toFixed(2)} day(s) routed to vacation balance`);
+              } else {
+                if (valueType === "AMOUNT" && resolvedAmount > 0) {
+                  excessExcuseAmountDeductionTotal += resolvedAmount;
+                  notes.push(`Partial excuse overage — ${resolvedAmount.toFixed(2)} salary amount deducted`);
+                } else {
+                  excessExcuseDeductionTotal += resolvedDays;
+                  dayDeduction = resolvedDays;
+                  notes.push(`Partial excuse overage — ${resolvedDays.toFixed(2)} day(s) deducted from salary`);
+                }
+              }
+            } else {
+              notes.push("Partial excuse overage with no HR deduction value configured");
+            }
+            if (pendingDecision) {
+              notes.push("HR deduction source decision pending");
             }
             break;
           }
@@ -392,7 +488,7 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
 
         dailyRows.push({
           date: ds,
-          status: rec.status,
+          status: effectiveStatus,
           checkIn: rec.checkIn,
           checkOut: rec.checkOut,
           rawHours: hrs,
@@ -407,11 +503,20 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
         if (leaveMatch.covered) {
           if (leaveMatch.kind === "EXCUSE") {
             excusedDays++;
+            let excDeduction = 0;
+            const notesList = ["Approved excuse (no attendance record)"];
+            if (leaveMatch.quotaExceeded && leaveMatch.excessDeductionMethod === "SALARY") {
+               excDeduction = leaveMatch.excessDeductionAmount || 0; 
+               if (excDeduction > 0) {
+                 excessExcuseDeductionTotal += excDeduction;
+                 notesList.push(`Excess excuse deduction applied (${excDeduction} days)`);
+               }
+            }
             dailyRows.push({
               date: ds, status: "EXCUSED", checkIn: null, checkOut: null,
               rawHours: 0, excusedMinutes: 0, effectiveHours: 0,
-              mergedPunches: 0, deduction: 0, leaveType: null,
-              notes: ["Approved excuse (no attendance record)"],
+              mergedPunches: 0, deduction: excDeduction, leaveType: null,
+              notes: notesList,
             });
           } else {
             const isUnpaid = leaveMatch.effectivePaymentType === "UNPAID" || UNPAID_LEAVE_TYPES.has(leaveMatch.leaveType);
@@ -478,9 +583,11 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
     const earlyDepartureDeductionAmount = r2(earlyDepartureDeductionTotal * rawDailyRate);
     const incompleteDeductionAmount = r2(incompleteDeductionTotal * rawDailyRate);
     const excessExcuseDeductionAmount = r2(excessExcuseDeductionTotal * rawDailyRate);
+    const excessExcuseAmountDeductionAmount = r2(excessExcuseAmountDeductionTotal);
     const totalDeductionAmount = r2(
       lateDeductionAmount + absenceDeductionAmount + unpaidLeaveDeductionAmount +
-      earlyDepartureDeductionAmount + incompleteDeductionAmount + excessExcuseDeductionAmount,
+      earlyDepartureDeductionAmount + incompleteDeductionAmount +
+      excessExcuseDeductionAmount + excessExcuseAmountDeductionAmount,
     );
 
     let assessmentBonusAmount = 0;
@@ -531,6 +638,7 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
       paidLeaveDays,
       unpaidLeaveDays,
       excusedDays,
+      partialExcusedDays,
       earlyDepartureDays,
       incompleteDays,
       holidayDays,
@@ -545,6 +653,8 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
         earlyDepartureDays: r2(earlyDepartureDeductionTotal),
         incompleteDays: r2(incompleteDeductionTotal),
         excessExcuseDays: r2(excessExcuseDeductionTotal),
+        excessExcuseAmount: excessExcuseAmountDeductionAmount,
+        vacationBalanceDays: r2(vacationBalanceDeductionTotal),
         totalDeductionDays: r2(totalDeductionDays),
         // ── Display-only EGP estimates (UI / attendance report) — NOT read by payroll ──
         lateAmount: lateDeductionAmount,
@@ -552,7 +662,9 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
         unpaidLeaveAmount: unpaidLeaveDeductionAmount,
         earlyDepartureAmount: earlyDepartureDeductionAmount,
         incompleteAmount: incompleteDeductionAmount,
-        excessExcuseAmount: excessExcuseDeductionAmount,
+        excessExcuseAmount: r2(excessExcuseDeductionAmount + excessExcuseAmountDeductionAmount),
+        excessExcuseAmountFromDays: excessExcuseDeductionAmount,
+        excessExcuseAmountDirect: excessExcuseAmountDeductionAmount,
         totalAmount: totalDeductionAmount,
       },
       netEffectiveDays: r2(workingDays - totalDeductionDays),

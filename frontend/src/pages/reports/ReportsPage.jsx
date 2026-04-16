@@ -3,9 +3,13 @@ import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { getReportsSummaryApi } from "@/modules/reports/api";
 import { DataTable } from "@/shared/components/DataTable";
+import { useAppSelector } from "@/shared/hooks/reduxHooks";
+import { getAccessLevelLabel, getReportsAccessLevel } from "@/shared/utils/accessControl";
 
 export function ReportsPage() {
   const { showToast } = useToast();
+  const currentUser = useAppSelector((s) => s.identity.currentUser);
+  const reportsAccessLevel = getReportsAccessLevel(currentUser);
   const [summary, setSummary] = useState(null);
   const [warnings, setWarnings] = useState([]);
   const [unassignedEmployees, setUnassignedEmployees] = useState([]);
@@ -38,7 +42,7 @@ export function ReportsPage() {
 
   if (isLoading) {
     return (
-      <Layout title="Reports" description="Loading...">
+      <Layout title="Reports" description={`Access: ${getAccessLevelLabel(reportsAccessLevel)} · Loading...`}>
         Loading report...
       </Layout>
     );
@@ -46,14 +50,14 @@ export function ReportsPage() {
 
   if (!summary) {
     return (
-      <Layout title="Reports" description="System summary and insights.">
+      <Layout title="Reports" description={`Access: ${getAccessLevelLabel(reportsAccessLevel)} · System summary and insights.`}>
         No data available
       </Layout>
     );
   }
 
   return (
-    <Layout title="Reports" description="System summary and insights.">
+    <Layout title="Reports" description={`Access: ${getAccessLevelLabel(reportsAccessLevel)} · System summary and insights.`}>
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-white p-4 rounded-lg shadow">

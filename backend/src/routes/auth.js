@@ -5,9 +5,9 @@
  * Now uses Employee model (merged from User).
  */
 import { Router } from "express";
-import jwt from "jsonwebtoken";
 import { Employee } from "../models/Employee.js";
 import { UserPermission } from "../models/Permission.js";
+import { PageAccessOverride } from "../models/PageAccessOverride.js";
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -28,7 +28,8 @@ import {
 import { PasswordResetRequest } from "../models/PasswordResetRequest.js";
 import { Department } from "../models/Department.js";
 import { Team } from "../models/Team.js";
-import { isAdminRole } from "../utils/roles.js";
+import { bumpAuthzVersion } from "../services/authzVersionService.js";
+import { assertNotCurrentChiefExecutive } from "../services/chiefExecutiveService.js";
 
 const router = Router();
 
@@ -66,14 +67,29 @@ router.post("/login", validateLogin, async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const permissions = await UserPermission.find({ userId: employee._id });
+    const [permissions, pageOverrides] = await Promise.all([
+      UserPermission.find({ userId: employee._id }),
+      PageAccessOverride.find({ userId: employee._id }).select("pageId level").lean(),
+    ]);
 
     const authUser = {
       id: employee._id.toString(),
       email: employee.email,
       role: employee.role,
+      authzVersion: Number(employee.authzVersion || 0),
+      isHrDepartmentMember:
+        String(employee.department || "").trim().toUpperCase() ===
+        String(process.env.HR_DEPARTMENT_NAME || "HR").toUpperCase(),
+      departmentId: employee.departmentId || null,
+      teamId: employee.teamId || null,
+      hrTemplates: Array.isArray(employee.hrTemplates) ? employee.hrTemplates : [],
+      hrLevel: employee.hrLevel || "STAFF",
       requirePasswordChange: employee.requirePasswordChange,
       permissions: permissions.map(p => ({ module: p.module, actions: p.actions, scope: p.scope })),
+      pageAccessOverrides: pageOverrides.map((row) => ({
+        pageId: String(row.pageId),
+        level: String(row.level || "NONE").toUpperCase(),
+      })),
     };
 
     const accessToken = generateAccessToken(authUser);
@@ -126,7 +142,7 @@ router.post("/refresh", async (req, res) => {
  * POST /logout — Header: `Authorization: Bearer <access_token>`.
  * @flow Blacklist token in `TokenBlacklist` until expiry.
  */
-router.post("/logout", async (req, res) => {
+router.post("/logout", requireAuth, async (req, res) => {
   try {
     const header = req.headers.authorization;
     if (!header || !header.startsWith("Bearer ")) {
@@ -186,6 +202,11 @@ router.post(
         id: newEmployee._id.toString(),
         email: newEmployee.email,
         role: newEmployee.role,
+        authzVersion: Number(newEmployee.authzVersion || 0),
+        departmentId: newEmployee.departmentId || null,
+        teamId: newEmployee.teamId || null,
+        hrTemplates: [],
+        hrLevel: "STAFF",
         permissions: [],
       };
 
@@ -203,14 +224,12 @@ router.post(
  * POST /change-password — Bearer access token + `{ currentPassword, newPassword }`.
  * @flow Verify JWT → load user → verify old hash → validate new password → save → blacklist old token.
  */
-router.post("/change-password", async (req, res) => {
+router.post("/change-password", requireAuth, async (req, res) => {
   try {
     const header = req.headers.authorization;
-    if (!header || !header.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Authentication required" });
-    }
-
-    const token = header.slice("Bearer ".length);
+    const token = header?.startsWith("Bearer ")
+      ? header.slice("Bearer ".length)
+      : null;
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
@@ -219,21 +238,7 @@ router.post("/change-password", async (req, res) => {
         .json({ error: "Current and new password are required" });
     }
 
-    // Verify token to get user ID securely
-    let decoded;
-    try {
-      // Use the internal auth-secret fallback if env is missing
-      const secret = process.env.JWT_SECRET || "dev-secret";
-      decoded = jwt.verify(token, secret);
-    } catch (err) {
-      return res.status(401).json({ error: "Invalid or expired token" });
-    }
-
-    if (!decoded?.sub) {
-      return res.status(401).json({ error: "Invalid token payload" });
-    }
-
-    const user = await Employee.findById(decoded.sub);
+    const user = await Employee.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -374,10 +379,11 @@ router.post(
       // Hash and update password
       targetUser.passwordHash = await hashPassword(newPassword);
 
-      // An admin forcing a password may want the user to change it again
-      targetUser.requirePasswordChange = true;
+      // Force reset from admin screens should let user sign in directly with the new password.
+      targetUser.requirePasswordChange = false;
 
       await targetUser.save();
+      await bumpAuthzVersion(targetUser._id);
 
       // Automatically resolve any 'PENDING' reset requests for this email
       await PasswordResetRequest.updateMany(
@@ -387,7 +393,7 @@ router.post(
 
       res.json({
         message:
-          "Password reset successfully. The user will be required to change it upon their next login.",
+          "Password reset successfully. The user can log in directly with the new password.",
       });
     } catch (error) {
       console.error("Admin password reset error:", error);
@@ -400,28 +406,12 @@ router.post(
  * PUT /:id/status — Admin-only. Body: `{ isActive: boolean }`.
  * @flow Find user by `req.params.id` → set `isActive` → save → JSON confirmation.
  */
-router.put("/:id/status", async (req, res) => {
+router.put(
+  "/:id/status",
+  requireAuth,
+  enforcePolicy("manage", "auth"),
+  async (req, res) => {
   try {
-    const header = req.headers.authorization;
-    if (!header || !header.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Authentication required" });
-    }
-
-    const token = header.slice("Bearer ".length);
-    let decoded;
-    try {
-      const secret = process.env.JWT_SECRET || "dev-secret";
-      decoded = jwt.verify(token, secret);
-    } catch {
-      return res.status(401).json({ error: "Invalid or expired token" });
-    }
-
-    if (!decoded || !isAdminRole(decoded.role)) {
-      return res
-        .status(403)
-        .json({ error: "Only admins can change user status" });
-    }
-
     const { isActive } = req.body;
     if (typeof isActive !== "boolean") {
       return res.status(400).json({ error: "isActive boolean is required" });
@@ -433,8 +423,16 @@ router.put("/:id/status", async (req, res) => {
       return res.status(404).json({ error: "Target user not found" });
     }
 
+    if (isActive === false) {
+      await assertNotCurrentChiefExecutive(
+        targetUser._id,
+        "Cannot deactivate the current Chief Executive before appointing an active replacement",
+      );
+    }
+
     targetUser.isActive = isActive;
     await targetUser.save();
+    await bumpAuthzVersion(targetUser._id);
 
     if (isActive === false) {
       // Clear org leadership slots when account is deactivated
@@ -460,8 +458,12 @@ router.put("/:id/status", async (req, res) => {
     });
   } catch (error) {
     console.error("Admin status update error:", error);
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     res.status(500).json({ error: "Failed to update user status" });
   }
-});
+},
+);
 
 export default router;

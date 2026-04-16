@@ -14,6 +14,25 @@ const storedAuth = (() => {
   }
 })();
 
+const storedViewMode = (() => {
+  try {
+    const raw = localStorage.getItem("viewMode");
+    return raw === "management" ? "management" : "personal";
+  } catch {
+    return "personal";
+  }
+})();
+
+function hasManagementCapabilities(user) {
+  if (!user) return false;
+  const role = String(user.role || "").toUpperCase();
+  if (["ADMIN", "HR_STAFF", "HR_MANAGER", "MANAGER", "TEAM_LEADER", "HR"].includes(role)) {
+    return true;
+  }
+  if (Array.isArray(user.hrTemplates) && user.hrTemplates.length > 0) return true;
+  return Array.isArray(user.permissions) && user.permissions.length > 0;
+}
+
 const initialState = {
   currentUser: storedAuth?.user ?? null,
   accessToken: storedAuth?.accessToken ?? null,
@@ -21,6 +40,7 @@ const initialState = {
   isRefreshing: false,
   isLoginPending: false,
   loginError: null,
+  viewMode: storedViewMode,
 };
 
 export const loginThunk = createAsyncThunk(
@@ -88,8 +108,20 @@ const identitySlice = createSlice({
       state.isRefreshing = false;
       state.isLoginPending = false;
       state.loginError = null;
+      state.viewMode = "personal";
       try {
         localStorage.removeItem("auth");
+        localStorage.removeItem("viewMode");
+      } catch {
+        // ignore
+      }
+    },
+    setViewMode: (state, action) => {
+      const requested = action.payload === "management" ? "management" : "personal";
+      const canManage = hasManagementCapabilities(state.currentUser);
+      state.viewMode = canManage ? requested : "personal";
+      try {
+        localStorage.setItem("viewMode", state.viewMode);
       } catch {
         // ignore
       }
@@ -122,6 +154,10 @@ const identitySlice = createSlice({
         state.isRefreshing = false;
         state.isLoginPending = false;
         state.loginError = null;
+        const canManage = hasManagementCapabilities(action.payload.user);
+        // Ensure newly granted management capabilities are reflected immediately after login.
+        state.viewMode = canManage ? "management" : "personal";
+        localStorage.setItem("viewMode", state.viewMode);
         localStorage.setItem(
           "auth",
           JSON.stringify({
@@ -156,8 +192,10 @@ const identitySlice = createSlice({
         state.accessToken = null;
         state.refreshToken = null;
         state.isRefreshing = false;
+        state.viewMode = "personal";
         try {
           localStorage.removeItem("auth");
+          localStorage.removeItem("viewMode");
         } catch {
           // ignore
         }
@@ -168,8 +206,10 @@ const identitySlice = createSlice({
         state.accessToken = null;
         state.refreshToken = null;
         state.isRefreshing = false;
+        state.viewMode = "personal";
         try {
           localStorage.removeItem("auth");
+          localStorage.removeItem("viewMode");
         } catch {
           // ignore
         }
@@ -178,4 +218,4 @@ const identitySlice = createSlice({
 });
 
 export const identityReducer = identitySlice.reducer;
-export const { logout, setTokens, clearLoginError } = identitySlice.actions;
+export const { logout, setTokens, clearLoginError, setViewMode } = identitySlice.actions;

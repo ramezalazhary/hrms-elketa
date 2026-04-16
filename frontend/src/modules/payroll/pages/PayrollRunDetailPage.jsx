@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
+import { useAppSelector } from "@/shared/hooks/reduxHooks";
+import { canManagePayroll } from "@/shared/utils/accessControl";
 import {
   getPayrollRunApi,
   getPayrollRecordsApi,
@@ -42,6 +44,8 @@ export function PayrollRunDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const currentUser = useAppSelector((s) => s.identity.currentUser);
+  const canManageRunActions = canManagePayroll(currentUser);
   const payrollDp = usePayrollDecimalPlaces();
   const fmt = (n) => formatPayrollEgp(n, payrollDp);
 
@@ -209,8 +213,8 @@ export function PayrollRunDetailPage() {
 
   const t = run.totals || {};
   const period = `${MONTHS[(run.period?.month || 1) - 1]} ${run.period?.year}`;
-  const canCompute = run.status !== "FINALIZED";
-  const canFinalize = run.status === "COMPUTED";
+  const canCompute = canManageRunActions && run.status !== "FINALIZED";
+  const canFinalize = canManageRunActions && run.status === "COMPUTED";
   const hasRecords = records.length > 0;
 
   return (
@@ -255,7 +259,7 @@ export function PayrollRunDetailPage() {
                 {finalizing ? "Finalizing..." : "Finalize"}
               </button>
             )}
-            {hasRecords && (
+            {hasRecords && canManageRunActions && (
               <button
                 type="button"
                 onClick={handleRepairTotals}
@@ -267,7 +271,7 @@ export function PayrollRunDetailPage() {
                 {repairing ? "Repairing…" : "Repair totals"}
               </button>
             )}
-            {hasRecords && (
+            {hasRecords && canManageRunActions && (
               <div className="relative group">
                 <button className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50">
                   <Download size={14} /> Export
@@ -342,9 +346,13 @@ export function PayrollRunDetailPage() {
             <div className="flex gap-1 overflow-x-auto">
               {[
                 { key: "records", label: "Employee Records" },
-                { key: "payment", label: "Payment List" },
-                { key: "insurance", label: "Insurance Report" },
-                { key: "tax", label: "Tax Report" },
+                ...(canManageRunActions
+                  ? [
+                      { key: "payment", label: "Payment List" },
+                      { key: "insurance", label: "Insurance Report" },
+                      { key: "tax", label: "Tax Report" },
+                    ]
+                  : []),
               ].map(({ key, label }) => (
                 <button
                   key={key}
@@ -384,9 +392,11 @@ export function PayrollRunDetailPage() {
                   return (
                     <tr
                       key={rid}
-                      className="cursor-pointer hover:bg-zinc-50/80 transition"
-                      onClick={() => setSelectedRecord(r)}
-                      title="View full calculation"
+                      className={`${canManageRunActions ? "cursor-pointer hover:bg-zinc-50/80" : ""} transition`}
+                      onClick={() => {
+                        if (canManageRunActions) setSelectedRecord(r);
+                      }}
+                      title={canManageRunActions ? "View full calculation" : undefined}
                     >
                       <td className="px-3 py-2.5">
                         <span className="rounded-md border border-teal-200 bg-teal-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-teal-800">{r.employeeCode}</span>
@@ -411,7 +421,7 @@ export function PayrollRunDetailPage() {
         )}
 
         {/* Payment list tab */}
-        {activeTab === "payment" && paymentList && (
+        {canManageRunActions && activeTab === "payment" && paymentList && (
           <div className="space-y-4">
             {[
               { title: "Cash Employees", data: paymentList.cash, total: paymentList.cashTotal },
@@ -450,7 +460,7 @@ export function PayrollRunDetailPage() {
         )}
 
         {/* Insurance report tab */}
-        {activeTab === "insurance" && insuranceReport && (
+        {canManageRunActions && activeTab === "insurance" && insuranceReport && (
           <div className="rounded-xl border border-zinc-200 bg-white">
             <div className="border-b border-zinc-100 px-5 py-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-zinc-800">Insurance Report ({insuranceReport.rows.length} insured)</h3>
@@ -489,7 +499,7 @@ export function PayrollRunDetailPage() {
         )}
 
         {/* Tax report tab */}
-        {activeTab === "tax" && taxReport && (
+        {canManageRunActions && activeTab === "tax" && taxReport && (
           <div className="rounded-xl border border-zinc-200 bg-white">
             <div className="border-b border-zinc-100 px-5 py-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-zinc-800">Tax Report</h3>
@@ -529,7 +539,7 @@ export function PayrollRunDetailPage() {
           </div>
         )}
 
-        {selectedRecord && (
+        {canManageRunActions && selectedRecord && (
           <EmployeePayrollCalculationModal
             record={selectedRecord}
             periodLabel={period}

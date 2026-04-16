@@ -1,5 +1,6 @@
 import { store } from "@/app/store";
 import { refreshTokenThunk } from "@/modules/identity/store";
+import { logout } from "@/modules/identity/store";
 
 /**
  * Reads the access token from the Redux `identity` slice.
@@ -38,6 +39,7 @@ export function getAuthHeaders() {
  */
 export async function fetchWithAuth(input, init) {
   const token = getAuthToken();
+  const hadAccessTokenAtRequestStart = Boolean(token);
   const headers = new Headers(init?.headers);
 
   if (token) {
@@ -60,7 +62,24 @@ export async function fetchWithAuth(input, init) {
     );
   }
 
-  if (response.status === 401 && getRefreshToken()) {
+  const extract401Message = async (resp) => {
+    if (resp.status !== 401) return "";
+    try {
+      const body = await resp.clone().json();
+      return String(body?.error || body?.message || "").toLowerCase();
+    } catch {
+      return "";
+    }
+  };
+
+  let serverMessage = await extract401Message(response);
+  let isTokenSession401 =
+    serverMessage.includes("session outdated") ||
+    serverMessage.includes("token expired") ||
+    serverMessage.includes("invalid token");
+
+  // Refresh only for token/session invalidation, not every 401.
+  if (response.status === 401 && isTokenSession401 && getRefreshToken()) {
     try {
       await store.dispatch(refreshTokenThunk()).unwrap();
 
@@ -72,6 +91,12 @@ export async function fetchWithAuth(input, init) {
             ...init,
             headers,
           });
+          // Re-evaluate based on the retried response, not the initial 401.
+          serverMessage = await extract401Message(response);
+          isTokenSession401 =
+            serverMessage.includes("session outdated") ||
+            serverMessage.includes("token expired") ||
+            serverMessage.includes("invalid token");
         } catch (retryNetworkError) {
           throw new Error(
             "Unable to connect to the server. Please check your internet connection and try again."
@@ -82,6 +107,15 @@ export async function fetchWithAuth(input, init) {
       // Token refresh failed — user session is expired
       // The identity store handles clearing state on rejection
       console.error("Token refresh failed:", refreshError);
+      store.dispatch(logout());
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+  }
+
+  // If we still end up unauthorized, force logout only for clear token/session-invalid states.
+  if (response.status === 401) {
+    if (hadAccessTokenAtRequestStart && isTokenSession401) {
+      store.dispatch(logout());
       throw new Error("Your session has expired. Please sign in again.");
     }
   }

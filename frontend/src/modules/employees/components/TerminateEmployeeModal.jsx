@@ -22,10 +22,10 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
   };
 
   const AVATAR_COLORS = [
-    "from-violet-500 to-purple-600", "from-teal-500 to-cyan-600",
-    "from-rose-500 to-pink-600", "from-amber-500 to-orange-600",
-    "from-blue-500 to-indigo-600", "from-emerald-500 to-green-600",
-    "from-fuchsia-500 to-pink-600", "from-sky-500 to-blue-600",
+    "from-zinc-500 to-zinc-700",
+    "from-stone-500 to-stone-700",
+    "from-neutral-500 to-neutral-700",
+    "from-zinc-600 to-stone-600",
   ];
 
   const getAvatarColor = (name) => {
@@ -35,11 +35,10 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl relative overflow-hidden border border-rose-100 animate-in zoom-in-95 duration-300">
-        {/* Decorative elements */}
-        <div className="absolute right-0 top-0 -mr-16 -mt-16 h-48 w-48 rounded-full bg-rose-500/10 blur-3xl" />
-        <div className="absolute left-0 bottom-0 -ml-16 -mb-16 h-32 w-32 rounded-full bg-amber-500/10 blur-2xl" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+      <div className="relative w-full max-w-lg overflow-hidden rounded-[20px] border border-zinc-200/90 bg-white shadow-2xl ring-1 ring-zinc-950/[0.06] animate-in zoom-in-95 duration-300">
+        <div className="pointer-events-none absolute right-0 top-0 -mr-16 -mt-16 h-48 w-48 rounded-full bg-rose-500/[0.07] blur-3xl" />
+        <div className="pointer-events-none absolute left-0 bottom-0 -ml-16 -mb-16 h-32 w-32 rounded-full bg-zinc-400/[0.06] blur-2xl" />
         
         <div className="relative p-6 sm:p-8">
           {/* Header */}
@@ -54,18 +53,18 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
                 </div>
               </div>
               <div>
-                <h2 className="text-xl font-black text-slate-900 tracking-tight leading-tight">Terminate Employment</h2>
+                <h2 className="text-xl font-black text-zinc-900 tracking-tight leading-tight">Terminate Employment</h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-sm font-semibold text-slate-500 truncate">{employee.fullName}</span>
-                  <span className="h-1 w-1 rounded-full bg-slate-300" />
-                  <span className="font-mono text-[11px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wider">{employee.employeeCode || "EMP-000"}</span>
+                  <span className="text-sm font-semibold text-zinc-500 truncate">{employee.fullName}</span>
+                  <span className="h-1 w-1 rounded-full bg-zinc-300" />
+                  <span className="font-mono text-[11px] font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded uppercase tracking-wider">{employee.employeeCode || "EMP-000"}</span>
                 </div>
               </div>
             </div>
             <button 
               type="button" 
               onClick={onClose}
-              className="flex items-center justify-center h-10 w-10 rounded-2xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all duration-200 active:scale-90"
+              className="flex items-center justify-center h-10 w-10 rounded-2xl text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition-all duration-200 active:scale-90"
             >
               <X className="h-5 w-5" />
             </button>
@@ -88,17 +87,17 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {/* Exit Type Selection */}
               <div className="space-y-2">
-                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                <label className="block text-[11px] font-black text-zinc-500 uppercase tracking-widest ml-1">
                   Exit Classification
                 </label>
-                <div className="flex p-1 bg-slate-100 rounded-2xl border border-slate-200/60 shadow-inner">
+                <div className="flex p-1 bg-zinc-100 rounded-2xl border border-zinc-200/60 shadow-inner">
                   <button
                     type="button"
                     onClick={() => setStatus("TERMINATED")}
                     className={`flex-1 flex items-center justify-center py-2.5 text-xs font-bold rounded-xl transition-all duration-200 ${
                       status === "TERMINATED" 
                         ? "bg-white text-rose-600 shadow-md ring-1 ring-rose-200/50" 
-                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50 uppercase tracking-wider"
+                        : "text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50 uppercase tracking-wider"
                     }`}
                   >
                     Termination
@@ -108,8 +107,8 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
                     onClick={() => setStatus("RESIGNED")}
                     className={`flex-1 flex items-center justify-center py-2.5 text-xs font-bold rounded-xl transition-all duration-200 ${
                       status === "RESIGNED" 
-                        ? "bg-white text-blue-600 shadow-md ring-1 ring-blue-200/50" 
-                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50 uppercase tracking-wider"
+                        ? "bg-white text-zinc-900 shadow-md ring-1 ring-zinc-200/70" 
+                        : "text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50 uppercase tracking-wider"
                     }`}
                   >
                     Resignation
@@ -119,7 +118,7 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
 
               {/* Exit Date */}
               <div className="space-y-2">
-                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                <label className="block text-[11px] font-black text-zinc-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                   <CalendarX2 className="h-3 w-3" /> Effective Date
                 </label>
                 <input
@@ -127,14 +126,14 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
                   required
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 shadow-sm transition-all focus:border-rose-400 focus:outline-none focus:ring-4 focus:ring-rose-500/10 placeholder:text-slate-300"
+                  className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-bold text-zinc-800 shadow-sm transition-all focus:border-rose-400 focus:outline-none focus:ring-4 focus:ring-rose-500/10 placeholder:text-zinc-300"
                 />
               </div>
             </div>
 
             {/* Reason Textarea */}
             <div className="space-y-2">
-              <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+              <label className="block text-[11px] font-black text-zinc-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                 <FileText className="h-3 w-3" /> Reason for Departure
               </label>
               <textarea
@@ -143,22 +142,22 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
                 placeholder="Briefly describe the reason for termination or resignation..."
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-sm transition-all focus:border-rose-400 focus:outline-none focus:ring-4 focus:ring-rose-500/10 resize-none placeholder:text-slate-400"
+                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-800 shadow-sm transition-all focus:border-rose-400 focus:outline-none focus:ring-4 focus:ring-rose-500/10 resize-none placeholder:text-zinc-400"
               />
             </div>
 
             {/* Footer Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-2">
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 mt-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-2xl px-6 py-3 text-sm font-bold text-slate-500 hover:bg-slate-100 transition-all duration-200 active:scale-95"
+                className="rounded-2xl px-6 py-3 text-sm font-bold text-zinc-500 hover:bg-zinc-100 transition-all duration-200 active:scale-95"
               >
                 Go Back
               </button>
               <button
                 type="submit"
-                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-rose-600 to-rose-700 px-8 py-3 text-sm font-black text-white shadow-xl shadow-rose-500/30 transition-all duration-300 hover:shadow-2xl hover:shadow-rose-600/40 hover:-translate-y-0.5 active:scale-95 active:translate-y-0"
+                className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-8 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 active:scale-[0.98] motion-reduce:active:scale-100"
               >
                 <Check className="h-4 w-4" /> Confirm & Process
               </button>

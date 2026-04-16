@@ -1,0 +1,42 @@
+.leave-ui {
+  --leave-surface-base: #ffffff;
+  --leave-surface-soft: #f7f7f8;
+  --leave-surface-elevated: #fcfcfd;
+  --leave-border-soft: #e5e7eb;
+  --leave-border-strong: #d1d5db;
+  --leave-text-title: #111827;
+  --leave-text-body: #374151;
+  --leave-text-meta: #6b7280;
+  --leave-radius-lg: 20px;
+  --leave-radius-md: 14px;
+  --leave-shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
+  --leave-shadow-md: 0 8px 24px rgba(17, 24, 39, 0.08);
+}
+
+.leave-ui .leave-surface {
+  background: var(--leave-surface-base);
+  border: 1px solid var(--leave-border-soft);
+  border-radius: var(--leave-radius-lg);
+  box-shadow: var(--leave-shadow-sm);
+}
+
+.leave-ui .leave-elevated {
+  background: var(--leave-surface-elevated);
+  box-shadow: var(--leave-shadow-md);
+}
+
+.leave-ui .leave-title {
+  color: var(--leave-text-title);
+}
+
+.leave-ui .leave-body {
+  color: var(--leave-text-body);
+}
+
+.leave-ui .leave-meta {
+  color: var(--leave-text-meta);
+}
+
+.leave-ui .leave-transition {
+  transition: all 160ms ease;
+}

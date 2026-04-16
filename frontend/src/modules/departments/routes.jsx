@@ -1,4 +1,5 @@
-import { RequireRole } from "@/shared/routing/RequireRole";
+import { RequireDepartmentsAccess } from "@/shared/routing/RequireDepartmentsAccess";
+import { RequireDepartmentsManage } from "@/shared/routing/RequireDepartmentsManage";
 import { CreateDepartmentPage } from "./pages/CreateDepartmentPage";
 import { DepartmentsListPage } from "./pages/DepartmentsListPage";
 import { EditDepartmentPage } from "./pages/EditDepartmentPage";
@@ -8,33 +9,33 @@ export const departmentsRoutes = [
   { 
     path: "/departments", 
     element: (
-      <RequireRole roles={[3, "ADMIN", "HR_STAFF", "HR_MANAGER"]}>
+      <RequireDepartmentsAccess>
         <DepartmentsListPage />
-      </RequireRole>
+      </RequireDepartmentsAccess>
     ) 
   },
   {
     path: "/departments/create",
     element: (
-      <RequireRole roles={[3, "ADMIN"]}>
+      <RequireDepartmentsManage>
         <CreateDepartmentPage />
-      </RequireRole>
+      </RequireDepartmentsManage>
     ),
   },
   {
     path: "/departments/:departmentId",
     element: (
-      <RequireRole roles={[2, 3, "MANAGER", "ADMIN", "HR_STAFF", "HR_MANAGER"]}>
+      <RequireDepartmentsAccess>
         <DepartmentStructurePage />
-      </RequireRole>
+      </RequireDepartmentsAccess>
     ),
   },
   {
     path: "/departments/:departmentId/edit",
     element: (
-      <RequireRole roles={[3, "ADMIN"]}>
+      <RequireDepartmentsManage>
         <EditDepartmentPage />
-      </RequireRole>
+      </RequireDepartmentsManage>
     ),
   },
 ];

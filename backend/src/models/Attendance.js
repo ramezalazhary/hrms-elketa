@@ -31,6 +31,7 @@ const AttendanceSchema = new mongoose.Schema(
         "ON_LEAVE",
         "OVERTIME",
         "EXCUSED",
+        "PARTIAL_EXCUSED",
         "INCOMPLETE",
         "HOLIDAY",
       ],
@@ -59,6 +60,27 @@ const AttendanceSchema = new mongoose.Schema(
     },
     /** Minutes credited from approved mid-day excuses (Phase 0c). */
     excusedMinutes: { type: Number, default: 0 },
+    /** Minutes late beyond allowed excuse coverage when a row is partially excused. */
+    excuseOverageMinutes: { type: Number, default: 0 },
+    /** Whether HR must explicitly choose deduction source for this row. */
+    requiresDeductionDecision: { type: Boolean, default: false },
+    /** HR-selected deduction source for over-max excuse scenarios. */
+    deductionSource: {
+      type: String,
+      enum: ["SALARY", "VACATION_BALANCE"],
+      default: undefined,
+    },
+    /** HR-selected deduction unit for PARTIAL_EXCUSED routing. */
+    deductionValueType: {
+      type: String,
+      enum: ["DAYS", "AMOUNT"],
+      default: undefined,
+    },
+    /** HR-selected deduction numeric value (days or currency amount based on deductionValueType). */
+    deductionValue: { type: Number, default: undefined },
+    /** Audit trail for deduction source decision. */
+    deductionDecisionBy: { type: mongoose.Schema.Types.ObjectId, ref: "Employee" },
+    deductionDecisionAt: { type: Date },
     /** Number of source rows merged during import (Phase 0b). 1 = normal, >1 = merged. */
     rawPunches: { type: Number, default: 1 },
     remarks: {
@@ -73,6 +95,7 @@ const AttendanceSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
 
 // Ensure an employee only has one attendance record per day
 AttendanceSchema.index({ employeeId: 1, date: 1 }, { unique: true });

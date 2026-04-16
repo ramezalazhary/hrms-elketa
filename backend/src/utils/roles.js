@@ -3,6 +3,7 @@ export const ROLE = Object.freeze({
   EMPLOYEE: "EMPLOYEE",
   TEAM_LEADER: "TEAM_LEADER",
   MANAGER: "MANAGER",
+  HR: "HR",
   HR_STAFF: "HR_STAFF",
   HR_MANAGER: "HR_MANAGER",
   ADMIN: "ADMIN",
@@ -20,6 +21,7 @@ export const ROLE_LEVEL = Object.freeze({
   [ROLE.EMPLOYEE]: 1,
   [ROLE.TEAM_LEADER]: 2,
   [ROLE.MANAGER]: 2,
+  [ROLE.HR]: 3,
   [ROLE.HR_STAFF]: 3,
   [ROLE.HR_MANAGER]: 3,
   [ROLE.ADMIN]: 4,
@@ -31,6 +33,9 @@ export const CANONICAL_ROLES = Object.freeze(Object.keys(ROLE_LEVEL));
 export function normalizeRole(role) {
   if (typeof role === "number") return ROLE_MAP[role] || ROLE.EMPLOYEE;
   const r = String(role || "").trim().toUpperCase();
+  if (r === "TL" || r === "TEAMLEADER" || r === "TEAM_LEAD" || r === "TEAM LEADER") {
+    return ROLE.TEAM_LEADER;
+  }
   if (Object.prototype.hasOwnProperty.call(ROLE_LEVEL, r)) return r;
   return ROLE.EMPLOYEE;
 }
@@ -44,6 +49,14 @@ export function parseRoleInput(role) {
   }
   if (typeof role !== "string") return null;
   const normalized = role.trim().toUpperCase();
+  if (
+    normalized === "TL" ||
+    normalized === "TEAMLEADER" ||
+    normalized === "TEAM_LEAD" ||
+    normalized === "TEAM LEADER"
+  ) {
+    return ROLE.TEAM_LEADER;
+  }
   return CANONICAL_ROLES.includes(normalized) ? normalized : null;
 }
 
@@ -56,7 +69,12 @@ export function isAdminRole(role) {
 export function isHrOrAdmin(user) {
   if (!user) return false;
   const r = normalizeRole(user.role);
-  return r === ROLE.ADMIN || r === ROLE.HR_STAFF || r === ROLE.HR_MANAGER;
+  return (
+    r === ROLE.ADMIN ||
+    r === ROLE.HR ||
+    r === ROLE.HR_STAFF ||
+    r === ROLE.HR_MANAGER
+  );
 }
 
 /** @param {{ role?: string|number } | null | undefined} user */
@@ -92,6 +110,7 @@ const EDIT_ORDER = Object.freeze({
   [ROLE.EMPLOYEE]: 1,
   [ROLE.TEAM_LEADER]: 3,
   [ROLE.MANAGER]: 4,
+  [ROLE.HR]: 6,
   [ROLE.HR_STAFF]: 6,
   [ROLE.HR_MANAGER]: 8,
   [ROLE.ADMIN]: 10,

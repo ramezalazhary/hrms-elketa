@@ -2,6 +2,7 @@ import { Router } from "express";
 import { EmployeeAdvance } from "../models/EmployeeAdvance.js";
 import { Employee } from "../models/Employee.js";
 import { requireAuth } from "../middleware/auth.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { normalizeRole, ROLE } from "../utils/roles.js";
 
 const router = Router();
@@ -13,7 +14,11 @@ function isHR(user) {
 }
 
 // 1. Get all advances (Employee sees theirs, HR sees all)
-router.get("/", requireAuth, async (req, res) => {
+router.get(
+  "/",
+  requireAuth,
+  enforcePolicy("view", "payroll", () => ({ pageId: "advances" })),
+  async (req, res) => {
   try {
     const filter = {};
     if (!isHR(req.user)) {
@@ -38,8 +43,33 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
+// Personal endpoint: last-month advances only.
+router.get(
+  "/mine",
+  requireAuth,
+  enforcePolicy("view", "payroll", () => ({ pageId: "advances" })),
+  async (req, res) => {
+  try {
+    const lastMonthCutoff = new Date();
+    lastMonthCutoff.setDate(lastMonthCutoff.getDate() - 30);
+    const advances = await EmployeeAdvance.find({
+      employeeId: req.user.id,
+      createdAt: { $gte: lastMonthCutoff },
+    })
+      .populate("employeeId", "fullName email employeeCode department")
+      .sort({ createdAt: -1 });
+    res.json(advances);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch your advances" });
+  }
+});
+
 // 2. Employee requests an advance
-router.post("/request", requireAuth, async (req, res) => {
+router.post(
+  "/request",
+  requireAuth,
+  enforcePolicy("view", "payroll", () => ({ pageId: "advances" })),
+  async (req, res) => {
   try {
     const { amount, reason } = req.body;
     if (!amount || amount <= 0) return res.status(400).json({ error: "Invalid amount" });
@@ -60,7 +90,11 @@ router.post("/request", requireAuth, async (req, res) => {
 });
 
 // 3. HR creates an advance directly (APPROVED)
-router.post("/", requireAuth, async (req, res) => {
+router.post(
+  "/",
+  requireAuth,
+  enforcePolicy("manage", "payroll", () => ({ pageId: "advances" })),
+  async (req, res) => {
   try {
     if (!isHR(req.user)) return res.status(403).json({ error: "Forbidden: HR only" });
 
@@ -106,7 +140,11 @@ router.post("/", requireAuth, async (req, res) => {
 });
 
 // 4. HR Approves / Updates an advance
-router.put("/:id/approve", requireAuth, async (req, res) => {
+router.put(
+  "/:id/approve",
+  requireAuth,
+  enforcePolicy("manage", "payroll", () => ({ pageId: "advances" })),
+  async (req, res) => {
   try {
     if (!isHR(req.user)) return res.status(403).json({ error: "Forbidden: HR only" });
 
@@ -145,7 +183,11 @@ router.put("/:id/approve", requireAuth, async (req, res) => {
 });
 
 // 5. Delete / Cancel an advance
-router.delete("/:id", requireAuth, async (req, res) => {
+router.delete(
+  "/:id",
+  requireAuth,
+  enforcePolicy("view", "payroll", () => ({ pageId: "advances" })),
+  async (req, res) => {
   try {
     const advance = await EmployeeAdvance.findById(req.params.id);
     if (!advance) return res.status(404).json({ error: "Advance not found" });
@@ -177,7 +219,11 @@ router.delete("/:id", requireAuth, async (req, res) => {
 });
 
 // 6. Get single advance detail
-router.get("/:id", requireAuth, async (req, res) => {
+router.get(
+  "/:id",
+  requireAuth,
+  enforcePolicy("view", "payroll", () => ({ pageId: "advances" })),
+  async (req, res) => {
   try {
     const advance = await EmployeeAdvance.findById(req.params.id)
       .populate("employeeId", "fullName email employeeCode department");

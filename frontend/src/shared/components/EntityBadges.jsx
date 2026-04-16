@@ -100,6 +100,12 @@ const STATUS_CONFIG = {
     className: "bg-teal-50 text-teal-900 border-teal-200",
     iconClass: "text-teal-600",
   },
+  PARTIAL_EXCUSED: {
+    label: "Partial excused",
+    Icon: AlertCircle,
+    className: "bg-violet-50 text-violet-900 border-violet-200",
+    iconClass: "text-violet-600",
+  },
   EARLY_DEPARTURE: {
     label: "Early departure",
     Icon: LogOut,
@@ -215,11 +221,13 @@ const ROLE_CONFIG = {
 };
 
 function normaliseRoleKey(r) {
-  if (r === 3 || r === "ADMIN") return "ADMIN";
-  if (r === 2 || r === "MANAGER") return "MANAGER";
-  if (r === "HR_MANAGER") return "HR_MANAGER";
-  if (r === "HR_STAFF") return "HR_STAFF";
-  if (r === "TEAM_LEADER") return "TEAM_LEADER";
+  const role = String(r ?? "").trim().toUpperCase();
+  if (r === 3 || role === "ADMIN") return "ADMIN";
+  if (r === 2 || role === "MANAGER") return "MANAGER";
+  if (role === "HR") return "HR";
+  if (role === "HR_MANAGER") return "HR_MANAGER";
+  if (role === "HR_STAFF") return "HR_STAFF";
+  if (role === "TEAM_LEADER" || role === "TEAMLEADER" || role === "TL") return "TEAM_LEADER";
   return "EMPLOYEE";
 }
 

@@ -4,6 +4,7 @@ import { enforcePolicy } from '../middleware/enforcePolicy.js';
 import { Alert } from '../models/Alert.js';
 import { Employee } from '../models/Employee.js';
 import { generateAlerts } from '../modules/alerts/index.js';
+import { resolveEmployeeScopeIds } from '../services/scopeService.js';
 
 const router = Router();
 
@@ -12,12 +13,10 @@ router.get('/alerts', requireAuth, enforcePolicy("read", "dashboard"), async (re
   try {
     await generateAlerts();
 
-    const decision = req.authzDecision;
+    const scoped = await resolveEmployeeScopeIds(req.user);
     const employeeMatch = { status: { $ne: 'TERMINATED' } };
-    if (decision.scope === 'department') {
-       const userEmp = await Employee.findOne({ email: req.user.email });
-       if (userEmp?.departmentId) employeeMatch.departmentId = userEmp.departmentId;
-       else if (userEmp?.department) employeeMatch.department = userEmp.department;
+    if (scoped.scope !== 'all') {
+      employeeMatch._id = { $in: scoped.employeeIds || [] };
     }
 
     const relevantEmployees = await Employee.find(employeeMatch).select('_id').lean();
@@ -57,20 +56,19 @@ router.get('/alerts', requireAuth, enforcePolicy("read", "dashboard"), async (re
 // Endpoint 2: Gather Financial/Headcount Metrics
 router.get('/metrics', requireAuth, enforcePolicy("read", "dashboard"), async (req, res) => {
   try {
-    const decision = req.authzDecision;
-    let deptFilter = {};
-    if (decision.scope === 'department') {
-       const userEmp = await Employee.findOne({ email: req.user.email });
-       if (userEmp?.departmentId) deptFilter = { departmentId: userEmp.departmentId };
-       else if (userEmp?.department) deptFilter = { department: userEmp.department };
-    }
+    const scoped = await resolveEmployeeScopeIds(req.user);
+    const scopedFilter =
+      scoped.scope === 'all'
+        ? {}
+        : { _id: { $in: scoped.employeeIds || [] } };
 
-    const pipeline = [];
-    if (Object.keys(deptFilter).length) pipeline.push({ $match: deptFilter });
-    pipeline.push({ $match: { status: { $ne: 'TERMINATED' } } });
+    const baseFilter = {
+      status: { $ne: 'TERMINATED' },
+      ...scopedFilter,
+    };
 
-    const statsQuery = Employee.aggregate([
-      ...pipeline,
+    const pipeline = [
+      { $match: baseFilter },
       {
         $group: {
            _id: null,
@@ -78,15 +76,16 @@ router.get('/metrics', requireAuth, enforcePolicy("read", "dashboard"), async (r
            totalPayroll: { $sum: "$financial.baseSalary" }
         }
       }
-    ]);
+    ];
+
+    const statsQuery = Employee.aggregate(pipeline);
 
     const today = new Date();
     const thirtyDays = new Date(today);
     thirtyDays.setDate(thirtyDays.getDate() + 30);
 
     const salaryQuery = Employee.countDocuments({
-      status: { $ne: 'TERMINATED' },
-      ...deptFilter,
+      ...baseFilter,
       nextReviewDate: { $gte: today, $lte: thirtyDays }
     });
 
@@ -94,8 +93,7 @@ router.get('/metrics', requireAuth, enforcePolicy("read", "dashboard"), async (r
     sixtyDays.setDate(sixtyDays.getDate() + 60);
 
     const idQuery = Employee.countDocuments({
-      status: { $ne: 'TERMINATED' },
-      ...deptFilter,
+      ...baseFilter,
       nationalIdExpiryDate: { $gte: today, $lte: sixtyDays }
     });
 

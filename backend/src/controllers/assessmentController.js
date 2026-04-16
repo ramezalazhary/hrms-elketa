@@ -2,7 +2,6 @@ import { Assessment } from "../models/Assessment.js";
 import { Employee } from "../models/Employee.js";
 import { createAssessmentSchema } from "../validators/assessmentValidators.js";
 import { canAssessEmployee } from "../services/assessmentAccessService.js";
-import { ROLE, normalizeRole } from "../utils/roles.js";
 
 const MONTH_NAMES = [
   "", "January", "February", "March", "April", "May", "June",
@@ -274,15 +273,6 @@ export const getAssessmentReminders = async (req, res) => {
  */
 export const getBonusApprovals = async (req, res) => {
   try {
-    const role = normalizeRole(req.user?.role);
-    if (
-      role !== ROLE.HR_STAFF &&
-      role !== ROLE.HR_MANAGER &&
-      role !== ROLE.ADMIN
-    ) {
-      return res.status(403).json({ error: "Forbidden: HR or Admin only" });
-    }
-
     const docs = await Assessment.find({
       "assessment.bonusStatus": "PENDING_HR",
     })
@@ -325,15 +315,6 @@ export const getBonusApprovals = async (req, res) => {
  */
 export const approveBonus = async (req, res) => {
   try {
-    const role = normalizeRole(req.user?.role);
-    if (
-      role !== ROLE.HR_STAFF &&
-      role !== ROLE.HR_MANAGER &&
-      role !== ROLE.ADMIN
-    ) {
-      return res.status(403).json({ error: "Forbidden: HR or Admin only" });
-    }
-
     const { employeeId, assessmentId } = req.params;
     const doc = await Assessment.findOne({ employeeId });
     if (!doc) return res.status(404).json({ error: "Assessment document not found" });
@@ -361,15 +342,6 @@ export const approveBonus = async (req, res) => {
  */
 export const rejectBonus = async (req, res) => {
   try {
-    const role = normalizeRole(req.user?.role);
-    if (
-      role !== ROLE.HR_STAFF &&
-      role !== ROLE.HR_MANAGER &&
-      role !== ROLE.ADMIN
-    ) {
-      return res.status(403).json({ error: "Forbidden: HR or Admin only" });
-    }
-
     const { employeeId, assessmentId } = req.params;
     const reason = req.body.reason || "";
     const doc = await Assessment.findOne({ employeeId });

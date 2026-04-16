@@ -29,13 +29,22 @@ import {
   groupStandaloneTeamsByDepartmentId,
   mergedTeamNamesForDepartment,
 } from "@/shared/utils/mergeDepartmentTeams";
+import {
+  ACCESS_LEVEL,
+  getAccessLevelLabel,
+  getEmployeeDirectoryAccessLevel,
+} from "@/shared/utils/accessControl";
 
 /* ─── tiny helpers ─── */
 const AVATAR_COLORS = [
-  "from-violet-500 to-purple-600", "from-teal-500 to-cyan-600",
-  "from-rose-500 to-pink-600", "from-amber-500 to-orange-600",
-  "from-blue-500 to-indigo-600", "from-emerald-500 to-green-600",
-  "from-fuchsia-500 to-pink-600", "from-sky-500 to-blue-600",
+  "from-zinc-500 to-zinc-700",
+  "from-stone-500 to-stone-700",
+  "from-neutral-500 to-neutral-700",
+  "from-zinc-600 to-stone-600",
+  "from-stone-600 to-zinc-700",
+  "from-neutral-600 to-zinc-700",
+  "from-zinc-500 to-stone-600",
+  "from-stone-500 to-zinc-600",
 ];
 function getAvatarColor(name) {
   let h = 0;
@@ -60,6 +69,7 @@ export function EmployeesListPage() {
   const isLoading = useAppSelector((s) => s.employees.isLoading);
   const role = useAppSelector((s) => s.identity.currentUser?.role);
   const currentUser = useAppSelector((s) => s.identity.currentUser);
+  const employeeDirectoryAccessLevel = getEmployeeDirectoryAccessLevel(currentUser);
   const currentUserEmployee = useMemo(
     () =>
       employees.find(
@@ -217,7 +227,8 @@ export function EmployeesListPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const canModify = ["ADMIN", "HR_STAFF", "HR_MANAGER"].includes(role);
+  const canModify = employeeDirectoryAccessLevel === ACCESS_LEVEL.EDIT || employeeDirectoryAccessLevel === ACCESS_LEVEL.ADMIN;
+  const canDeleteEmployeeRecord = employeeDirectoryAccessLevel === ACCESS_LEVEL.ADMIN;
   const isDevMode = import.meta.env.DEV;
 
   // Close action dropdown on outside click
@@ -288,14 +299,14 @@ export function EmployeesListPage() {
   return (
     <Layout
       title="Employees"
-      description="Directory, filters, and quick actions for your workforce."
+      description={`Access: ${getAccessLevelLabel(employeeDirectoryAccessLevel)} · Directory, filters, and quick actions for your workforce.`}
       actions={
-        ["ADMIN", "HR_STAFF", "HR_MANAGER"].includes(role) ? (
-          <div className="flex gap-2">
-            <Link className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50" to="/employees/onboarding">
+        canModify ? (
+          <div className="flex flex-wrap gap-2">
+            <Link className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50" to="/employees/onboarding">
               <Users className="h-4 w-4 opacity-70" /> Onboarding
             </Link>
-            <Link className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-600 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-teal-600/25 transition hover:shadow-xl hover:shadow-teal-600/30" to="/employees/create">
+            <Link className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800" to="/employees/create">
               <UserPlus className="h-4 w-4" /> Add employee
             </Link>
           </div>
@@ -303,20 +314,23 @@ export function EmployeesListPage() {
       }
     >
       {/* ─── STAT CARDS ─── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="mb-2 grid grid-cols-2 gap-3 md:grid-cols-4">
         {[
-          { label: "Total Workforce", value: employees.length, icon: Users, color: "from-slate-600 to-slate-800", bg: "bg-slate-50 border-slate-200" },
-          { label: "Active", value: activeEmployees.length, icon: UserCheck, color: "from-emerald-500 to-emerald-700", bg: "bg-emerald-50 border-emerald-200" },
-          { label: "On Leave", value: employees.filter(e => e.status === "ON_LEAVE").length, icon: CalendarDays, color: "from-amber-500 to-amber-700", bg: "bg-amber-50 border-amber-200" },
-          { label: "Separated", value: terminatedEmployees.length, icon: UserMinus, color: "from-rose-500 to-rose-700", bg: "bg-rose-50 border-rose-200" },
+          { label: "Total workforce", value: employees.length, icon: Users },
+          { label: "Active", value: activeEmployees.length, icon: UserCheck },
+          { label: "On leave", value: employees.filter(e => e.status === "ON_LEAVE").length, icon: CalendarDays },
+          { label: "Separated", value: terminatedEmployees.length, icon: UserMinus },
         ].map((stat) => (
-          <div key={stat.label} className={`flex items-center gap-3 rounded-xl border p-4 ${stat.bg} transition hover:shadow-sm`}>
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${stat.color} text-white shadow-sm`}>
+          <div
+            key={stat.label}
+            className="flex items-center gap-3 rounded-[20px] bg-white p-4 shadow-sm ring-1 ring-zinc-950/[0.06] transition hover:shadow-md"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/80">
               <stat.icon className="h-5 w-5" strokeWidth={1.75} />
             </div>
             <div>
-              <p className="text-2xl font-bold tabular-nums text-slate-900">{stat.value}</p>
-              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{stat.label}</p>
+              <p className="text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">{stat.value}</p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{stat.label}</p>
             </div>
           </div>
         ))}
@@ -327,17 +341,17 @@ export function EmployeesListPage() {
         {/* ─── TABS + SEARCH BAR ─── */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Tabs */}
-          <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
+          <div className="inline-flex w-full max-w-md gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 sm:w-auto">
             <button type="button" onClick={() => { setViewTab("active"); setPage(1); }}
-              className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition ${viewTab === "active" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${viewTab === "active" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
               <UserCheck className="h-3.5 w-3.5" /> Active
-              <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${viewTab === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>{activeEmployees.length}</span>
+              <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${viewTab === "active" ? "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/70" : "bg-zinc-200/60 text-zinc-500"}`}>{activeEmployees.length}</span>
             </button>
             <button type="button" onClick={() => { setViewTab("terminated"); setPage(1); }}
-              className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition ${viewTab === "terminated" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${viewTab === "terminated" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
               <UserX className="h-3.5 w-3.5" /> Separated
               {terminatedEmployees.length > 0 && (
-                <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${viewTab === "terminated" ? "bg-rose-100 text-rose-700" : "bg-slate-200 text-slate-500"}`}>{terminatedEmployees.length}</span>
+                <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${viewTab === "terminated" ? "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/70" : "bg-zinc-200/60 text-zinc-500"}`}>{terminatedEmployees.length}</span>
               )}
             </button>
           </div>
@@ -345,25 +359,25 @@ export function EmployeesListPage() {
           {/* Search + Filter toggle */}
           <div className="flex items-center gap-2 flex-1 max-w-lg">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
               <input
                 type="text" placeholder="Search name or code…"
-                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-10 text-sm shadow-sm transition focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 py-2.5 pl-10 pr-10 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
                 value={search}
                 onChange={(e) => setFilter("search", e.target.value)}
               />
               {search && (
-                <button onClick={() => setFilter("search", "")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <button type="button" onClick={() => setFilter("search", "")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 transition hover:text-zinc-700">
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
             <button type="button" onClick={() => setShowFilters(!showFilters)}
-              className={`relative flex items-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium transition ${showFilters ? "border-teal-300 bg-teal-50 text-teal-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+              className={`relative flex items-center gap-1.5 rounded-full border px-3.5 py-2.5 text-sm font-medium shadow-sm transition ${showFilters ? "border-zinc-300 bg-zinc-100 text-zinc-900 ring-1 ring-zinc-200/80" : "border-zinc-200/90 bg-white text-zinc-700 hover:bg-zinc-50"}`}>
               <Filter className="h-4 w-4" />
               Filters
               {activeFiltersCount > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-teal-600 text-[10px] font-bold text-white">{activeFiltersCount}</span>
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 text-[10px] font-semibold text-white">{activeFiltersCount}</span>
               )}
             </button>
           </div>
@@ -371,24 +385,24 @@ export function EmployeesListPage() {
 
         {/* ─── FILTER BAR (collapsible) ─── */}
         {showFilters && (
-          <div className="animate-in slide-in-from-top-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm mt-1">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Refine Results</span>
+          <div className="mt-1 animate-in slide-in-from-top-2 rounded-[20px] bg-white p-4 shadow-sm ring-1 ring-zinc-950/[0.06]">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Refine results</span>
               {activeFiltersCount > 0 && (
-                <button onClick={() => {
+                <button type="button" onClick={() => {
                   const next = new URLSearchParams();
                   if (search) next.set("search", search);
                   setSearchParams(next);
-                }} className="text-xs font-medium text-rose-600 hover:text-rose-700 transition">
+                }} className="text-xs font-medium text-red-600 transition hover:text-red-700">
                   Clear all filters
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">Department</label>
+                <label className="mb-1.5 block text-xs font-medium text-zinc-500">Department</label>
                 <select value={departmentFilter} onChange={(e) => setFilter("department", e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20">
+                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80">
                   <option value="all">All departments</option>
                   {departmentOptions.map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
@@ -396,20 +410,20 @@ export function EmployeesListPage() {
               {viewTab === "active" && (
                 <>
                   <div>
-                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">Quick Flags</label>
+                    <label className="mb-1.5 block text-xs font-medium text-zinc-500">Quick flags</label>
                     <div className="flex gap-2">
-                      <button onClick={() => setFilter("idExpiringSoon", idExpiringSoon ? "" : "true")}
-                        className={`flex-1 rounded-lg border px-3 py-2 text-[11px] font-bold text-center transition ${idExpiringSoon ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
-                        ID Expiry ⚠
+                      <button type="button" onClick={() => setFilter("idExpiringSoon", idExpiringSoon ? "" : "true")}
+                        className={`flex-1 rounded-xl border px-3 py-2 text-center text-[11px] font-semibold transition ${idExpiringSoon ? "border-amber-200 bg-amber-50/90 text-amber-900 ring-1 ring-amber-200/70" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50"}`}>
+                        ID expiry
                       </button>
-                      <button onClick={() => setFilter("recentTransfers", recentTransfers ? "" : "true")}
-                        className={`flex-1 rounded-lg border px-3 py-2 text-[11px] font-bold text-center transition ${recentTransfers ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
-                        Transfers 🔄
+                      <button type="button" onClick={() => setFilter("recentTransfers", recentTransfers ? "" : "true")}
+                        className={`flex-1 rounded-xl border px-3 py-2 text-center text-[11px] font-semibold transition ${recentTransfers ? "border-zinc-300 bg-zinc-100 text-zinc-900 ring-1 ring-zinc-200/80" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50"}`}>
+                        Transfers
                       </button>
                     </div>
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">Salary Period</label>
+                    <label className="mb-1.5 block text-xs font-medium text-zinc-500">Salary period</label>
                     <div className="relative flex items-center gap-1.5">
                       <input
                         type="month"
@@ -430,7 +444,7 @@ export function EmployeesListPage() {
                           setSearchParams(next);
                           setPage(1);
                         }}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
                         placeholder="Any time"
                       />
                       {increasePeriod !== "all" && (
@@ -444,7 +458,7 @@ export function EmployeesListPage() {
                             setSearchParams(next);
                             setPage(1);
                           }}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200"
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
                           title="Clear month filter"
                         >
                           <X className="h-3.5 w-3.5" />
@@ -455,9 +469,9 @@ export function EmployeesListPage() {
                 </>
               )}
               <div>
-                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">Sort By</label>
+                <label className="mb-1.5 block text-xs font-medium text-zinc-500">Sort by</label>
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20">
+                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80">
                   <option value="name-asc">Name (A → Z)</option>
                   <option value="name-desc">Name (Z → A)</option>
                   {viewTab === "active" && <>
@@ -474,31 +488,31 @@ export function EmployeesListPage() {
 
       {/* ─── LOADING ─── */}
       {isLoading && (
-        <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500 mt-4">
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+        <div className="mt-4 flex items-center justify-center gap-2 py-8 text-sm text-zinc-500">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
           Loading employees…
         </div>
       )}
 
       {/* ─── EMPLOYEE CARDS / ROWS ─── */}
       {!isLoading && paged.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center mt-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 mb-4">
-            <Users className="h-8 w-8" />
+        <div className="mt-4 flex flex-col items-center justify-center rounded-[20px] bg-zinc-50/40 py-16 text-center ring-1 ring-zinc-950/[0.04]">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 ring-1 ring-zinc-200/80">
+            <Users className="h-7 w-7" />
           </div>
-          <p className="text-sm font-semibold text-slate-700 mb-1">
+          <p className="mb-1 text-sm font-medium text-zinc-800">
             {viewTab === "active" ? "No active employees found" : "No separated employees"}
           </p>
-          <p className="text-xs text-slate-400 max-w-sm">
+          <p className="max-w-sm text-xs text-zinc-500">
             {viewTab === "active" ? "Try adjusting your search or filters, or add a new employee." : "No employees have been terminated or resigned."}
           </p>
         </div>
       )}
 
       {!isLoading && paged.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm mt-6">
+        <div className="mt-6 overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
           {/* Table header */}
-          <div className="hidden md:grid md:grid-cols-12 gap-4 items-center bg-slate-50/80 border-b border-slate-100 px-6 py-4 text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
+          <div className="hidden items-center gap-4 border-b border-zinc-100 bg-zinc-50/70 px-6 py-4 text-[11px] font-medium uppercase tracking-wide text-zinc-500 md:grid md:grid-cols-12">
             <div className="col-span-4">Employee</div>
             <div className="col-span-2">Department</div>
             <div className="col-span-1">Status</div>
@@ -530,21 +544,21 @@ export function EmployeesListPage() {
 
             return (
               <div key={emp.id}
-                className={`group grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 items-center px-6 py-4 transition hover:bg-slate-50/80 ${!isLast ? "border-b border-slate-100" : ""}`}>
+                className={`group grid grid-cols-1 items-center gap-3 px-6 py-4 transition hover:bg-zinc-50/70 md:grid-cols-12 md:gap-4 ${!isLast ? "border-b border-zinc-100" : ""}`}>
 
                 {/* Employee */}
                 <div className="col-span-4 flex items-center gap-4 min-w-0">
-                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${getAvatarColor(emp.fullName)} text-sm font-bold text-white shadow-sm ring-2 ring-white`}>
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${getAvatarColor(emp.fullName)} text-sm font-semibold text-white shadow-sm ring-2 ring-white`}>
                     {getInitials(emp.fullName)}
                   </div>
                   <div className="min-w-0 flex-1">
                     <Link to={`/employees/${emp.id}`}
-                      className="block truncate text-[15px] font-bold text-slate-800 transition hover:text-teal-700">
+                      className="block truncate text-[15px] font-semibold tracking-tight text-zinc-900 transition hover:text-zinc-600">
                       {emp.fullName}
                     </Link>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="font-mono text-[11px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{emp.employeeCode || "—"}</span>
-                      <span className="truncate text-xs text-slate-500 font-medium">{emp.email}</span>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-600 ring-1 ring-zinc-200/70">{emp.employeeCode || "—"}</span>
+                      <span className="truncate text-xs font-medium text-zinc-500">{emp.email}</span>
                     </div>
                   </div>
                 </div>
@@ -564,7 +578,7 @@ export function EmployeesListPage() {
                     {/* Key Dates */}
                     <div className="col-span-2 flex flex-col gap-0.5">
                       {increaseDateObj && (
-                        <div className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isIncreaseDue ? "text-amber-700" : "text-slate-400"}`}>
+                        <div className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isIncreaseDue ? "text-amber-800" : "text-zinc-400"}`}>
                           <CreditCard className="h-3 w-3" />
                           <span>
                             {formatDate(
@@ -575,20 +589,20 @@ export function EmployeesListPage() {
                         </div>
                       )}
                       {idExpiryDate && (
-                        <div className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isIdExpired ? "text-rose-600 animate-pulse" : isIdExpiringSoon ? "text-amber-600" : "text-slate-400"}`}>
+                        <div className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isIdExpired ? "animate-pulse text-red-700" : isIdExpiringSoon ? "text-amber-700" : "text-zinc-400"}`}>
                           <CalendarDays className="h-3 w-3" />
                           <span>{formatDate(emp.nationalIdExpiryDate)}</span>
                           {isIdExpired && <AlertTriangle className="h-3 w-3" />}
                         </div>
                       )}
-                      {!increaseDateObj && !idExpiryDate && <span className="text-[10px] text-slate-300">—</span>}
+                      {!increaseDateObj && !idExpiryDate && <span className="text-[10px] text-zinc-300">—</span>}
                     </div>
 
                     {/* Actions */}
                     <div className="col-span-3 flex items-center justify-end gap-1.5">
                       {isIncreaseDue && canModify && (
-                        <button onClick={() => setIncreaseModalTarget(emp)}
-                          className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-teal-500 to-teal-600 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:shadow-md active:scale-[0.97]">
+                        <button type="button" onClick={() => setIncreaseModalTarget(emp)}
+                          className="flex items-center gap-1 rounded-full bg-zinc-900 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.97]">
                           <TrendingUp className="h-3 w-3" /> Increase
                         </button>
                       )}
@@ -604,37 +618,37 @@ export function EmployeesListPage() {
                         <button
                           type="button"
                           onClick={() => { setEvaluateTarget(emp); setOpenActions(null); }}
-                          className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-900 transition hover:bg-amber-100 hover:border-amber-300"
+                          className="flex items-center gap-1 rounded-full border border-amber-200/90 bg-amber-50/90 px-2.5 py-1.5 text-[11px] font-semibold text-amber-950 transition hover:bg-amber-100"
                         >
                           <Star className="h-3 w-3 text-amber-600" /> Evaluate
                         </button>
                       )}
                       <Link to={`/employees/${emp.id}`}
-                        className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50 hover:border-slate-300">
+                        className="flex items-center gap-1 rounded-full border border-zinc-200/90 bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
                         <Eye className="h-3 w-3" /> View
                       </Link>
                       {canModify && (
                         <div className="relative">
-                          <button onClick={(e) => { e.stopPropagation(); setOpenActions(openActions === emp.id ? null : emp.id); }}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 transition hover:bg-slate-50 hover:text-slate-600 hover:border-slate-300">
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenActions(openActions === emp.id ? null : emp.id); }}
+                            className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200/90 bg-white text-zinc-400 transition hover:bg-zinc-50 hover:text-zinc-700">
                             <MoreHorizontal className="h-4 w-4" />
                           </button>
                           {openActions === emp.id && (
-                            <div className="absolute right-0 top-full mt-1 w-44 rounded-xl border border-slate-200 bg-white p-1 shadow-xl z-50 animate-in zoom-in-95 fade-in duration-150"
+                            <div className="absolute right-0 top-full z-50 mt-1 w-44 animate-in fade-in zoom-in-95 rounded-2xl bg-white p-1 shadow-xl ring-1 ring-zinc-950/[0.08] duration-150"
                               onClick={(e) => e.stopPropagation()}>
                               <Link to={`/employees/${emp.id}/edit`}
-                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                                <Pencil className="h-3.5 w-3.5 text-violet-500" /> Edit Profile
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50">
+                                <Pencil className="h-3.5 w-3.5 text-zinc-500" /> Edit profile
                               </Link>
-                              <button onClick={() => { setTerminateModalTarget(emp); setOpenActions(null); }}
-                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50">
+                              <button type="button" onClick={() => { setTerminateModalTarget(emp); setOpenActions(null); }}
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50">
                                 <UserX className="h-3.5 w-3.5" /> Terminate
                               </button>
-                              {isDevMode && (
+                              {isDevMode && canDeleteEmployeeRecord && (
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteEmployee(emp)}
-                                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
+                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" /> Delete (Dev only)
                                 </button>
@@ -651,32 +665,32 @@ export function EmployeesListPage() {
                     <div className="col-span-2">
                       <div className="flex items-center gap-1.5 text-sm font-semibold text-rose-700">
                         <CalendarX2 className="h-3.5 w-3.5 text-rose-400" />
-                        {emp.terminationDate ? formatDate(emp.terminationDate) : <span className="text-slate-400 italic font-normal text-xs">Not recorded</span>}
+                        {emp.terminationDate ? formatDate(emp.terminationDate) : <span className="text-xs font-normal italic text-zinc-400">Not recorded</span>}
                       </div>
                     </div>
                     {/* Reason */}
                     <div className="col-span-1">
-                      <span className="text-xs text-slate-500 truncate block max-w-[10rem]" title={emp.terminationReason || ""}>
+                      <span className="block max-w-[10rem] truncate text-xs text-zinc-500" title={emp.terminationReason || ""}>
                         {emp.terminationReason || "—"}
                       </span>
                     </div>
                     {/* Actions */}
                     <div className="col-span-2 flex items-center justify-end gap-1.5">
                       <Link to={`/employees/${emp.id}`}
-                        className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50">
+                        className="flex items-center gap-1 rounded-full border border-zinc-200/90 bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
                         <Eye className="h-3 w-3" /> View
                       </Link>
                       {canModify && (
-                        <button onClick={() => handleReactivate(emp)}
-                          className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 transition hover:bg-emerald-100">
+                        <button type="button" onClick={() => handleReactivate(emp)}
+                          className="flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-800 transition hover:bg-zinc-100">
                           <RotateCcw className="h-3 w-3" /> Reactivate
                         </button>
                       )}
-                      {canModify && isDevMode && (
+                      {canDeleteEmployeeRecord && isDevMode && (
                         <button
                           type="button"
                           onClick={() => handleDeleteEmployee(emp)}
-                          className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-700 transition hover:bg-red-100"
+                          className="flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-semibold text-red-700 transition hover:bg-red-100"
                         >
                           <Trash2 className="h-3 w-3" /> Delete
                         </button>

@@ -15,9 +15,13 @@ import {
   ShieldCheck,
   TrendingUp
 } from "lucide-react";
+import { useAppSelector } from "@/shared/hooks/reduxHooks";
+import { canManageDepartments } from "@/shared/utils/accessControl";
 
 export function DepartmentStructurePage() {
   const { departmentId } = useParams();
+  const currentUser = useAppSelector((state) => state.identity.currentUser);
+  const canEditDepartment = canManageDepartments(currentUser);
   const [department, setDepartment] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -345,15 +349,17 @@ export function DepartmentStructurePage() {
           </div>
         </section>
 
-        {/* Floating Action Button for Admins */}
-        <div className="fixed bottom-8 right-8 z-40 flex gap-3">
-          <Link 
-            to={`/departments/${departmentId}/edit`}
-            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-teal-600 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-white shadow-xl shadow-teal-900/25 transition hover:from-violet-500 hover:to-teal-500 hover:shadow-2xl"
-          >
-            <Briefcase size={16} strokeWidth={1.75} /> Edit department
-          </Link>
-        </div>
+        {/* Floating Action Button for department managers (admin only). */}
+        {canEditDepartment && (
+          <div className="fixed bottom-8 right-8 z-40 flex gap-3">
+            <Link
+              to={`/departments/${departmentId}/edit`}
+              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-teal-600 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-white shadow-xl shadow-teal-900/25 transition hover:from-violet-500 hover:to-teal-500 hover:shadow-2xl"
+            >
+              <Briefcase size={16} strokeWidth={1.75} /> Edit department
+            </Link>
+          </div>
+        )}
       </div>
     </Layout>
   );

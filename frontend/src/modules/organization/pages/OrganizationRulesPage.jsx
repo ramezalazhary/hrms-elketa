@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useId, useMemo, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   Trash2,
@@ -15,22 +15,42 @@ import {
   Network,
   Clock,
   ChevronDown,
-  ChevronUp,
   Info,
+  CircleHelp,
   CheckCircle2,
   Gift,
 } from "lucide-react";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
-import { getDocumentRequirementsApi, updateDocumentRequirementsApi } from "../api";
+import {
+  createPartnerApi,
+  deletePartnerApi,
+  getDocumentRequirementsApi,
+  getPartnersApi,
+  updateDocumentRequirementsApi,
+  updatePartnerApi,
+} from "../api";
 import { getDepartmentsApi } from "@/modules/departments/api";
 import { getEmployeesApi } from "@/modules/employees/api";
+import { useAppSelector } from "@/shared/hooks/reduxHooks";
+import { canManagePartners } from "@/shared/utils/accessControl";
+import { normaliseRoleKey } from "@/shared/components/EntityBadges";
 import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
 import {
   normalizeWorkLocationsForEditor,
   workLocationsToApiPayload,
   emptyPolicyBranchRow,
 } from "@/shared/utils/policyWorkLocationBranches";
+import {
+  lateTierMmSsFromStoredMinutes,
+  parseMmSsToStoredMinutes,
+} from "@/shared/utils/lateTierTimeFormat";
+import {
+  addSecondsToClock,
+  deductionForLateWithMonthlyGraceExhaustion,
+  isLateByPolicy,
+  tierIntervalsSecondsFromPolicy,
+} from "@/shared/utils/lateTierDeductionPreview";
 
 const TABS = [
   { key: "general", label: "General", icon: Network, color: "teal" },
@@ -54,20 +74,241 @@ function SkeletonBlock() {
 
 function SectionShell({ icon: Icon, title, description, iconColor = "text-zinc-600", actions, children }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+        <div className="flex gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 ring-1 ring-zinc-200/80">
             <Icon className={`h-5 w-5 ${iconColor}`} aria-hidden />
           </div>
-          <div>
-            <h2 className="text-base font-semibold text-zinc-900">{title}</h2>
-            <p className="mt-0.5 max-w-2xl text-sm text-zinc-500">{description}</p>
+          <div className="min-w-0 pt-0.5">
+            <h2 className="text-[17px] font-semibold tracking-tight text-zinc-900">{title}</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-500">{description}</p>
           </div>
         </div>
-        {actions}
+        {actions ? <div className="shrink-0 sm:pt-0.5">{actions}</div> : null}
       </div>
       {children}
+    </div>
+  );
+}
+
+function ExpandableRulesHint({ accent = "sky", title, subtitle, subtitleDir = "ltr", children }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const isEmerald = accent === "emerald";
+  const accentBar = isEmerald ? "border-l-emerald-500" : "border-l-sky-500";
+  const iconTint = isEmerald ? "text-emerald-600" : "text-sky-600";
+
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="group flex w-full items-center gap-3 rounded-2xl bg-zinc-100/70 px-4 py-3.5 text-left transition hover:bg-zinc-100 active:scale-[0.998] motion-reduce:active:scale-100"
+      >
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-zinc-200/80 ${iconTint}`} aria-hidden>
+          <CircleHelp className="h-[18px] w-[18px]" strokeWidth={1.75} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-semibold leading-snug tracking-tight text-zinc-900">{title}</span>
+          {subtitle ? (
+            <span className="mt-0.5 block text-xs leading-snug text-zinc-500" dir={subtitleDir}>
+              {subtitle}
+            </span>
+          ) : null}
+        </span>
+        <ChevronDown
+          className={`h-5 w-5 shrink-0 text-zinc-400 transition duration-200 ${open ? "-rotate-180" : ""}`}
+          aria-hidden
+          strokeWidth={2}
+        />
+      </button>
+      {open ? (
+        <div
+          id={panelId}
+          role="region"
+          aria-label={title}
+          className={`mt-2 space-y-4 rounded-2xl border border-zinc-200/80 bg-zinc-50/40 p-4 sm:p-5 text-[13px] leading-relaxed text-zinc-700 shadow-sm shadow-zinc-950/5 border-l-[3px] ${accentBar}`}
+        >
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function formatDeductionDaysLabel(d) {
+  if (!Number.isFinite(d)) return "—";
+  const x = Number(d);
+  if (x === 0) return "0";
+  const t = x.toFixed(4).replace(/\.?0+$/, "");
+  return t;
+}
+
+/** Live preview: late deduction days from the editor’s tiers, before vs after monthly grace quota exhaustion. */
+function MonthlyGraceDeductionPreview({ rules }) {
+  const shift = rules.standardStartTime || "09:00:00";
+  const baseGrace = Number(rules.gracePeriodMinutes);
+  const graceOk = Number.isFinite(baseGrace) && baseGrace > 0;
+  const tiers = Array.isArray(rules.lateDeductionTiers) ? rules.lateDeductionTiers : [];
+
+  const preview = useMemo(() => {
+    if (!tiers.length) return { empty: true };
+    const intervals = tierIntervalsSecondsFromPolicy(tiers);
+    const firstDed = intervals[0]?.deductionDays;
+    const lateAddFull = graceOk ? baseGrace : 0;
+    const rows = [];
+
+    if (graceOk) {
+      const maxSec = baseGrace * 60;
+      const graceInteriorSec = Math.min(Math.max(30, Math.floor(maxSec * 0.7)), maxSec);
+      const cinGrace = addSecondsToClock(shift, graceInteriorSec);
+      const lateBefore = isLateByPolicy(cinGrace, shift, lateAddFull);
+      const dedBeforeGrace = lateBefore
+        ? deductionForLateWithMonthlyGraceExhaustion(cinGrace, shift, tiers, baseGrace, lateAddFull)
+        : 0;
+      const dedAfterGrace = deductionForLateWithMonthlyGraceExhaustion(cinGrace, shift, tiers, baseGrace, 0);
+      rows.push({
+        id: "inGrace",
+        checkIn: cinGrace,
+        offsetLabel: `${lateTierMmSsFromStoredMinutes(graceInteriorSec / 60)} after shift`,
+        beforeStatus: lateBefore ? "LATE" : "PRESENT",
+        beforeDed: dedBeforeGrace,
+        afterStatus: "LATE",
+        afterDed: dedAfterGrace,
+      });
+    }
+
+    const pastOffsetSec = graceOk ? baseGrace * 60 + 60 : 11 * 60;
+    const cinLate = addSecondsToClock(shift, pastOffsetSec);
+    const dedBeforeLate = deductionForLateWithMonthlyGraceExhaustion(cinLate, shift, tiers, baseGrace, lateAddFull);
+    const dedAfterLate = deductionForLateWithMonthlyGraceExhaustion(cinLate, shift, tiers, baseGrace, 0);
+    rows.push({
+      id: "pastGrace",
+      checkIn: cinLate,
+      offsetLabel: graceOk ? `${baseGrace} min grace + 1 min` : "11 min after shift (no grace)",
+      beforeStatus: "LATE",
+      beforeDed: dedBeforeLate,
+      afterStatus: "LATE",
+      afterDed: dedAfterLate,
+    });
+
+    return {
+      empty: false,
+      rows,
+      firstDed,
+      intervals,
+      shift,
+      baseGrace,
+      graceOk,
+    };
+  }, [shift, baseGrace, graceOk, tiers]);
+
+  if (preview.empty) {
+    return (
+      <div className="rounded-2xl bg-white px-4 py-4 ring-1 ring-zinc-200/80">
+        <p className="text-[13px] font-semibold tracking-tight text-zinc-900">Deduction preview</p>
+        <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">
+          Add at least one late tier in the table below. Sample rows will then show day(s) deducted before vs after the monthly grace
+          quota runs out — same logic as payroll and attendance finalize.
+        </p>
+        <p className="mt-2 text-xs leading-relaxed text-zinc-500" dir="rtl">
+          أضف شريحة تأخير واحدة على الأقل في الجدول أدناه ليظهر معاين الخصم هنا.
+        </p>
+      </div>
+    );
+  }
+
+  const { rows, firstDed, intervals } = preview;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">From your rules</p>
+          <p className="mt-0.5 text-[13px] font-semibold tracking-tight text-zinc-900">Deduction preview</p>
+        </div>
+        <span className="rounded-lg bg-zinc-100 px-2.5 py-1 font-mono text-xs text-zinc-700 ring-1 ring-zinc-200/80">
+          {shift}
+        </span>
+      </div>
+
+      <ul className="space-y-2 rounded-2xl bg-white px-4 py-3 ring-1 ring-zinc-200/80">
+        <li className="flex gap-3 text-xs leading-relaxed text-zinc-600">
+          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500/80" aria-hidden />
+          <span>
+            <span className="font-medium text-zinc-800">Grace quota available</span>
+            {" — "}
+            Late threshold is shift + <strong className="text-zinc-900">{graceOk ? `${baseGrace} min` : "0"}</strong>. Inside that
+            window you are <strong className="text-emerald-700">PRESENT</strong> (0 tier deduction). After that,{" "}
+            <strong className="text-red-700/90">LATE</strong> uses your tier table on seconds after shift start.
+          </span>
+        </li>
+        <li className="flex gap-3 text-xs leading-relaxed text-zinc-600">
+          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500/80" aria-hidden />
+          <span>
+            <span className="font-medium text-zinc-800">Grace quota exhausted</span>
+            {" — "}
+            Lateness is measured from shift start. Inside the old grace window (or before the first tier&apos;s first second), the
+            deduction is your <strong className="text-zinc-900">first tier</strong>
+            {Number.isFinite(firstDed) ? (
+              <>
+                : <strong className="tabular-nums text-zinc-900">{formatDeductionDaysLabel(firstDed)}</strong> day(s)
+              </>
+            ) : null}
+            . Otherwise the matching tier applies (or the last tier if above the top band).
+          </span>
+        </li>
+      </ul>
+
+      <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-200/80">
+        <table className="min-w-full text-left text-xs">
+          <thead>
+            <tr className="border-b border-zinc-100 bg-zinc-50/80">
+              <th className="px-3 py-2.5 font-medium text-zinc-500">Sample</th>
+              <th className="px-3 py-2.5 font-medium text-zinc-500">Check-in</th>
+              <th className="px-3 py-2.5 font-medium text-zinc-500">Has quota</th>
+              <th className="px-3 py-2.5 font-medium text-zinc-500">Quota out</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100">
+            {rows.map((r) => (
+              <tr key={r.id} className="text-zinc-700">
+                <td className="px-3 py-3 align-top">
+                  <span className="font-medium text-zinc-900">{r.offsetLabel}</span>
+                </td>
+                <td className="px-3 py-3 align-top font-mono text-[11px] text-zinc-800">{r.checkIn}</td>
+                <td className="px-3 py-3 align-top">
+                  <span className="font-medium text-zinc-900">{r.beforeStatus}</span>
+                  <span className="text-zinc-400"> · </span>
+                  <span className="tabular-nums font-semibold text-zinc-900">{formatDeductionDaysLabel(r.beforeDed)}</span>
+                  <span className="text-zinc-400"> d</span>
+                </td>
+                <td className="px-3 py-3 align-top">
+                  <span className="font-medium text-zinc-900">{r.afterStatus}</span>
+                  <span className="text-zinc-400"> · </span>
+                  <span className="tabular-nums font-semibold text-zinc-900">{formatDeductionDaysLabel(r.afterDed)}</span>
+                  <span className="text-zinc-400"> d</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {intervals.length > 0 ? (
+        <p className="px-0.5 text-[11px] leading-relaxed text-zinc-400">
+          First tier (server seconds): {intervals[0].lo}–{intervals[0].hi}s after shift →{" "}
+          <span className="font-medium text-zinc-600">{formatDeductionDaysLabel(intervals[0].deductionDays)}</span> day(s).
+        </p>
+      ) : null}
+
+      <p className="rounded-xl bg-zinc-100/60 px-3 py-2.5 text-xs leading-relaxed text-zinc-600" dir="rtl">
+        «Has quota» = عتبة شيفت + السماح. «Quota out» = بعد نفاد الرصيد؛ التأخير من أول الشيفت مع قاعدة الشريحة الأولى عند
+        الحاجة.
+      </p>
     </div>
   );
 }
@@ -75,22 +316,57 @@ function SectionShell({ icon: Icon, title, description, iconColor = "text-zinc-6
 function FieldGroup({ label, hint, children, className = "" }) {
   return (
     <div className={className}>
-      <label className="mb-1 block text-xs font-medium text-zinc-600">{label}</label>
-      {hint && <p className="mb-1.5 text-[11px] leading-snug text-zinc-400">{hint}</p>}
+      <label className="mb-1.5 block text-xs font-medium text-zinc-500">{label}</label>
+      {hint && <p className="mb-2 text-[11px] leading-snug text-zinc-400">{hint}</p>}
       {children}
     </div>
   );
 }
 
-const INPUT_CLS = "w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
-const SELECT_CLS = `${INPUT_CLS} disabled:bg-zinc-50 disabled:text-zinc-400`;
+const INPUT_CLS =
+  "w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80";
+const SELECT_CLS = `${INPUT_CLS} disabled:bg-zinc-100/80 disabled:text-zinc-400`;
 const NUM_CLS = `${INPUT_CLS} tabular-nums`;
+
+const SECONDARY_BTN =
+  "inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-white px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:scale-[0.99] motion-reduce:active:scale-100";
+
+function LateTierMmSsInput({ valueMinutes, onCommit, className }) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState("");
+  const formatted = lateTierMmSsFromStoredMinutes(valueMinutes);
+  return (
+    <input
+      type="text"
+      inputMode="text"
+      autoComplete="off"
+      spellCheck={false}
+      placeholder="mm:ss"
+      title="minutes:seconds after shift start (e.g. 1:30 = 1 min 30 sec)"
+      className={className}
+      value={focused ? draft : formatted}
+      onFocus={() => {
+        setFocused(true);
+        setDraft(formatted);
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        setFocused(false);
+        const p = parseMmSsToStoredMinutes(draft);
+        if (p !== null && Number.isFinite(p)) onCommit(p);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+      }}
+    />
+  );
+}
 
 function ruleBadge(type) {
   const styles = {
-    DEFAULT: "bg-emerald-50 text-emerald-800 ring-emerald-200/60",
-    DEPARTMENT: "bg-sky-50 text-sky-800 ring-sky-200/60",
-    EMPLOYEE: "bg-violet-50 text-violet-800 ring-violet-200/60",
+    DEFAULT: "bg-zinc-100 text-zinc-800 ring-zinc-200/80",
+    DEPARTMENT: "bg-zinc-100 text-zinc-800 ring-zinc-200/80",
+    EMPLOYEE: "bg-zinc-100 text-zinc-800 ring-zinc-200/80",
   };
   const labels = { DEFAULT: "Global default", DEPARTMENT: "Department", EMPLOYEE: "Employee" };
   return (
@@ -114,6 +390,8 @@ export function OrganizationRulesPage() {
     standardStartTime: "09:00",
     standardEndTime: "17:00",
     gracePeriodMinutes: 15,
+    monthlyGraceUsesEnabled: false,
+    monthlyGraceUsesAllowed: 3,
     workingDaysPerMonth: 22,
     lateDeductionTiers: [],
     absenceDeductionDays: 1,
@@ -151,11 +429,25 @@ export function OrganizationRulesPage() {
   });
   const [departmentRows, setDepartmentRows] = useState([]);
   const [employeeOptions, setEmployeeOptions] = useState([]);
+  const [partners, setPartners] = useState([]);
+  const [partnerDraft, setPartnerDraft] = useState({
+    name: "",
+    title: "Partner",
+    employeeId: "",
+    ownershipPercent: "",
+    notes: "",
+  });
+  const [savingPartner, setSavingPartner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [expandedPolicies, setExpandedPolicies] = useState({});
   const [expandedLocations, setExpandedLocations] = useState({});
   const { showToast } = useToast();
+  const currentUser = useAppSelector((state) => state.identity.currentUser);
+  const canEditPartners = canManagePartners(currentUser, chiefExecutiveEmployeeId);
+  const canManageBulkLeaveCredits = new Set(["HR_STAFF", "HR_MANAGER", "ADMIN"]).has(
+    normaliseRoleKey(currentUser?.role),
+  );
 
   useEffect(() => {
     async function load() {
@@ -177,6 +469,7 @@ export function OrganizationRulesPage() {
           setChiefExecutiveEmployeeId("");
         }
         setChiefExecutiveTitle(data.chiefExecutiveTitle?.trim() || "Chief Executive Officer");
+        setPartners(Array.isArray(data.partners) ? data.partners : []);
         setLeavePolicies(Array.isArray(data.leavePolicies) ? data.leavePolicies : []);
         if (data.attendanceRules && typeof data.attendanceRules === "object") {
           setAttendanceRules((prev) => ({ ...prev, ...data.attendanceRules }));
@@ -311,10 +604,13 @@ export function OrganizationRulesPage() {
   };
   const addDeductionTier = () => {
     const tiers = attendanceRules.lateDeductionTiers || [];
-    const lastTo = tiers.length > 0 ? tiers[tiers.length - 1].toMinutes : 0;
+    const lastToMin = tiers.length > 0 ? tiers[tiers.length - 1].toMinutes : 0;
     setAttendanceRules((prev) => ({
       ...prev,
-      lateDeductionTiers: [...prev.lateDeductionTiers, { fromMinutes: lastTo, toMinutes: lastTo + 30, deductionDays: 0.25 }],
+      lateDeductionTiers: [
+        ...prev.lateDeductionTiers,
+        { fromMinutes: lastToMin, toMinutes: lastToMin + 30, deductionDays: 0.25 },
+      ],
     }));
   };
   const updateDeductionTier = (index, field, value) => {
@@ -330,6 +626,10 @@ export function OrganizationRulesPage() {
 
   // --- Save ---
   const handleSave = useCallback(async () => {
+    if (!chiefExecutiveEmployeeId.trim()) {
+      showToast("Chief Executive is required. Select an active employee before saving.", "error");
+      return;
+    }
     setSaving(true);
     try {
       await updateDocumentRequirementsApi({
@@ -339,13 +639,24 @@ export function OrganizationRulesPage() {
         companyTimezone: companyTimezone.trim() || "Africa/Cairo",
         companyMonthStartDay: Math.min(31, Math.max(1, Math.floor(Number(companyMonthStartDay)) || 1)),
         chiefExecutiveTitle: chiefExecutiveTitle.trim() || "Chief Executive Officer",
-        chiefExecutiveEmployeeId: chiefExecutiveEmployeeId.trim() || null,
+        chiefExecutiveEmployeeId: chiefExecutiveEmployeeId.trim(),
+        partners,
         leavePolicies: leavePolicies.map((p) => ({ version: Number(p.version) || 1, vacationRules: p.vacationRules || {}, excuseRules: p.excuseRules || {} })),
         attendanceRules: {
           ...attendanceRules,
           lateDeductionTiers: (attendanceRules.lateDeductionTiers || [])
             .filter((t) => t.fromMinutes != null && t.toMinutes != null)
-            .map((t) => ({ fromMinutes: Number(t.fromMinutes) || 0, toMinutes: Number(t.toMinutes) || 1, deductionDays: Number(t.deductionDays) || 0 })),
+            .map((t) => ({
+              fromMinutes: Math.max(0, Number(t.fromMinutes) || 0),
+              toMinutes: Number(t.toMinutes),
+              deductionDays: Number(t.deductionDays) || 0,
+            }))
+            .filter(
+              (t) =>
+                Number.isFinite(t.fromMinutes) &&
+                Number.isFinite(t.toMinutes) &&
+                t.toMinutes > t.fromMinutes,
+            ),
         },
         assessmentPayrollRules: {
           bonusDaysEnabled: Boolean(assessmentPayrollRules.bonusDaysEnabled),
@@ -378,7 +689,64 @@ export function OrganizationRulesPage() {
     } finally {
       setSaving(false);
     }
-  }, [requiredDocs, workLocations, salaryIncreaseRules, companyTimezone, companyMonthStartDay, chiefExecutiveTitle, chiefExecutiveEmployeeId, leavePolicies, attendanceRules, assessmentPayrollRules, payrollConfig, showToast]);
+  }, [requiredDocs, workLocations, salaryIncreaseRules, companyTimezone, companyMonthStartDay, chiefExecutiveTitle, chiefExecutiveEmployeeId, leavePolicies, attendanceRules, assessmentPayrollRules, payrollConfig, partners, showToast]);
+
+  const refreshPartners = useCallback(async () => {
+    const data = await getPartnersApi();
+    setPartners(Array.isArray(data?.partners) ? data.partners : []);
+  }, []);
+
+  const handleCreatePartner = useCallback(async () => {
+    if (!canEditPartners) return;
+    if (!partnerDraft.name.trim()) {
+      showToast("Partner name is required", "error");
+      return;
+    }
+    setSavingPartner(true);
+    try {
+      await createPartnerApi({
+        ...partnerDraft,
+        employeeId: partnerDraft.employeeId || null,
+        ownershipPercent:
+          partnerDraft.ownershipPercent === "" ? null : Number(partnerDraft.ownershipPercent),
+      });
+      await refreshPartners();
+      setPartnerDraft({ name: "", title: "Partner", employeeId: "", ownershipPercent: "", notes: "" });
+      showToast("Partner added", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setSavingPartner(false);
+    }
+  }, [canEditPartners, partnerDraft, refreshPartners, showToast]);
+
+  const handleDeletePartner = useCallback(async (partnerId) => {
+    if (!canEditPartners || !partnerId) return;
+    setSavingPartner(true);
+    try {
+      await deletePartnerApi(partnerId);
+      await refreshPartners();
+      showToast("Partner removed", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setSavingPartner(false);
+    }
+  }, [canEditPartners, refreshPartners, showToast]);
+
+  const handleUpdatePartner = useCallback(async (partner) => {
+    if (!canEditPartners || !partner?._id) return;
+    setSavingPartner(true);
+    try {
+      await updatePartnerApi(partner._id, partner);
+      await refreshPartners();
+      showToast("Partner updated", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setSavingPartner(false);
+    }
+  }, [canEditPartners, refreshPartners, showToast]);
 
   const stats = useMemo(() => {
     const filledDocs = requiredDocs.filter((d) => d.name?.trim()).length;
@@ -406,9 +774,13 @@ export function OrganizationRulesPage() {
       description="Company-wide configuration for documents, workplaces, leave, attendance, and salary."
     >
       <div className="pb-24">
-        {/* Tab navigation */}
-        <div className="mb-6 -mx-1 overflow-x-auto">
-          <div className="flex gap-1 min-w-max px-1">
+        {/* Tab navigation — segmented control */}
+        <div className="mb-8 -mx-1 overflow-x-auto pb-0.5">
+          <div
+            className="inline-flex min-w-max gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80"
+            role="tablist"
+            aria-label="Organization settings sections"
+          >
             {TABS.map(({ key, label, icon: TabIcon }) => {
               const isActive = activeTab === key;
               const badge = tabBadges[key];
@@ -416,19 +788,23 @@ export function OrganizationRulesPage() {
                 <button
                   key={key}
                   type="button"
+                  role="tab"
+                  aria-selected={isActive}
                   onClick={() => setActiveTab(key)}
-                  className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium whitespace-nowrap transition ${
                     isActive
-                      ? "bg-zinc-900 text-white shadow-md"
-                      : "bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900"
+                      ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60"
+                      : "text-zinc-600 hover:text-zinc-900"
                   }`}
                 >
-                  <TabIcon className={`h-4 w-4 ${isActive ? "text-white" : "text-zinc-400"}`} />
+                  <TabIcon className={`h-4 w-4 shrink-0 ${isActive ? "text-zinc-800" : "text-zinc-400"}`} />
                   {label}
                   {badge != null && (
-                    <span className={`ml-0.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${
-                      isActive ? "bg-white/20 text-white" : "bg-zinc-100 text-zinc-500"
-                    }`}>
+                    <span
+                      className={`ml-0.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${
+                        isActive ? "bg-zinc-900 text-white" : "bg-zinc-200/80 text-zinc-600"
+                      }`}
+                    >
                       {badge}
                     </span>
                   )}
@@ -439,99 +815,166 @@ export function OrganizationRulesPage() {
         </div>
 
         {loading ? (
-          <div className="rounded-2xl border border-zinc-200/90 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
             <SkeletonBlock />
           </div>
         ) : (
-          <div className="rounded-2xl border border-zinc-200/90 bg-white shadow-sm overflow-hidden">
-            <div className="p-5 sm:p-7">
+          <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+            <div className="p-6 sm:p-8 lg:p-10">
               {/* ===== GENERAL ===== */}
               {activeTab === "general" && (
                 <SectionShell
                   icon={Network}
-                  iconColor="text-teal-600"
+                  iconColor="text-zinc-700"
                   title="Company month & organizational hierarchy"
                   description="Set the first day of your monthly cycle, timezone, and identify the chief executive. Department managers are listed from the Departments module."
                 >
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    <FieldGroup
-                      label="Month starts on calendar day (1–31)"
-                      hint="1 = standard calendar month. E.g. 26 = period runs 26th to 25th of the next month."
-                    >
-                      <input
-                        type="number" min={1} max={31}
-                        className={`${NUM_CLS} max-w-[8rem]`}
-                        value={companyMonthStartDay}
-                        onChange={(e) => setCompanyMonthStartDay(Math.min(31, Math.max(1, Number(e.target.value) || 1)))}
-                      />
-                    </FieldGroup>
-                    <FieldGroup label="Company timezone (IANA)">
-                      <input
-                        type="text"
-                        className={`${INPUT_CLS} max-w-xs`}
-                        value={companyTimezone}
-                        onChange={(e) => setCompanyTimezone(e.target.value)}
-                        placeholder="Africa/Cairo"
-                      />
-                    </FieldGroup>
-                    <FieldGroup label="Chief executive title">
-                      <input
-                        type="text"
-                        className={INPUT_CLS}
-                        value={chiefExecutiveTitle}
-                        onChange={(e) => setChiefExecutiveTitle(e.target.value)}
-                        placeholder="e.g. Chief Executive Officer, Managing Director"
-                      />
-                    </FieldGroup>
-                    <FieldGroup label="Chief executive (employee record)">
-                      <select
-                        className={SELECT_CLS}
-                        value={chiefExecutiveEmployeeId}
-                        onChange={(e) => setChiefExecutiveEmployeeId(e.target.value)}
-                      >
-                        <option value="">Not set</option>
-                        {employeeOptions.map((emp) => (
-                          <option key={emp.id || emp._id} value={emp.id || emp._id}>
-                            {emp.fullName || emp.email} {emp.employeeCode ? `(${emp.employeeCode})` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </FieldGroup>
-                  </div>
-
-                  <div className="mt-8 pt-6 border-t border-zinc-100">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h3 className="text-sm font-semibold text-zinc-800">Department managers</h3>
-                        <p className="text-xs text-zinc-500 mt-0.5">
-                          Update names and emails in{" "}
-                          <Link to="/departments" className="font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2">Departments</Link>.
-                        </p>
+                  <section className="space-y-3">
+                    <header className="px-0.5">
+                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Fiscal month & leadership</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-500">Used across payroll, attendance periods, and reporting.</p>
+                    </header>
+                    <div className="overflow-hidden rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-6">
+                      <div className="grid gap-6 sm:grid-cols-2">
+                        <FieldGroup
+                          label="Month starts on calendar day (1–31)"
+                          hint="1 = standard calendar month. E.g. 26 = period runs 26th to 25th of the next month."
+                        >
+                          <input
+                            type="number" min={1} max={31}
+                            className={`${NUM_CLS} max-w-[8rem]`}
+                            value={companyMonthStartDay}
+                            onChange={(e) => setCompanyMonthStartDay(Math.min(31, Math.max(1, Number(e.target.value) || 1)))}
+                          />
+                        </FieldGroup>
+                        <FieldGroup label="Company timezone (IANA)">
+                          <input
+                            type="text"
+                            className={`${INPUT_CLS} max-w-xs`}
+                            value={companyTimezone}
+                            onChange={(e) => setCompanyTimezone(e.target.value)}
+                            placeholder="Africa/Cairo"
+                          />
+                        </FieldGroup>
+                        <FieldGroup label="Chief executive title">
+                          <input
+                            type="text"
+                            className={INPUT_CLS}
+                            value={chiefExecutiveTitle}
+                            onChange={(e) => setChiefExecutiveTitle(e.target.value)}
+                            placeholder="e.g. Chief Executive Officer, Managing Director"
+                          />
+                        </FieldGroup>
+                        <FieldGroup label="Chief executive (employee record)">
+                          <select
+                            className={SELECT_CLS}
+                            value={chiefExecutiveEmployeeId}
+                            onChange={(e) => setChiefExecutiveEmployeeId(e.target.value)}
+                          >
+                            <option value="">Not set</option>
+                            {employeeOptions.map((emp) => (
+                              <option key={emp.id || emp._id} value={emp.id || emp._id}>
+                                {emp.fullName || emp.email} {emp.employeeCode ? `(${emp.employeeCode})` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </FieldGroup>
                       </div>
+                      {!chiefExecutiveEmployeeId.trim() ? (
+                        <p className="mt-4 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
+                          A Chief Executive is mandatory. Save is blocked until a valid active employee is selected.
+                        </p>
+                      ) : null}
                     </div>
+                  </section>
+
+                  <section className="space-y-3">
+                    <header className="px-0.5">
+                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Partners governance</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-500">
+                        Partner records can be created or edited only by the active Chief Executive or Admin.
+                      </p>
+                    </header>
+                    <div className="overflow-hidden rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-6">
+                      {partners.length === 0 ? (
+                        <p className="text-sm text-zinc-500">No partners configured.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {partners.map((p) => {
+                            const pid = p._id || p.id;
+                            return (
+                              <div key={pid} className="grid gap-3 rounded-xl border border-zinc-200 p-3 sm:grid-cols-5">
+                                <input className={INPUT_CLS} value={p.name || ""} disabled={!canEditPartners || savingPartner} onChange={(e) => setPartners((prev) => prev.map((row) => (String(row._id || row.id) === String(pid) ? { ...row, name: e.target.value } : row)))} />
+                                <input className={INPUT_CLS} value={p.title || ""} disabled={!canEditPartners || savingPartner} onChange={(e) => setPartners((prev) => prev.map((row) => (String(row._id || row.id) === String(pid) ? { ...row, title: e.target.value } : row)))} />
+                                <input className={NUM_CLS} type="number" min={0} max={100} value={p.ownershipPercent ?? ""} disabled={!canEditPartners || savingPartner} onChange={(e) => setPartners((prev) => prev.map((row) => (String(row._id || row.id) === String(pid) ? { ...row, ownershipPercent: e.target.value } : row)))} />
+                                <button type="button" className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-60" disabled={!canEditPartners || savingPartner} onClick={() => handleUpdatePartner(p)}>Update</button>
+                                <button type="button" className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60" disabled={!canEditPartners || savingPartner} onClick={() => handleDeletePartner(pid)}>Remove</button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {canEditPartners ? (
+                        <div className="mt-4 grid gap-3 rounded-xl border border-dashed border-zinc-300 p-3 sm:grid-cols-5">
+                          <input className={INPUT_CLS} placeholder="Partner name" value={partnerDraft.name} onChange={(e) => setPartnerDraft((prev) => ({ ...prev, name: e.target.value }))} />
+                          <input className={INPUT_CLS} placeholder="Title" value={partnerDraft.title} onChange={(e) => setPartnerDraft((prev) => ({ ...prev, title: e.target.value }))} />
+                          <input className={NUM_CLS} type="number" min={0} max={100} placeholder="Ownership %" value={partnerDraft.ownershipPercent} onChange={(e) => setPartnerDraft((prev) => ({ ...prev, ownershipPercent: e.target.value }))} />
+                          <select className={SELECT_CLS} value={partnerDraft.employeeId} onChange={(e) => setPartnerDraft((prev) => ({ ...prev, employeeId: e.target.value }))}>
+                            <option value="">No linked employee</option>
+                            {employeeOptions.map((emp) => (
+                              <option key={emp.id || emp._id} value={emp.id || emp._id}>
+                                {emp.fullName || emp.email}
+                              </option>
+                            ))}
+                          </select>
+                          <button type="button" className="rounded-xl bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60" disabled={savingPartner} onClick={handleCreatePartner}>Add partner</button>
+                        </div>
+                      ) : (
+                        <p className="mt-4 rounded-xl bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200">
+                          Read-only: partner management is restricted to Chief Executive and Admin.
+                        </p>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="space-y-3">
+                    <header className="px-0.5">
+                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Department managers</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-500">
+                        Read-only here. Update names and emails in{" "}
+                        <Link to="/departments" className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600">
+                          Departments
+                        </Link>
+                        .
+                      </p>
+                    </header>
                     {departmentRows.length === 0 ? (
-                      <p className="py-4 text-sm text-zinc-500 text-center bg-zinc-50 rounded-xl">No departments loaded.</p>
+                      <div className="rounded-[20px] bg-zinc-50/50 py-10 text-center text-sm text-zinc-500 ring-1 ring-zinc-200/80">
+                        No departments loaded.
+                      </div>
                     ) : (
-                      <div className="overflow-x-auto rounded-xl border border-zinc-200/90">
-                        <table className="min-w-full divide-y divide-zinc-200 text-sm">
-                          <thead className="bg-zinc-50 text-left text-xs font-medium text-zinc-500">
-                            <tr>
-                              <th className="px-4 py-2.5">Department</th>
-                              <th className="px-4 py-2.5">Code</th>
-                              <th className="px-4 py-2.5">Head</th>
-                              <th className="px-4 py-2.5 w-20" />
+                      <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+                        <table className="min-w-full divide-y divide-zinc-100 text-sm">
+                          <thead>
+                            <tr className="bg-zinc-50/80 text-left text-xs font-medium text-zinc-500">
+                              <th className="px-4 py-3">Department</th>
+                              <th className="px-4 py-3">Code</th>
+                              <th className="px-4 py-3">Head</th>
+                              <th className="w-20 px-4 py-3" />
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-zinc-100 bg-white">
+                          <tbody className="divide-y divide-zinc-100">
                             {departmentRows.map((d) => {
                               const did = d.id || d._id;
                               return (
-                                <tr key={did} className="hover:bg-zinc-50/60">
-                                  <td className="px-4 py-2.5 font-medium text-zinc-900">{d.name}</td>
-                                  <td className="px-4 py-2.5 text-zinc-500">{d.code || "—"}</td>
-                                  <td className="px-4 py-2.5 text-zinc-700">{d.head?.trim() || "—"}</td>
-                                  <td className="px-4 py-2.5 text-right">
-                                    <Link to={`/departments/${did}/edit`} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">Edit</Link>
+                                <tr key={did} className="transition hover:bg-zinc-50/60">
+                                  <td className="px-4 py-3 font-medium text-zinc-900">{d.name}</td>
+                                  <td className="px-4 py-3 text-zinc-500">{d.code || "—"}</td>
+                                  <td className="px-4 py-3 text-zinc-600">{d.head?.trim() || "—"}</td>
+                                  <td className="px-4 py-3 text-right">
+                                    <Link to={`/departments/${did}/edit`} className="text-xs font-semibold text-zinc-700 hover:text-zinc-900">
+                                      Edit
+                                    </Link>
                                   </td>
                                 </tr>
                               );
@@ -540,7 +983,7 @@ export function OrganizationRulesPage() {
                         </table>
                       </div>
                     )}
-                  </div>
+                  </section>
                 </SectionShell>
               )}
 
@@ -548,10 +991,11 @@ export function OrganizationRulesPage() {
               {activeTab === "documents" && (
                 <SectionShell
                   icon={FileStack}
+                  iconColor="text-zinc-700"
                   title="Required documents"
                   description="Documents shown to employees in onboarding checklists. Mark items as mandatory to flag missing uploads."
                   actions={
-                    <button type="button" onClick={addDoc} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50">
+                    <button type="button" onClick={addDoc} className={SECONDARY_BTN}>
                       <Plus className="h-4 w-4" /> Add document
                     </button>
                   }
@@ -561,29 +1005,36 @@ export function OrganizationRulesPage() {
                   ) : (
                     <ul className="space-y-3">
                       {requiredDocs.map((doc, index) => (
-                        <li key={index} className={`relative rounded-xl border transition-shadow hover:shadow-md ${doc.isMandatory ? "border-indigo-200/60 bg-gradient-to-r from-indigo-50/30 to-white" : "border-zinc-200/90 bg-white"}`}>
-                          <div className="flex flex-col gap-4 p-4 sm:flex-row sm:flex-wrap sm:items-end">
+                        <li
+                          key={index}
+                          className={`relative overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 transition ${
+                            doc.isMandatory ? "ring-zinc-900/15" : "ring-zinc-950/[0.06]"
+                          }`}
+                        >
+                          <div className="flex flex-col gap-5 p-5 sm:flex-row sm:flex-wrap sm:items-end">
                             <div className="min-w-0 flex-1 sm:min-w-[200px]">
-                              <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-zinc-500">
-                                <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded bg-zinc-200/80 px-1 text-[10px] font-semibold text-zinc-700">{index + 1}</span>
+                              <label className="mb-1.5 flex items-center gap-2 text-xs font-medium text-zinc-500">
+                                <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-lg bg-zinc-100 text-[11px] font-semibold text-zinc-600 ring-1 ring-zinc-200/80">
+                                  {index + 1}
+                                </span>
                                 Name
                               </label>
                               <input type="text" className={INPUT_CLS} placeholder="e.g. National ID, employment contract" value={doc.name} onChange={(e) => updateDoc(index, "name", e.target.value)} />
                             </div>
                             <div className="min-w-0 flex-[2] sm:min-w-[280px]">
-                              <label className="mb-1 block text-xs font-medium text-zinc-500">Instructions</label>
+                              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Instructions</label>
                               <input type="text" className={INPUT_CLS} placeholder="Optional — e.g. must be a clear color scan" value={doc.description} onChange={(e) => updateDoc(index, "description", e.target.value)} />
                             </div>
-                            <div className="flex items-center gap-3 border-t border-zinc-100 pt-3 sm:border-0 sm:pt-0">
-                              <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
-                                <input type="checkbox" className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500/30" checked={doc.isMandatory} onChange={(e) => updateDoc(index, "isMandatory", e.target.checked)} />
-                                <span className="flex items-center gap-1 font-medium">
-                                  {doc.isMandatory && <ShieldCheck className="h-4 w-4 text-indigo-600" aria-hidden />}
+                            <div className="flex items-center gap-3 border-t border-zinc-100 pt-4 sm:border-0 sm:pt-0">
+                              <label className="flex cursor-pointer items-center gap-2.5 text-sm text-zinc-800">
+                                <input type="checkbox" className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-400/30" checked={doc.isMandatory} onChange={(e) => updateDoc(index, "isMandatory", e.target.checked)} />
+                                <span className="flex items-center gap-1.5 font-medium">
+                                  {doc.isMandatory && <ShieldCheck className="h-4 w-4 text-zinc-700" aria-hidden />}
                                   Mandatory
                                 </span>
                               </label>
                             </div>
-                            <button type="button" onClick={() => removeDoc(index)} className="absolute right-3 top-3 rounded-lg p-2 text-zinc-400 opacity-70 transition hover:bg-red-50 hover:text-red-600 sm:static sm:ml-auto sm:self-center sm:opacity-100" aria-label={`Remove document row ${index + 1}`}>
+                            <button type="button" onClick={() => removeDoc(index)} className="absolute right-3 top-3 rounded-full p-2 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 sm:static sm:ml-auto sm:self-center" aria-label={`Remove document row ${index + 1}`}>
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
@@ -598,11 +1049,11 @@ export function OrganizationRulesPage() {
               {activeTab === "workplaces" && (
                 <SectionShell
                   icon={MapPinned}
-                  iconColor="text-blue-600"
+                  iconColor="text-zinc-700"
                   title="Workplaces & branches"
                   description="Governorates and cities power workplace pickers. Each branch matches the Branch record shape (name, code, insurance number, location, city, country, status)."
                   actions={
-                    <button type="button" onClick={addLocation} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50">
+                    <button type="button" onClick={addLocation} className={SECONDARY_BTN}>
                       <Plus className="h-4 w-4" /> Add location
                     </button>
                   }
@@ -615,36 +1066,38 @@ export function OrganizationRulesPage() {
                         const isOpen = expandedLocations[cityIndex] !== false;
                         const filledBranches = (loc.branches || []).filter((b) => (b.name || "").trim() || (b.code || "").trim()).length;
                         return (
-                          <div key={cityIndex} className="rounded-xl border border-zinc-200/90 bg-white overflow-hidden transition hover:shadow-sm">
+                          <div key={cityIndex} className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06] transition hover:ring-zinc-950/[0.1]">
                             <button
                               type="button"
                               onClick={() => setExpandedLocations((p) => ({ ...p, [cityIndex]: !isOpen }))}
-                              className="w-full flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-zinc-50/60 transition text-left"
+                              className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition hover:bg-zinc-50/80"
                             >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <MapPinned className="h-4 w-4 text-blue-500 shrink-0" />
+                              <div className="flex min-w-0 items-center gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 ring-1 ring-zinc-200/80">
+                                  <MapPinned className="h-4 w-4 text-zinc-600" />
+                                </div>
                                 <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-zinc-900 truncate">
+                                  <p className="truncate text-[15px] font-semibold tracking-tight text-zinc-900">
                                     {loc.governorate && loc.city ? `${loc.city}, ${loc.governorate}` : "New location"}
                                   </p>
-                                  <p className="text-[11px] text-zinc-400">{filledBranches} branch{filledBranches !== 1 ? "es" : ""}</p>
+                                  <p className="text-xs text-zinc-500">{filledBranches} branch{filledBranches !== 1 ? "es" : ""}</p>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 shrink-0">
+                              <div className="flex shrink-0 items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); removeCity(cityIndex); }}
-                                  className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-red-50 hover:text-red-600"
+                                  className="rounded-full p-2 text-zinc-400 transition hover:bg-red-50 hover:text-red-600"
                                   aria-label="Remove location"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </button>
-                                {isOpen ? <ChevronUp className="h-4 w-4 text-zinc-400" /> : <ChevronDown className="h-4 w-4 text-zinc-400" />}
+                                <ChevronDown className={`h-5 w-5 text-zinc-400 transition ${isOpen ? "-rotate-180" : ""}`} aria-hidden />
                               </div>
                             </button>
 
                             {isOpen && (
-                              <div className="border-t border-zinc-100 p-5 space-y-5">
+                              <div className="space-y-6 border-t border-zinc-100 bg-zinc-50/30 p-5 sm:p-6">
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                   <FieldGroup label="Governorate">
                                     <select className={SELECT_CLS} value={loc.governorate} onChange={(e) => updateLocation(cityIndex, "governorate", e.target.value)}>
@@ -660,17 +1113,19 @@ export function OrganizationRulesPage() {
                                   </FieldGroup>
                                 </div>
 
-                                <div className="border-t border-zinc-100 pt-4">
-                                  <div className="flex items-center justify-between mb-3">
-                                    <span className="text-xs font-semibold text-zinc-700">Branches</span>
-                                    <button type="button" onClick={() => addBranch(cityIndex)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">+ Add branch</button>
+                                <div className="border-t border-zinc-100/80 pt-5">
+                                  <div className="mb-4 flex items-center justify-between">
+                                    <span className="text-[13px] font-semibold text-zinc-900">Branches</span>
+                                    <button type="button" onClick={() => addBranch(cityIndex)} className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+                                      + Add branch
+                                    </button>
                                   </div>
                                   {loc.branches.length === 0 ? (
-                                    <p className="py-3 text-center text-xs text-zinc-400 bg-zinc-50 rounded-lg">No branches — add one to define sites.</p>
+                                    <p className="rounded-2xl bg-white py-8 text-center text-sm text-zinc-500 ring-1 ring-zinc-200/80">No branches — add one to define sites.</p>
                                   ) : (
-                                    <div className="space-y-3">
+                                    <div className="space-y-4">
                                       {loc.branches.map((branch, bi) => (
-                                        <div key={bi} className="rounded-lg border border-zinc-200 bg-zinc-50/40 p-4 space-y-3">
+                                        <div key={bi} className="space-y-4 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5">
                                           <div className="flex items-center justify-between gap-2">
                                             <span className="text-xs font-semibold text-zinc-600">Branch {bi + 1}</span>
                                             <button type="button" onClick={() => removeBranch(cityIndex, bi)} className="shrink-0 rounded-lg p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove branch">
@@ -713,18 +1168,27 @@ export function OrganizationRulesPage() {
               {activeTab === "leave" && (
                 <SectionShell
                   icon={Plane}
-                  iconColor="text-teal-600"
+                  iconColor="text-zinc-700"
                   title="Leave & excuse policies"
                   description="Rules by version number — the highest version applies to new requests. Company timezone is used for time-off logic."
                   actions={
-                    <button type="button" onClick={addLeavePolicy} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50">
-                      <Plus className="h-4 w-4" /> Add policy version
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {canManageBulkLeaveCredits && (
+                        <Link to="/leave-operations" className={SECONDARY_BTN}>
+                          <Gift className="h-4 w-4" /> Bulk credits & history
+                        </Link>
+                      )}
+                      <button type="button" onClick={addLeavePolicy} className={SECONDARY_BTN}>
+                        <Plus className="h-4 w-4" /> Add policy version
+                      </button>
+                    </div>
                   }
                 >
-                  <div className="rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3 flex gap-3 items-start text-xs text-blue-800">
-                    <Info className="h-4 w-4 shrink-0 mt-0.5 text-blue-500" />
-                    <p>Each version defines vacation and excuse rules independently. The <strong className="font-semibold">highest version number</strong> is always active for new requests. Keep older versions for audit trail.</p>
+                  <div className="flex gap-3 rounded-2xl bg-zinc-100/70 px-4 py-3.5 text-xs leading-relaxed text-zinc-600 ring-1 ring-zinc-200/80">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" aria-hidden />
+                    <p>
+                      Each version defines vacation and excuse rules independently. The <strong className="font-semibold text-zinc-800">highest version number</strong> is active for new requests. Older versions stay for audit.
+                    </p>
                   </div>
 
                   {leavePolicies.length === 0 ? (
@@ -735,40 +1199,45 @@ export function OrganizationRulesPage() {
                         const isOpen = expandedPolicies[p.version] !== false;
                         const isHighest = p.version === Math.max(...leavePolicies.map((x) => Number(x.version) || 0));
                         return (
-                          <div key={idx} className={`rounded-xl border overflow-hidden transition ${isHighest ? "border-emerald-200 bg-emerald-50/20" : "border-zinc-200 bg-white"}`}>
+                          <div
+                            key={idx}
+                            className={`overflow-hidden rounded-[20px] shadow-sm ring-1 transition ${
+                              isHighest ? "bg-white ring-zinc-900/20" : "bg-white ring-zinc-950/[0.06]"
+                            }`}
+                          >
                             <button
                               type="button"
                               onClick={() => setExpandedPolicies((prev) => ({ ...prev, [p.version]: !isOpen }))}
-                              className="w-full flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-zinc-50/60 transition text-left"
+                              className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition hover:bg-zinc-50/80"
                             >
                               <div className="flex items-center gap-3">
-                                <span className="text-sm font-bold text-zinc-900">Version {p.version}</span>
+                                <span className="text-[15px] font-semibold tracking-tight text-zinc-900">Version {p.version}</span>
                                 {isHighest && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-inset ring-emerald-200/60">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
                                     <CheckCircle2 className="h-3 w-3" /> Active
                                   </span>
                                 )}
                               </div>
-                              <div className="flex items-center gap-2">
-                                <button type="button" onClick={(e) => { e.stopPropagation(); removeLeavePolicy(idx); }} className="rounded-lg p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-600 transition" aria-label="Remove policy">
+                              <div className="flex items-center gap-1">
+                                <button type="button" onClick={(e) => { e.stopPropagation(); removeLeavePolicy(idx); }} className="rounded-full p-2 text-zinc-400 transition hover:bg-red-50 hover:text-red-600" aria-label="Remove policy">
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </button>
-                                {isOpen ? <ChevronUp className="h-4 w-4 text-zinc-400" /> : <ChevronDown className="h-4 w-4 text-zinc-400" />}
+                                <ChevronDown className={`h-5 w-5 text-zinc-400 transition ${isOpen ? "-rotate-180" : ""}`} aria-hidden />
                               </div>
                             </button>
 
                             {isOpen && (
-                              <div className="border-t border-zinc-100 p-5 space-y-5">
+                              <div className="space-y-6 border-t border-zinc-100 bg-zinc-50/30 p-5 sm:p-6">
                                 <FieldGroup label="Version # (highest wins)" className="max-w-[10rem]">
                                   <input type="number" className={NUM_CLS} value={p.version} onChange={(e) => updateLeavePolicy(idx, { version: Number(e.target.value) })} />
                                 </FieldGroup>
 
                                 <div className="grid gap-5 sm:grid-cols-2">
                                   {/* Vacation */}
-                                  <div className="rounded-xl border border-zinc-200 bg-white p-4 space-y-4">
-                                    <div className="flex items-center gap-2 pb-2 border-b border-zinc-100">
-                                      <Plane className="h-4 w-4 text-teal-500" />
-                                      <p className="text-sm font-semibold text-zinc-800">Vacation rules</p>
+                                  <div className="space-y-4 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-sm">
+                                    <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
+                                      <Plane className="h-4 w-4 text-zinc-500" />
+                                      <p className="text-[13px] font-semibold tracking-tight text-zinc-900">Vacation rules</p>
                                     </div>
                                     <label className="flex items-center gap-2 text-xs text-zinc-700 cursor-pointer">
                                       <input type="checkbox" className="h-4 w-4 rounded border-zinc-300" checked={Boolean(p.vacationRules?.entitlementVariesByYear)} onChange={(e) => updateLeavePolicyNested(idx, "vacationRules", "entitlementVariesByYear", e.target.checked)} />
@@ -797,10 +1266,10 @@ export function OrganizationRulesPage() {
                                   </div>
 
                                   {/* Excuse */}
-                                  <div className="rounded-xl border border-zinc-200 bg-white p-4 space-y-4">
-                                    <div className="flex items-center gap-2 pb-2 border-b border-zinc-100">
-                                      <Clock className="h-4 w-4 text-orange-500" />
-                                      <p className="text-sm font-semibold text-zinc-800">Excuse rules</p>
+                                  <div className="space-y-4 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-sm">
+                                    <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
+                                      <Clock className="h-4 w-4 text-zinc-500" />
+                                      <p className="text-[13px] font-semibold tracking-tight text-zinc-900">Excuse rules</p>
                                     </div>
                                     <FieldGroup label="Max hours per excuse">
                                       <input type="number" min={0.25} step={0.25} className={`${NUM_CLS} max-w-[8rem]`} value={p.excuseRules?.maxHoursPerExcuse ?? 8} onChange={(e) => updateLeavePolicyNested(idx, "excuseRules", "maxHoursPerExcuse", Number(e.target.value))} />
@@ -837,118 +1306,334 @@ export function OrganizationRulesPage() {
               {activeTab === "attendance" && (
                 <SectionShell
                   icon={Clock}
-                  iconColor="text-orange-600"
+                  iconColor="text-zinc-700"
                   title="Attendance & deduction rules"
-                  description="Global work hours, grace period, and penalty tiers for lateness, absence, and early departure. Deductions are expressed as days deducted from monthly pay."
+                  description="Global work hours (start/end support seconds), grace period, and penalty tiers for lateness, absence, and early departure. Deductions are expressed as days deducted from monthly pay."
                 >
-                  {/* Shift hours visual */}
-                  <div className="rounded-xl border border-orange-100 bg-gradient-to-r from-orange-50/60 to-amber-50/40 p-4">
-                    <div className="flex items-center gap-3 text-xs font-semibold text-orange-800 mb-3">
-                      <Clock className="h-4 w-4" />
-                      Shift schedule
-                    </div>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 border border-orange-200/60 shadow-sm">
-                        <span className="text-[10px] uppercase tracking-wide text-zinc-400 font-bold">Start</span>
-                        <input type="time" className="text-sm font-bold text-zinc-900 bg-transparent outline-none w-24" value={attendanceRules.standardStartTime} onChange={(e) => updateAttendanceField("standardStartTime", e.target.value)} />
-                      </div>
-                      <span className="text-zinc-300 font-bold">→</span>
-                      <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 border border-orange-200/60 shadow-sm">
-                        <span className="text-[10px] uppercase tracking-wide text-zinc-400 font-bold">End</span>
-                        <input type="time" className="text-sm font-bold text-zinc-900 bg-transparent outline-none w-24" value={attendanceRules.standardEndTime} onChange={(e) => updateAttendanceField("standardEndTime", e.target.value)} />
-                      </div>
-                      <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 border border-orange-200/60 shadow-sm">
-                        <span className="text-[10px] uppercase tracking-wide text-zinc-400 font-bold">Grace</span>
-                        <input type="number" min={0} className="text-sm font-bold text-zinc-900 bg-transparent outline-none w-14 tabular-nums" value={attendanceRules.gracePeriodMinutes} onChange={(e) => updateAttendanceField("gracePeriodMinutes", Number(e.target.value))} />
-                        <span className="text-xs text-zinc-400">min</span>
-                      </div>
-                      <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 border border-orange-200/60 shadow-sm">
-                        <span className="text-[10px] uppercase tracking-wide text-zinc-400 font-bold">Days/mo</span>
-                        <input type="number" min={1} max={31} className="text-sm font-bold text-zinc-900 bg-transparent outline-none w-12 tabular-nums" value={attendanceRules.workingDaysPerMonth} onChange={(e) => updateAttendanceField("workingDaysPerMonth", Number(e.target.value))} />
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-orange-900/80 mt-3 leading-relaxed">
-                      <strong>Days/mo</strong> is the single company value for dividing monthly salary (attendance deductions,
-                      payroll daily rate, and assessment multipliers). It is stored on both attendance and payroll policy blocks
-                      in sync.
-                    </p>
-                    <p className="text-[11px] text-orange-900/80 mt-3 leading-relaxed">
-                      Weekly rest days below use UTC weekday (0 = Sunday … 6 = Saturday), matching how attendance dates are stored. Typical Egypt setup: Friday + Saturday (5 and 6). Clear all to treat every calendar day as a possible working day in reports.
-                    </p>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {[
-                        { dow: 0, label: "Sun / الأحد" },
-                        { dow: 1, label: "Mon / الاثنين" },
-                        { dow: 2, label: "Tue / الثلاثاء" },
-                        { dow: 3, label: "Wed / الأربعاء" },
-                        { dow: 4, label: "Thu / الخميس" },
-                        { dow: 5, label: "Fri / الجمعة" },
-                        { dow: 6, label: "Sat / السبت" },
-                      ].map(({ dow, label }) => {
-                        const selected = (attendanceRules.weeklyRestDays || []).includes(dow);
-                        return (
-                          <button
-                            key={dow}
-                            type="button"
-                            onClick={() => toggleWeeklyRestDay(dow)}
-                            className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
-                              selected
-                                ? "border-orange-400 bg-orange-100 text-orange-900"
-                                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <div className="space-y-10">
+                    {/* —— Schedule & grace —— */}
+                    <section className="space-y-3">
+                      <header className="px-0.5">
+                        <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Schedule & grace</h3>
+                        <p className="mt-1 max-w-prose text-sm leading-snug text-zinc-500">
+                          Company default check-in and check-out. Supports seconds. Grace minutes extend how late someone can arrive before status becomes late, unless the monthly grace budget has run out.
+                        </p>
+                      </header>
 
-                  {/* Deduction tiers */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-zinc-800">Late arrival deduction tiers</p>
-                        <p className="text-xs text-zinc-500">Minutes late range → days deducted from salary.</p>
+                      <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+                        <div className="grid divide-y divide-zinc-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                          <div className="p-4 sm:p-5">
+                            <label className="block text-xs font-medium text-zinc-500">Start</label>
+                            <input
+                              type="time"
+                              step={1}
+                              className="mt-2 w-full min-w-0 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-[15px] font-medium text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                              value={attendanceRules.standardStartTime}
+                              onChange={(e) => updateAttendanceField("standardStartTime", e.target.value)}
+                            />
+                          </div>
+                          <div className="p-4 sm:p-5">
+                            <label className="block text-xs font-medium text-zinc-500">End</label>
+                            <input
+                              type="time"
+                              step={1}
+                              className="mt-2 w-full min-w-0 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-[15px] font-medium text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                              value={attendanceRules.standardEndTime}
+                              onChange={(e) => updateAttendanceField("standardEndTime", e.target.value)}
+                            />
+                          </div>
+                          <div className="p-4 sm:p-5">
+                            <label className="block text-xs font-medium text-zinc-500">Grace period</label>
+                            <div className="mt-2 flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={0}
+                                className="w-full min-w-0 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-[15px] font-medium tabular-nums text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                                value={attendanceRules.gracePeriodMinutes}
+                                onChange={(e) => updateAttendanceField("gracePeriodMinutes", Number(e.target.value))}
+                              />
+                              <span className="shrink-0 text-sm text-zinc-400">min</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-zinc-100 bg-zinc-50/40 px-4 py-4 sm:px-5">
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <label className="flex cursor-pointer items-start gap-3 sm:items-center">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 h-[18px] w-[18px] shrink-0 rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-400/30 sm:mt-0"
+                                checked={Boolean(attendanceRules.monthlyGraceUsesEnabled)}
+                                onChange={(e) => updateAttendanceField("monthlyGraceUsesEnabled", e.target.checked)}
+                              />
+                              <span>
+                                <span className="block text-[15px] font-medium text-zinc-900">Monthly grace budget</span>
+                                <span className="mt-0.5 block text-xs leading-snug text-zinc-500">
+                                  Limit how many times per fiscal month an arrival can sit in the grace window without counting as late. Excused late days do not use a slot.
+                                </span>
+                              </span>
+                            </label>
+                            <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-zinc-500">Max / month</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={31}
+                                  disabled={!attendanceRules.monthlyGraceUsesEnabled}
+                                  className="w-14 rounded-xl border border-zinc-200 bg-white px-2.5 py-2 text-center text-sm font-semibold tabular-nums text-zinc-900 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200/80 disabled:cursor-not-allowed disabled:opacity-45"
+                                  value={attendanceRules.monthlyGraceUsesAllowed ?? 0}
+                                  onChange={(e) =>
+                                    updateAttendanceField(
+                                      "monthlyGraceUsesAllowed",
+                                      Math.min(31, Math.max(0, Number(e.target.value) || 0)),
+                                    )
+                                  }
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setAttendanceRules((p) => ({ ...p, monthlyGraceUsesEnabled: false }))}
+                                className="text-sm font-medium text-zinc-500 transition hover:text-zinc-800"
+                              >
+                                Turn off
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-zinc-100 px-4 py-4 sm:px-5">
+                          <label className="block text-xs font-medium text-zinc-500">Working days per month</label>
+                          <p className="mt-1 max-w-prose text-xs leading-relaxed text-zinc-400">
+                            One number for salary math: attendance deductions, payroll daily rate, and assessments. Synced with payroll policy.
+                          </p>
+                          <input
+                            type="number"
+                            min={1}
+                            max={31}
+                            className="mt-3 w-24 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-[15px] font-semibold tabular-nums text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                            value={attendanceRules.workingDaysPerMonth}
+                            onChange={(e) => updateAttendanceField("workingDaysPerMonth", Number(e.target.value))}
+                          />
+                        </div>
                       </div>
-                      <button type="button" onClick={addDeductionTier} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50">
-                        <Plus className="h-3.5 w-3.5" /> Add tier
-                      </button>
-                    </div>
-                    {attendanceRules.lateDeductionTiers.length === 0 ? (
-                      <p className="text-xs text-zinc-400 py-4 text-center border border-dashed border-zinc-200 rounded-lg bg-zinc-50/30">
-                        No tiers — late arrivals will not be penalized until tiers are added.
+
+                      <ExpandableRulesHint
+                        accent="sky"
+                        title="How monthly grace behaves"
+                        subtitle="مثال رقمي + معاينة خصم من شرائحك — اضغط للتفاصيل"
+                        subtitleDir="rtl"
+                      >
+                        <div className="space-y-4">
+                          <p className="text-xs leading-relaxed text-zinc-600">
+                            Workdays in the fiscal month (excluding weekly rest and holidays) count toward the budget when check-in is after shift start but still within the grace window. After the limit, late is measured from shift start and the former grace window can incur the first tier.
+                          </p>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200/80">
+                              <p className="text-xs font-semibold text-zinc-900">Budget off</p>
+                              <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-zinc-600">
+                                <li>Example: Mon / Wed / Fri, check-in <strong className="text-zinc-800">09:07</strong>, shift <strong>09:00</strong>, grace <strong>10 min</strong>.</li>
+                                <li>All three → <strong className="text-emerald-600">PRESENT</strong>; no tier deduction.</li>
+                              </ul>
+                            </div>
+                            <div className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200/80">
+                              <p className="text-xs font-semibold text-zinc-900">Budget on (max 2 / month)</p>
+                              <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-zinc-600">
+                                <li>
+                                  <strong className="text-zinc-800">Mon</strong> & <strong className="text-zinc-800">Wed</strong> →{" "}
+                                  <strong className="text-emerald-600">PRESENT</strong> (uses 1 &amp; 2).
+                                </li>
+                                <li>
+                                  <strong className="text-zinc-800">Fri</strong> → quota used →{" "}
+                                  <strong className="text-red-600/90">LATE</strong> from shift start (~7 min); tiers apply.
+                                </li>
+                              </ul>
+                            </div>
+                          </div>
+                          <MonthlyGraceDeductionPreview rules={attendanceRules} />
+                          <p className="text-xs leading-relaxed text-zinc-600" dir="rtl">
+                            ملخص: مع إيقاف الرصيد كل الأيام في المثال <strong>حاضر</strong>. مع حدّ <strong>مرتين</strong> اليوم الثالث يصبح <strong>متأخراً</strong> ويُخصم حسب الجدول.
+                          </p>
+                        </div>
+                      </ExpandableRulesHint>
+                    </section>
+
+                    {/* —— Calendar —— */}
+                    <section className="space-y-3">
+                      <header className="px-0.5">
+                        <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Weekly rest</h3>
+                        <p className="mt-1 max-w-prose text-sm leading-snug text-zinc-500">
+                          Stored as UTC weekday (0 Sunday … 6 Saturday), same as attendance dates. Egypt: often Friday + Saturday. Clear all to count every calendar day in reports.
+                        </p>
+                      </header>
+                      <div className="flex flex-wrap gap-2 rounded-[20px] bg-white p-4 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-5">
+                        {[
+                          { dow: 0, label: "Sun" },
+                          { dow: 1, label: "Mon" },
+                          { dow: 2, label: "Tue" },
+                          { dow: 3, label: "Wed" },
+                          { dow: 4, label: "Thu" },
+                          { dow: 5, label: "Fri" },
+                          { dow: 6, label: "Sat" },
+                        ].map(({ dow, label }) => {
+                          const selected = (attendanceRules.weeklyRestDays || []).includes(dow);
+                          return (
+                            <button
+                              key={dow}
+                              type="button"
+                              onClick={() => toggleWeeklyRestDay(dow)}
+                              className={`min-h-[44px] min-w-[44px] rounded-full px-4 text-sm font-medium transition ${
+                                selected
+                                  ? "bg-zinc-900 text-white shadow-sm"
+                                  : "bg-zinc-100 text-zinc-600 ring-1 ring-zinc-200/80 hover:bg-zinc-200/80"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="px-0.5 text-xs text-zinc-400" dir="rtl">
+                        الأيام بالعربي في التلميح أعلاه؛ الأزرار مختصرة لتقليل الزحمة.
                       </p>
-                    ) : (
-                      <div className="overflow-x-auto rounded-xl border border-zinc-200/90">
-                        <table className="min-w-full divide-y divide-zinc-200 text-sm">
-                          <thead className="bg-zinc-50/90 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                            <tr>
-                              <th className="whitespace-nowrap px-4 py-2.5">From (min)</th>
-                              <th className="whitespace-nowrap px-4 py-2.5">To (min)</th>
-                              <th className="whitespace-nowrap px-4 py-2.5">Days deducted</th>
-                              <th className="w-10 px-2 py-2.5" />
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-zinc-100 bg-white">
-                            {attendanceRules.lateDeductionTiers.map((tier, idx) => (
-                              <tr key={idx} className="hover:bg-zinc-50/80">
-                                <td className="px-4 py-2"><input type="number" min={0} className={`${NUM_CLS} w-24`} value={tier.fromMinutes} onChange={(e) => updateDeductionTier(idx, "fromMinutes", Number(e.target.value))} /></td>
-                                <td className="px-4 py-2"><input type="number" min={1} className={`${NUM_CLS} w-24`} value={tier.toMinutes} onChange={(e) => updateDeductionTier(idx, "toMinutes", Number(e.target.value))} /></td>
-                                <td className="px-4 py-2"><input type="number" min={0} step={0.25} className={`${NUM_CLS} w-24 font-semibold`} value={tier.deductionDays} onChange={(e) => updateDeductionTier(idx, "deductionDays", Number(e.target.value))} /></td>
-                                <td className="px-2 py-2 text-right">
-                                  <button type="button" onClick={() => removeDeductionTier(idx)} className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                    </section>
+
+                    {/* —— Late tiers —— */}
+                    <section className="space-y-4">
+                      <header className="px-0.5">
+                        <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Late arrival tiers</h3>
+                        <p className="mt-1 max-w-prose text-sm leading-snug text-zinc-500">
+                          Minutes after shift start; deduction is expressed in days of monthly pay. Tiers must be contiguous when saved.
+                        </p>
+                      </header>
+
+                      <ExpandableRulesHint
+                        accent="emerald"
+                        title="Reference: tiers vs clock (example shift 09:00)"
+                        subtitle="لماذا يتكرر 10:00 بين صفّين — اضغط للشرح والجدول"
+                        subtitleDir="rtl"
+                      >
+                        <div className="space-y-4">
+                          <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-200/80">
+                            <table className="min-w-full text-left font-mono text-[11px] sm:text-xs">
+                              <thead>
+                                <tr className="border-b border-zinc-100 bg-zinc-50/90">
+                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500">From</th>
+                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500">To</th>
+                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500">Deduction</th>
+                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500">Clock</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-100 text-zinc-700">
+                                <tr>
+                                  <td className="px-3 py-2.5">01:00</td>
+                                  <td className="px-3 py-2.5">10:00</td>
+                                  <td className="px-3 py-2.5 font-sans">0.25 d</td>
+                                  <td className="px-3 py-2.5 text-emerald-800/90">
+                                    <strong>09:01:01</strong> → <strong>09:10:00</strong>
+                                  </td>
+                                </tr>
+                                <tr className="bg-zinc-50/50">
+                                  <td className="px-3 py-2.5">10:00</td>
+                                  <td className="px-3 py-2.5">30:00</td>
+                                  <td className="px-3 py-2.5 font-sans">0.5 d</td>
+                                  <td className="px-3 py-2.5 text-emerald-800/90">
+                                    <strong>09:10:01</strong> → <strong>09:30:00</strong>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="rounded-2xl bg-zinc-100/60 px-4 py-3 text-xs leading-relaxed text-zinc-600">
+                            <strong className="text-zinc-800">Same 10:00 on two rows?</strong> Yes — tier 1 ends at second 600; tier 2 starts at second 601 (<code className="rounded bg-white/90 px-1 ring-1 ring-zinc-200/80">floor(from×60)+1</code>), so you do not need to type 10:01.
+                          </div>
+                          <p className="text-xs leading-relaxed text-zinc-600" dir="rtl">
+                            الشريحة الثانية قد تبدأ بنفس «10:00» كقيمة من؛ السيرفر يحسب أول ثانية للشريحة الثانية تلقائياً.
+                          </p>
+                        </div>
+                      </ExpandableRulesHint>
+
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={addDeductionTier}
+                          className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add tier
+                        </button>
                       </div>
-                    )}
+
+                      {attendanceRules.lateDeductionTiers.length === 0 ? (
+                        <div className="rounded-[20px] border border-dashed border-zinc-200 bg-zinc-50/30 px-4 py-10 text-center">
+                          <p className="text-sm font-medium text-zinc-600">No late tiers</p>
+                          <p className="mx-auto mt-1 max-w-sm text-xs text-zinc-400">Late arrivals will not reduce pay until you add at least one tier.</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+                          <table className="min-w-full divide-y divide-zinc-100 text-sm">
+                            <thead>
+                              <tr className="bg-zinc-50/80 text-left text-xs font-medium text-zinc-500">
+                                <th className="whitespace-nowrap px-4 py-3">From (mm:ss)</th>
+                                <th className="whitespace-nowrap px-4 py-3">To (mm:ss)</th>
+                                <th className="whitespace-nowrap px-4 py-3">Days deducted</th>
+                                <th className="w-12 px-2 py-3" />
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-100">
+                              {attendanceRules.lateDeductionTiers.map((tier, idx) => (
+                                <tr key={idx} className="transition hover:bg-zinc-50/60">
+                                  <td className="px-4 py-3 align-middle">
+                                    <LateTierMmSsInput
+                                      valueMinutes={tier.fromMinutes}
+                                      onCommit={(v) => updateDeductionTier(idx, "fromMinutes", v)}
+                                      className={`${NUM_CLS} w-full max-w-[8.5rem] font-mono text-sm`}
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3 align-middle">
+                                    <LateTierMmSsInput
+                                      valueMinutes={tier.toMinutes}
+                                      onCommit={(v) => updateDeductionTier(idx, "toMinutes", v)}
+                                      className={`${NUM_CLS} w-full max-w-[8.5rem] font-mono text-sm`}
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3 align-middle">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step={0.25}
+                                      className={`${NUM_CLS} w-full max-w-[6.5rem] font-semibold`}
+                                      value={tier.deductionDays}
+                                      onChange={(e) => updateDeductionTier(idx, "deductionDays", Number(e.target.value))}
+                                    />
+                                  </td>
+                                  <td className="px-2 py-3 align-middle text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => removeDeductionTier(idx)}
+                                      className="rounded-full p-2 text-zinc-400 transition hover:bg-red-50 hover:text-red-600"
+                                      aria-label="Remove tier"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </section>
                   </div>
 
-                  {/* Per-event deductions */}
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <section className="space-y-4">
+                    <header className="px-0.5">
+                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Other attendance deductions</h3>
+                      <p className="mt-1 max-w-prose text-sm leading-relaxed text-zinc-500">
+                        Fixed day amounts per event type (separate from late tiers above).
+                      </p>
+                    </header>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <DeductionCard
                       label="Absence"
                       description="Per full-day absence without approved leave"
@@ -977,7 +1662,8 @@ export function OrganizationRulesPage() {
                       onChange={(v) => updateAttendanceField("unpaidLeaveDeductionDays", v)}
                       color="orange"
                     />
-                  </div>
+                    </div>
+                  </section>
                 </SectionShell>
               )}
 
@@ -985,11 +1671,11 @@ export function OrganizationRulesPage() {
               {activeTab === "salary" && (<>
                 <SectionShell
                   icon={Percent}
-                  iconColor="text-violet-600"
+                  iconColor="text-zinc-700"
                   title="Annual salary increases"
                   description="Default and overrides for processing increases. Department and employee rules take precedence over the global default."
                   actions={
-                    <button type="button" onClick={addSalaryRule} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50">
+                    <button type="button" onClick={addSalaryRule} className={SECONDARY_BTN}>
                       <Plus className="h-4 w-4" /> Add rule
                     </button>
                   }
@@ -997,23 +1683,23 @@ export function OrganizationRulesPage() {
                   {salaryIncreaseRules.length === 0 ? (
                     <EmptyState icon={Percent} title="No salary rules" description="Start with one 'Global default' percentage, then add department overrides." actionLabel="Add a rule" onAction={addSalaryRule} />
                   ) : (
-                    <div className="overflow-x-auto rounded-xl border border-zinc-200/90">
-                      <table className="min-w-full divide-y divide-zinc-200 text-sm">
-                        <thead className="bg-zinc-50/90 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                          <tr>
+                    <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+                      <table className="min-w-full divide-y divide-zinc-100 text-sm">
+                        <thead>
+                          <tr className="bg-zinc-50/80 text-left text-xs font-medium text-zinc-500">
                             <th className="whitespace-nowrap px-4 py-3">Type</th>
                             <th className="whitespace-nowrap px-4 py-3">Applies to</th>
                             <th className="whitespace-nowrap px-4 py-3 text-right">Rate</th>
                             <th className="w-10 px-2 py-3" />
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-zinc-100 bg-white">
+                        <tbody className="divide-y divide-zinc-100">
                           {salaryIncreaseRules.map((rule, idx) => (
-                            <tr key={idx} className="align-top transition hover:bg-zinc-50/80">
+                            <tr key={idx} className="align-top transition hover:bg-zinc-50/60">
                               <td className="px-4 py-3">
                                 <div className="flex flex-wrap items-center gap-2">
                                   {ruleBadge(rule.type)}
-                                  <select className="min-w-[10rem] rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-900" value={rule.type} onChange={(e) => updateSalaryRule(idx, "type", e.target.value)} aria-label="Rule type">
+                                  <select className={`${SELECT_CLS} min-w-[10rem] text-xs font-medium`} value={rule.type} onChange={(e) => updateSalaryRule(idx, "type", e.target.value)} aria-label="Rule type">
                                     <option value="DEFAULT">Global default</option>
                                     <option value="DEPARTMENT">Department</option>
                                     <option value="EMPLOYEE">Employee</option>
@@ -1042,49 +1728,49 @@ export function OrganizationRulesPage() {
                                 </div>
                               </td>
                               <td className="px-2 py-3 text-right">
-                                <button type="button" onClick={() => removeSalaryRule(idx)} className="rounded-lg p-2 text-zinc-400 transition hover:bg-red-50 hover:text-red-600" aria-label="Remove rule"><Trash2 className="h-4 w-4" /></button>
+                                <button type="button" onClick={() => removeSalaryRule(idx)} className="rounded-full p-2 text-zinc-400 transition hover:bg-red-50 hover:text-red-600" aria-label="Remove rule"><Trash2 className="h-4 w-4" /></button>
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                      <p className="border-t border-zinc-100 bg-zinc-50/50 px-4 py-2 text-xs text-zinc-500">
+                      <p className="border-t border-zinc-100 bg-zinc-50/50 px-4 py-3 text-xs leading-relaxed text-zinc-500">
                         Rows without a target (non-default) are excluded when you save.
                       </p>
                     </div>
                   )}
                 </SectionShell>
 
-                <div className="mt-6">
+                <div className="mt-10">
                   <SectionShell
                     icon={Gift}
-                    iconColor="text-amber-600"
+                    iconColor="text-zinc-700"
                     title="Assessment payroll rules"
                     description="Configure how assessment bonuses and overtime translate to monetary amounts in the monthly payroll report. Bonus days and overtime are multiplied by the employee's daily gross rate."
                   >
                     <div className="space-y-4">
-                      <div className="rounded-xl border border-zinc-200/90 divide-y divide-zinc-100 bg-white">
-                        <div className="flex items-center justify-between px-4 py-3.5">
-                          <div className="flex items-center gap-3">
-                            <label className="flex items-center gap-2 cursor-pointer">
+                      <div className="overflow-hidden divide-y divide-zinc-100 rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+                        <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <label className="flex cursor-pointer items-center gap-3">
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-zinc-300"
+                                className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-400/30"
                                 checked={assessmentPayrollRules.bonusDaysEnabled}
                                 onChange={(e) => setAssessmentPayrollRules((p) => ({ ...p, bonusDaysEnabled: e.target.checked }))}
                               />
-                              <span className="text-sm font-semibold text-zinc-800">Bonus days</span>
+                              <span className="text-[15px] font-semibold tracking-tight text-zinc-900">Bonus days</span>
                             </label>
-                            <span className="text-xs text-zinc-400">Days entered in assessment × multiplier × daily gross rate</span>
+                            <p className="mt-1 pl-9 text-xs leading-relaxed text-zinc-500">Days in assessment × multiplier × daily gross rate</p>
                           </div>
                           {assessmentPayrollRules.bonusDaysEnabled && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-zinc-500">Multiplier</span>
+                            <div className="flex flex-wrap items-center gap-2 pl-9 sm:pl-0">
+                              <span className="text-xs font-medium text-zinc-500">Multiplier</span>
                               <input
                                 type="number"
                                 min={0}
                                 step={0.1}
-                                className="w-16 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-right text-sm font-semibold text-zinc-900 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200"
+                                className={`${NUM_CLS} w-20 text-right font-semibold`}
                                 value={assessmentPayrollRules.bonusDayMultiplier}
                                 onChange={(e) => setAssessmentPayrollRules((p) => ({ ...p, bonusDayMultiplier: Number(e.target.value) }))}
                               />
@@ -1093,27 +1779,27 @@ export function OrganizationRulesPage() {
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between px-4 py-3.5">
-                          <div className="flex items-center gap-3">
-                            <label className="flex items-center gap-2 cursor-pointer">
+                        <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <label className="flex cursor-pointer items-center gap-3">
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-zinc-300"
+                                className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-400/30"
                                 checked={assessmentPayrollRules.overtimeEnabled}
                                 onChange={(e) => setAssessmentPayrollRules((p) => ({ ...p, overtimeEnabled: e.target.checked }))}
                               />
-                              <span className="text-sm font-semibold text-zinc-800">Overtime hours</span>
+                              <span className="text-[15px] font-semibold tracking-tight text-zinc-900">Overtime hours</span>
                             </label>
-                            <span className="text-xs text-zinc-400">Hours entered in assessment × multiplier × daily gross rate</span>
+                            <p className="mt-1 pl-9 text-xs leading-relaxed text-zinc-500">Hours in assessment × multiplier × daily gross rate</p>
                           </div>
                           {assessmentPayrollRules.overtimeEnabled && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-zinc-500">Multiplier</span>
+                            <div className="flex flex-wrap items-center gap-2 pl-9 sm:pl-0">
+                              <span className="text-xs font-medium text-zinc-500">Multiplier</span>
                               <input
                                 type="number"
                                 min={0}
                                 step={0.1}
-                                className="w-16 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-right text-sm font-semibold text-zinc-900 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
+                                className={`${NUM_CLS} w-20 text-right font-semibold`}
                                 value={assessmentPayrollRules.overtimeDayMultiplier}
                                 onChange={(e) => setAssessmentPayrollRules((p) => ({ ...p, overtimeDayMultiplier: Number(e.target.value) }))}
                               />
@@ -1122,27 +1808,27 @@ export function OrganizationRulesPage() {
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between px-4 py-3.5">
-                          <div className="flex items-center gap-3">
-                            <label className="flex items-center gap-2 cursor-pointer">
+                        <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <label className="flex cursor-pointer items-center gap-3">
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-zinc-300"
+                                className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-400/30"
                                 checked={assessmentPayrollRules.deductionEnabled}
                                 onChange={(e) => setAssessmentPayrollRules((p) => ({ ...p, deductionEnabled: e.target.checked }))}
                               />
-                              <span className="text-sm font-semibold text-zinc-800">Deduction (EGP)</span>
+                              <span className="text-[15px] font-semibold tracking-tight text-zinc-900">Deduction (EGP)</span>
                             </label>
-                            <span className="text-xs text-zinc-400">Fixed EGP amount entered in assessment × multiplier (no daily rate)</span>
+                            <p className="mt-1 pl-9 text-xs leading-relaxed text-zinc-500">Fixed EGP in assessment × multiplier (no daily rate)</p>
                           </div>
                           {assessmentPayrollRules.deductionEnabled && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-zinc-500">Multiplier</span>
+                            <div className="flex flex-wrap items-center gap-2 pl-9 sm:pl-0">
+                              <span className="text-xs font-medium text-zinc-500">Multiplier</span>
                               <input
                                 type="number"
                                 min={0}
                                 step={0.1}
-                                className="w-16 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-right text-sm font-semibold text-zinc-900 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
+                                className={`${NUM_CLS} w-20 text-right font-semibold`}
                                 value={assessmentPayrollRules.deductionDayMultiplier}
                                 onChange={(e) => setAssessmentPayrollRules((p) => ({ ...p, deductionDayMultiplier: Number(e.target.value) }))}
                               />
@@ -1152,12 +1838,9 @@ export function OrganizationRulesPage() {
                         </div>
                       </div>
 
-                      <div className="rounded-lg bg-zinc-50/80 px-4 py-2.5 text-xs text-zinc-500">
-                        <strong>Formulas:</strong>{" "}
-                        Bonus = days × multiplier × daily gross rate.{" "}
-                        Overtime = hours × multiplier × daily gross rate.{" "}
-                        Deduction = EGP amount × multiplier (direct, no rate conversion).{" "}
-                        Net assessment = bonus + overtime − deduction. Only HR-approved assessments are included.
+                      <div className="rounded-2xl bg-zinc-100/60 px-4 py-3 text-xs leading-relaxed text-zinc-600">
+                        <strong className="text-zinc-800">Formulas:</strong>{" "}
+                        Bonus = days × multiplier × daily gross rate. Overtime = hours × multiplier × daily gross rate. Deduction = EGP × multiplier. Net = bonus + overtime − deduction. Only HR-approved assessments count.
                       </div>
                     </div>
                   </SectionShell>
@@ -1168,11 +1851,12 @@ export function OrganizationRulesPage() {
               {activeTab === "payroll" && (
                 <SectionShell
                   icon={Gift}
-                  iconColor="text-indigo-600"
+                  iconColor="text-zinc-700"
                   title="Payroll computation settings"
                   description="Egyptian labor law defaults (2026). Tax brackets, social insurance rates, overtime multiplier, and personal exemption. These values drive the payroll engine."
                 >
-                  <div className="space-y-6">
+                  <div className="space-y-8">
+                    <div className="overflow-hidden rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-6">
                     <FieldGroup
                       label="Amount decimal places (payroll rounding)"
                       hint="HR sets how all EGP amounts are rounded in payroll (0 = whole pounds, 2 = fils to two decimals). Applies to compute, lines, and totals."
@@ -1181,14 +1865,14 @@ export function OrganizationRulesPage() {
                         type="number"
                         min={0}
                         max={8}
-                        className={NUM_CLS}
+                        className={`${NUM_CLS} max-w-[10rem]`}
                         value={payrollConfig.decimalPlaces ?? 2}
                         onChange={(e) =>
                           setPayrollConfig((p) => ({ ...p, decimalPlaces: Number(e.target.value) }))
                         }
                       />
                     </FieldGroup>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                       <FieldGroup
                         label="Working days / month"
                         hint="Same value as Attendance → Shift schedule (Days/mo). Edit it there; both payroll and monthly attendance analysis use this divisor."
@@ -1213,10 +1897,11 @@ export function OrganizationRulesPage() {
                         <input type="number" min={0} className={NUM_CLS} value={payrollConfig.personalExemptionAnnual} onChange={(e) => setPayrollConfig((p) => ({ ...p, personalExemptionAnnual: Number(e.target.value) }))} />
                       </FieldGroup>
                     </div>
+                    </div>
 
-                    <div className="rounded-xl border border-zinc-200/90 p-4 space-y-3">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Social Insurance Rates</h4>
-                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="overflow-hidden rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-6">
+                      <p className="mb-4 text-[13px] font-semibold tracking-tight text-zinc-900">Social insurance</p>
+                      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                         <FieldGroup label="Employee share">
                           <div className="flex items-center gap-1">
                             <input type="number" min={0} step={0.001} className={`${NUM_CLS} w-20`} value={payrollConfig.insuranceRates?.employeeShare} onChange={(e) => setPayrollConfig((p) => ({ ...p, insuranceRates: { ...p.insuranceRates, employeeShare: Number(e.target.value) } }))} />
@@ -1244,9 +1929,9 @@ export function OrganizationRulesPage() {
                       </FieldGroup>
                     </div>
 
-                    <div className="rounded-xl border border-zinc-200/90 p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Tax Brackets (Annual EGP)</h4>
+                    <div className="overflow-hidden rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-6">
+                      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-[13px] font-semibold tracking-tight text-zinc-900">Tax brackets (annual EGP)</p>
                         <button
                           type="button"
                           onClick={() => {
@@ -1255,15 +1940,15 @@ export function OrganizationRulesPage() {
                             brackets.push({ from: lastTo, to: null, rate: 0 });
                             setPayrollConfig((p) => ({ ...p, taxBrackets: brackets }));
                           }}
-                          className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                          className={`${SECONDARY_BTN} py-2 text-xs`}
                         >
-                          <Plus className="h-3 w-3" /> Add bracket
+                          <Plus className="h-3.5 w-3.5" /> Add bracket
                         </button>
                       </div>
-                      <div className="overflow-x-auto rounded-lg border border-zinc-100">
+                      <div className="overflow-hidden rounded-xl ring-1 ring-zinc-100">
                         <table className="min-w-full divide-y divide-zinc-100 text-xs">
-                          <thead className="bg-zinc-50/80 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                            <tr>
+                          <thead>
+                            <tr className="bg-zinc-50/80 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                               <th className="px-3 py-2">From (EGP)</th>
                               <th className="px-3 py-2">To (EGP)</th>
                               <th className="px-3 py-2">Rate</th>
@@ -1353,11 +2038,13 @@ export function OrganizationRulesPage() {
 
 function EmptyState({ icon: Icon, title, description, actionLabel, onAction }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/30 py-14 text-center">
-      <Icon className="h-10 w-10 text-zinc-300" aria-hidden />
-      <p className="mt-3 text-sm font-medium text-zinc-600">{title}</p>
-      <p className="mt-1 max-w-sm text-sm text-zinc-500">{description}</p>
-      <button type="button" onClick={onAction} className="mt-4 text-sm font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2">
+    <div className="flex flex-col items-center justify-center rounded-[20px] border border-dashed border-zinc-200 bg-zinc-50/40 py-16 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+        <Icon className="h-7 w-7 text-zinc-300" aria-hidden />
+      </div>
+      <p className="mt-4 text-[15px] font-semibold tracking-tight text-zinc-900">{title}</p>
+      <p className="mt-1.5 max-w-sm px-4 text-sm leading-relaxed text-zinc-500">{description}</p>
+      <button type="button" onClick={onAction} className="mt-6 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] motion-reduce:active:scale-100">
         {actionLabel}
       </button>
     </div>
@@ -1365,21 +2052,17 @@ function EmptyState({ icon: Icon, title, description, actionLabel, onAction }) {
 }
 
 function DeductionCard({ label, description, value, onChange, color = "zinc" }) {
-  const colors = {
-    red: "border-red-100 bg-red-50/30",
-    amber: "border-amber-100 bg-amber-50/30",
-    zinc: "border-zinc-200 bg-zinc-50/30",
-  };
-  const dotColors = { red: "bg-red-400", amber: "bg-amber-400", zinc: "bg-zinc-400" };
+  const dotColors = { red: "bg-red-500", amber: "bg-amber-500", zinc: "bg-zinc-400", orange: "bg-orange-500" };
+  const dot = dotColors[color] || dotColors.zinc;
   return (
-    <div className={`rounded-xl border p-4 space-y-2 ${colors[color]}`}>
+    <div className="space-y-3 rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
       <div className="flex items-center gap-2">
-        <div className={`h-2 w-2 rounded-full ${dotColors[color]}`} />
-        <span className="text-xs font-semibold text-zinc-800">{label}</span>
+        <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} aria-hidden />
+        <span className="text-[13px] font-semibold tracking-tight text-zinc-900">{label}</span>
       </div>
-      <p className="text-[11px] text-zinc-500 leading-snug">{description}</p>
-      <div className="flex items-center gap-1.5">
-        <input type="number" min={0} step={0.25} className={`${NUM_CLS} w-20 font-semibold`} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      <p className="text-xs leading-relaxed text-zinc-500">{description}</p>
+      <div className="flex items-center gap-2">
+        <input type="number" min={0} step={0.25} className={`${NUM_CLS} w-full max-w-[6.5rem] font-semibold`} value={value} onChange={(e) => onChange(Number(e.target.value))} />
         <span className="text-xs text-zinc-400">days</span>
       </div>
     </div>

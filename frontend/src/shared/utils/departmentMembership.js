@@ -2,6 +2,8 @@
 export function normalizeMongoId(val) {
   if (val == null || val === "") return "";
   if (typeof val === "object" && val._id != null) return String(val._id);
+  // Also check if val has an `id` property (frontend representation)
+  if (typeof val === "object" && val.id != null) return String(val.id);
   return String(val);
 }
 
@@ -13,10 +15,10 @@ export function normalizeMongoId(val) {
 export function employeeBelongsToDepartment(emp, department) {
   if (!emp || !department) return false;
   const deptId = normalizeMongoId(department.id ?? department._id);
-  const empDeptId = normalizeMongoId(emp.departmentId);
+  const empDeptId = normalizeMongoId(emp.departmentId ?? emp.department?.id ?? emp.department?._id);
   if (deptId && empDeptId && empDeptId === deptId) return true;
   if (department.name && emp.department === department.name) return true;
-  if (department.code && emp.department) {
+  if (department.code && typeof emp.department === 'string') {
     const code = String(department.code).trim().toUpperCase();
     const label = String(emp.department).trim().toUpperCase();
     if (label === code) return true;

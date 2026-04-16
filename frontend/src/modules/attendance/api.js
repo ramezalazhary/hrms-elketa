@@ -12,7 +12,9 @@ export const getAttendanceApi = async (params = {}) => {
   const url = query ? `${API_URL}/attendance?${query}` : `${API_URL}/attendance`;
   const response = await fetchWithAuth(url);
   const data = await handleApiResponse(response);
-  return Array.isArray(data) ? data : [];
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.attendance)) return data.attendance;
+  return [];
 };
 
 /**
@@ -25,6 +27,15 @@ export const getEmployeeAttendanceApi = async (employeeId) => {
 };
 
 /**
+ * Personal attendance stream for the last month.
+ * @returns {Promise<Array>}
+ */
+export const getMyAttendanceApi = async () => {
+  const response = await fetchWithAuth(`${API_URL}/attendance/me`);
+  return handleApiResponse(response);
+};
+
+/**
  * @returns {Promise<Array>}
  */
 export const getTodayAttendanceApi = async () => {
@@ -33,19 +44,33 @@ export const getTodayAttendanceApi = async () => {
 };
 
 export const createAttendanceApi = async (data) => {
+  const { status: _ignoredStatus, ...payload } = data || {};
   const response = await fetchWithAuth(`${API_URL}/attendance`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(payload),
   });
   return handleApiResponse(response);
 };
 
 export const updateAttendanceApi = async (id, data) => {
+  const { status: _ignoredStatus, ...payload } = data || {};
   const response = await fetchWithAuth(`${API_URL}/attendance/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(payload),
+  });
+  return handleApiResponse(response);
+};
+
+export const updateAttendanceDeductionSourceApi = async (
+  id,
+  { deductionSource, deductionValueType, deductionValue },
+) => {
+  const response = await fetchWithAuth(`${API_URL}/attendance/${id}/deduction-source`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deductionSource, deductionValueType, deductionValue }),
   });
   return handleApiResponse(response);
 };

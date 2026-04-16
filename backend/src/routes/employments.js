@@ -8,13 +8,19 @@ import { Team } from "../models/Team.js";
 import { Position } from "../models/Position.js";
 import { enrichEmployeesForResponse } from "../services/orgResolutionService.js";
 import { requireAuth } from "../middleware/auth.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { strictLimiter } from "../middleware/security.js";
 import { canManageEmployments } from "../utils/roles.js";
 
 const router = Router();
 
 // POST /employments/assign - Assign employee to department/team/position
-router.post("/assign", requireAuth, strictLimiter, async (req, res) => {
+router.post(
+  "/assign",
+  requireAuth,
+  enforcePolicy("create", "employees"),
+  strictLimiter,
+  async (req, res) => {
   try {
     if (!canManageEmployments(req.user)) {
       return res
@@ -172,10 +178,16 @@ router.post("/assign", requireAuth, strictLimiter, async (req, res) => {
     console.error("Employment assignment error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
-});
+  },
+);
 
 // DELETE /employments/unassign - Remove employee from assignment
-router.delete("/unassign", requireAuth, strictLimiter, async (req, res) => {
+router.delete(
+  "/unassign",
+  requireAuth,
+  enforcePolicy("create", "employees"),
+  strictLimiter,
+  async (req, res) => {
   try {
     if (!canManageEmployments(req.user)) {
       return res
@@ -264,10 +276,15 @@ router.delete("/unassign", requireAuth, strictLimiter, async (req, res) => {
     console.error("Employment unassignment error:", error);
     res.status(500).json({ error: "Failed to unassign employee" });
   }
-});
+  },
+);
 
 // GET /employments/employee/:employeeId - Get all assignments for employee
-router.get("/employee/:employeeId", requireAuth, async (req, res) => {
+router.get(
+  "/employee/:employeeId",
+  requireAuth,
+  enforcePolicy("read", "employees"),
+  async (req, res) => {
   try {
     if (!req.params.employeeId.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ error: "Invalid employee ID format" });
@@ -334,6 +351,7 @@ router.get("/employee/:employeeId", requireAuth, async (req, res) => {
     console.error("Error fetching employee assignments:", error);
     res.status(500).json({ error: "Failed to fetch employee assignments" });
   }
-});
+  },
+);
 
 export default router;

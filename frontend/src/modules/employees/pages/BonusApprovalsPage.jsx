@@ -98,7 +98,7 @@ export function BonusApprovalsPage() {
     <Layout>
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/80">
             <Gift size={20} />
           </div>
           <div>
@@ -116,8 +116,8 @@ export function BonusApprovalsPage() {
             <Loader2 className="animate-spin text-zinc-400" size={28} />
           </div>
         ) : items.length === 0 ? (
-          <div className="rounded-xl border border-zinc-200 bg-white px-6 py-16 text-center">
-            <Check className="mx-auto mb-3 text-emerald-400" size={36} />
+          <div className="rounded-[20px] bg-white px-6 py-16 text-center shadow-sm ring-1 ring-zinc-950/[0.06]">
+            <Check className="mx-auto mb-3 text-zinc-300" size={36} />
             <p className="text-sm font-medium text-zinc-600">
               No pending bonus approvals
             </p>
@@ -127,7 +127,7 @@ export function BonusApprovalsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-sm text-amber-800">
+            <div className="flex items-center gap-2 rounded-[20px] bg-amber-50/80 px-4 py-2.5 text-sm text-amber-950 ring-1 ring-amber-200/70">
               <AlertTriangle size={16} className="shrink-0" />
               <span>
                 <strong>{items.length}</strong> assessment bonus
@@ -135,7 +135,7 @@ export function BonusApprovalsPage() {
               </span>
             </div>
 
-            <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white">
+            <div className="divide-y divide-zinc-100 overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
               {items.length > 0 && items?.map((item) => {
                 const key = `${item.employeeId}-${item.assessmentId}`;
                 const isBusy = processing === key;
@@ -152,7 +152,7 @@ export function BonusApprovalsPage() {
                           {item.employeeName || "—"}
                         </span>
                         {item.employeeCode && (
-                          <span className="rounded-md border border-teal-200 bg-teal-50 px-1.5 py-0.5 font-mono text-[11px] text-teal-800">
+                          <span className="rounded-md border border-zinc-200/80 bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-800">
                             {item.employeeCode}
                           </span>
                         )}
@@ -184,13 +184,13 @@ export function BonusApprovalsPage() {
 
                       <div className="flex flex-wrap gap-3 text-xs">
                         {item.daysBonus > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700 ring-1 ring-emerald-200">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-800 ring-1 ring-zinc-200/70">
                             <Gift size={12} />
                             +{item.daysBonus}d bonus
                           </span>
                         )}
                         {item.overtime > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-700 ring-1 ring-blue-200">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-50 px-2 py-0.5 font-medium text-zinc-700 ring-1 ring-zinc-200/80">
                             <Clock size={12} />
                             +{item.overtime}d overtime
                           </span>
@@ -243,7 +243,7 @@ export function BonusApprovalsPage() {
                     {!isRejecting && (
                       <div className="flex shrink-0 gap-2">
                         <button
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 rounded-full bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-50"
                           disabled={isBusy}
                           onClick={() => handleApprove(item)}
                         >

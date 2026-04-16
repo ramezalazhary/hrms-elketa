@@ -50,30 +50,30 @@ export function LeaveBalanceCreditModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md rounded-2xl border border-teal-100 bg-white p-6 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4">
+      <div className="relative w-full max-w-md rounded-[20px] border border-zinc-200/90 bg-white p-6 shadow-2xl ring-1 ring-zinc-950/[0.06]">
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          className="absolute right-4 top-4 rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
           aria-label="Close"
         >
           <X className="h-5 w-5" />
         </button>
         <div className="flex items-center gap-2 mb-1">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-100 text-teal-700">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/80">
             <Gift className="h-5 w-5" />
           </div>
-          <h2 className="text-lg font-bold text-slate-900">Vacation balance credit</h2>
+          <h2 className="text-lg font-bold text-zinc-900">Vacation balance credit</h2>
         </div>
-        <p className="text-sm text-slate-600 mb-4">
+        <p className="text-sm text-zinc-600 mb-4">
           Add extra annual leave days for{" "}
-          <span className="font-semibold text-slate-800">{employeeName}</span> (e.g. formal
+          <span className="font-semibold text-zinc-800">{employeeName}</span> (e.g. formal
           vacation entitlement). This increases their remaining balance for new requests.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-1">
               Days to add
             </label>
             <input
@@ -83,13 +83,13 @@ export function LeaveBalanceCreditModal({
               step={1}
               value={days}
               onChange={(e) => setDays(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm transition focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200/80"
               placeholder="e.g. 3"
               required
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-1">
               Reason
             </label>
             <textarea
@@ -97,7 +97,7 @@ export function LeaveBalanceCreditModal({
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               maxLength={500}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm transition focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200/80"
               placeholder="Why is this credit being added?"
               required
             />
@@ -111,14 +111,14 @@ export function LeaveBalanceCreditModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+              className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
             >
               {submitting ? "Saving…" : "Add credit"}
             </button>

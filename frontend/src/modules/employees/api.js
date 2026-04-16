@@ -32,6 +32,11 @@ export const getEmployeeByIdApi = async (id) => {
   return handleApiResponse(response);
 };
 
+export const getMyEmployeeProfileApi = async () => {
+  const response = await fetchWithAuth(`${API_URL}/employees/me`);
+  return handleApiResponse(response);
+};
+
 export const processSalaryIncreaseApi = async ({ id, ...data }) => {
   const response = await fetchWithAuth(`${API_URL}/employees/${id}/process-increase`, {
     method: "POST",
@@ -130,6 +135,12 @@ export const listLeaveRequestsApi = async (params) => {
   return handleApiResponse(response);
 };
 
+export const listMyLeaveRequestsApi = async (params) => {
+  const q = params ? `?${new URLSearchParams(params).toString()}` : "";
+  const response = await fetchWithAuth(`${API_URL}/leave-requests/mine${q}`);
+  return handleApiResponse(response);
+};
+
 /** @param {{ employeeId?: string }} [params] — omit for own balance */
 export const getLeaveBalanceApi = async (params) => {
   const q = params?.employeeId
@@ -200,6 +211,11 @@ export const cancelLeaveRequestApi = async (id, reason) => {
 
 export const getLeaveRequestHistoryApi = async (id) => {
   const response = await fetchWithAuth(`${API_URL}/leave-requests/${id}/history`);
+  return handleApiResponse(response);
+};
+
+export const getLeaveRequestByIdApi = async (id) => {
+  const response = await fetchWithAuth(`${API_URL}/leave-requests/${id}`);
   return handleApiResponse(response);
 };
 

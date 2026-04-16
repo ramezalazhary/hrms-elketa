@@ -5,6 +5,7 @@ import {
   importAttendanceApi, 
   createAttendanceApi, 
   updateAttendanceApi, 
+  updateAttendanceDeductionSourceApi,
   deleteAttendanceApi,
   deleteAttendanceBulkApi,
   getMonthlyReportApi,
@@ -50,6 +51,21 @@ export const deleteAttendanceThunk = createAsyncThunk(
       return await deleteAttendanceApi(id);
     } catch (err) {
       return rejectWithValue(getErrorMessage(err, "Failed to delete attendance record"));
+    }
+  },
+);
+
+export const updateAttendanceDeductionSourceThunk = createAsyncThunk(
+  "attendance/updateDeductionSource",
+  async ({ id, deductionSource, deductionValueType, deductionValue }, { rejectWithValue }) => {
+    try {
+      return await updateAttendanceDeductionSourceApi(id, {
+        deductionSource,
+        deductionValueType,
+        deductionValue,
+      });
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, "Failed to update deduction source"));
     }
   },
 );
@@ -132,6 +148,13 @@ const attendanceSlice = createSlice({
         state.isLoading = false;
       })
       .addCase(updateAttendanceThunk.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload || action.error.message;
+      })
+      .addCase(updateAttendanceDeductionSourceThunk.fulfilled, (state) => {
+        state.isLoading = false;
+      })
+      .addCase(updateAttendanceDeductionSourceThunk.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload || action.error.message;
       })

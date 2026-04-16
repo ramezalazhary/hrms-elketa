@@ -28,8 +28,26 @@ import { ApiError } from "../utils/ApiError.js";
 import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
 import { createAuditLog } from "./auditService.js";
 import { mongoSupportsTransactions } from "../utils/mongoTransactions.js";
+import { resolveEmployeeScopeIds } from "./scopeService.js";
 
-const HR_ROLES = new Set(["HR_STAFF", "HR_MANAGER", "ADMIN"]);
+const HR_ROLES = new Set(["HR", "HR_STAFF", "HR_MANAGER", "ADMIN"]);
+const FORCE_APPROVE_ROLES = new Set(["HR_MANAGER", "ADMIN"]);
+const DIRECT_RECORD_ROLES = new Set(["HR_MANAGER", "ADMIN"]);
+const APPROVED_CANCEL_ROLES = new Set(["HR_MANAGER"]);
+const ESCALATION_RESOLVER_ROLES = new Set(["HR_MANAGER", "ADMIN"]);
+
+function roleKey(role) {
+  return String(role || "").trim().toUpperCase();
+}
+
+function hasRole(roleSet, role) {
+  return roleSet.has(roleKey(role));
+}
+
+function isHrEmployeeRole(role) {
+  const key = roleKey(role);
+  return key === "HR" || key === "HR_STAFF" || key === "HR_MANAGER";
+}
 
 function normEmail(e) {
   return (e || "").trim().toLowerCase();
@@ -145,6 +163,33 @@ function computeExcuseMinutes(startTime, endTime, roundingMinutes) {
   return diff;
 }
 
+function resolveExcuseAllowanceMinutes(leaveDoc) {
+  const computedMinutes = Number(leaveDoc?.computed?.minutes) || 0;
+  const rules = leaveDoc?.policySnapshot?.excuseRules || {};
+  const maxHours = Number(rules.maxHoursPerExcuse);
+  const maxMinutesPerRequest = Number(rules.maxMinutesPerRequest);
+  const policyMinutes = Number.isFinite(maxHours) && maxHours > 0
+    ? maxHours * 60
+    : (Number.isFinite(maxMinutesPerRequest) && maxMinutesPerRequest > 0
+      ? maxMinutesPerRequest
+      : 0);
+  return Math.max(0, computedMinutes, policyMinutes);
+}
+
+function mapExcuseOverageToDeductionFraction(overageMinutes, workdayMinutes = 8 * 60) {
+  if (!Number.isFinite(overageMinutes) || overageMinutes <= 0) return 0;
+  const quarter = workdayMinutes / 4;
+  const half = workdayMinutes / 2;
+  if (overageMinutes > half) return 0.5;
+  if (overageMinutes > quarter) return 0.25;
+  return 0;
+}
+
+function normalizeDecisionSource(value) {
+  const v = String(value || "").toUpperCase();
+  return v === "SALARY" || v === "VACATION_BALANCE" ? v : undefined;
+}
+
 function normalizeExcuseLimitPeriod(er) {
   const p = String(er.excuseLimitPeriod || "MONTH").toUpperCase();
   if (p === "WEEK" || p === "MONTH" || p === "YEAR") return p;
@@ -211,6 +256,10 @@ export async function resolveApproverEmails(employee) {
     : await Department.findOne({ name: employee.department });
   let teamLeaderEmail = "";
   let managerEmail = (dept?.head || "").trim();
+  if (!managerEmail && dept?.headId) {
+    const head = await Employee.findById(dept.headId).select("email").lean();
+    managerEmail = (head?.email || "").trim();
+  }
 
   const teamId = employee.teamId;
   const teamName = employee.team;
@@ -237,6 +286,18 @@ export async function resolveApproverEmails(employee) {
     }
   }
 
+  // Fallback: some legacy rows have team name but mismatched/missing department link.
+  // In that case, resolve by team name globally so TEAM_LEADER can still approve team requests.
+  if (!teamLeaderEmail && teamName) {
+    const fallbackTeam = await Team.findOne({ name: teamName });
+    if (fallbackTeam?.leaderEmail) {
+      teamLeaderEmail = fallbackTeam.leaderEmail.trim();
+    } else if (fallbackTeam?.leaderId) {
+      const leader = await Employee.findById(fallbackTeam.leaderId).select("email").lean();
+      if (leader?.email) teamLeaderEmail = leader.email.trim();
+    }
+  }
+
   return { teamLeaderEmail, managerEmail };
 }
 
@@ -246,15 +307,17 @@ export async function resolveApproverEmails(employee) {
  * @param {string} userEmail
  * @returns {Promise<import("mongoose").Types.ObjectId[]>}
  */
-async function listManagedEmployeeObjectIdsForApprover(userEmail) {
+async function listManagedEmployeeObjectIdsForApprover(userEmail, userId = null) {
   const u = normEmail(userEmail);
-  if (!u) return [];
+  if (!u && !userId) return [];
 
-  const depts = await Department.find({}).select("_id name head").lean();
+  const depts = await Department.find({}).select("_id name head headId").lean();
   const headedDeptIds = [];
   const headedDeptNames = [];
   for (const d of depts) {
-    if (normEmail(d.head) === u) {
+    const byEmail = u && normEmail(d.head) === u;
+    const byId = userId && d.headId && String(d.headId) === String(userId);
+    if (byEmail || byId) {
       headedDeptIds.push(d._id);
       headedDeptNames.push(d.name);
     }
@@ -281,7 +344,9 @@ async function listManagedEmployeeObjectIdsForApprover(userEmail) {
   for (const t of teams) {
     const resolvedEmail = normEmail(t.leaderEmail)
       || (t.leaderId && leaderIdToEmail.get(String(t.leaderId))) || "";
-    if (resolvedEmail !== u) continue;
+    const byEmail = Boolean(u) && resolvedEmail === u;
+    const byId = Boolean(userId) && t.leaderId && String(t.leaderId) === String(userId);
+    if (!byEmail && !byId) continue;
     const dept = depts.find((d) => String(d._id) === String(t.departmentId));
     ledTeams.push({
       _id: t._id,
@@ -360,14 +425,46 @@ function buildApprovalPipeline(teamLeaderEmail, managerEmail, employeeEmail) {
   return steps;
 }
 
+function buildApprovalPipelineForEmployee(employee, teamLeaderEmail, managerEmail) {
+  // HR employees are approved by HR manager or HR team leader directly.
+  if (isHrEmployeeRole(employee?.role)) {
+    const emp = normEmail(employee?.email);
+    const tlOk = teamLeaderEmail && normEmail(teamLeaderEmail) !== emp;
+    const mgrOk = managerEmail && normEmail(managerEmail) !== emp;
+    if (tlOk || mgrOk) {
+      return [{ role: "MANAGEMENT", status: "PENDING" }];
+    }
+    // Fallback to HR step so requests are not blocked when org links are missing.
+    return [{ role: "HR", status: "PENDING" }];
+  }
+  return buildApprovalPipeline(teamLeaderEmail, managerEmail, employee?.email);
+}
+
 function syncDocumentStatus(doc) {
   if (doc.status === "CANCELLED") return;
-  if (doc.approvals.some((a) => a.status === "REJECTED")) {
-    doc.status = "REJECTED";
+  const approvals = Array.isArray(doc.approvals) ? doc.approvals : [];
+  const approvedCount = approvals.filter((a) => a.status === "APPROVED").length;
+  const rejectedCount = approvals.filter((a) => a.status === "REJECTED").length;
+  const pendingCount = approvals.filter((a) => a.status === "PENDING").length;
+
+  if (!approvals.length) {
+    doc.status = "PENDING";
     return;
   }
-  if (doc.approvals.length && doc.approvals.every((a) => a.status === "APPROVED")) {
+  if (pendingCount > 0) {
+    doc.status = "PENDING";
+    return;
+  }
+  if (approvedCount > 0 && rejectedCount > 0) {
+    doc.status = "ESCALATED";
+    return;
+  }
+  if (approvedCount === approvals.length) {
     doc.status = "APPROVED";
+    return;
+  }
+  if (rejectedCount > 0) {
+    doc.status = "REJECTED";
     return;
   }
   doc.status = "PENDING";
@@ -557,6 +654,23 @@ async function determineVacationPaymentType(employeeId, doc) {
 }
 
 /**
+ * Determine final payment type for approved excuse.
+ * Policy: if employee is not yet eligible, excuse is approved as UNPAID.
+ * If quota exceeded and deduction is SALARY => UNPAID, otherwise PAID.
+ * @param {object} doc LeaveRequest document
+ * @returns {{ type: "PAID"|"UNPAID", reason?: string }}
+ */
+function determineExcusePaymentType(doc) {
+  if (doc.preEligibility) {
+    return { type: "UNPAID", reason: "NOT_ELIGIBLE" };
+  }
+  if (doc.quotaExceeded && doc.excessDeductionMethod === "SALARY") {
+    return { type: "UNPAID", reason: "EXCESS_EXCUSE_SALARY" };
+  }
+  return { type: "PAID" };
+}
+
+/**
  * Determine whether an approved excuse exceeds the employee's remaining quota.
  * @param {import("mongoose").Types.ObjectId | string} employeeId
  * @param {object} doc LeaveRequest document
@@ -617,7 +731,7 @@ const MAX_CREDIT_REASON_LENGTH = 500;
  * @param {{ employeeId: string, days: number, reason: string }} body
  */
 export async function addAnnualLeaveCredit(user, body) {
-  if (!HR_ROLES.has(user.role)) {
+  if (!hasRole(HR_ROLES, user.role)) {
     throw new ApiError(403, "Forbidden: only HR or Admin can add leave credits");
   }
   const employeeId = body?.employeeId;
@@ -706,7 +820,7 @@ function parseAnnualLeaveCreditDaysAndReason(body) {
  * }} body
  */
 export async function addAnnualLeaveCreditBulk(user, body) {
-  if (!HR_ROLES.has(user.role)) {
+  if (!hasRole(HR_ROLES, user.role)) {
     throw new ApiError(403, "Forbidden: only HR or Admin can add leave credits");
   }
   const { daysInt, reason } = parseAnnualLeaveCreditDaysAndReason(body);
@@ -833,7 +947,7 @@ export async function addAnnualLeaveCreditBulk(user, body) {
 
 export async function assertCanViewEmployeeLeaveBalance(user, employeeId) {
   if (String(user.id) === String(employeeId)) return;
-  if (HR_ROLES.has(user.role)) return;
+  if (hasRole(HR_ROLES, user.role)) return;
   const subject = await Employee.findById(employeeId);
   if (!subject) {
     throw new ApiError(404, "Employee not found");
@@ -953,7 +1067,7 @@ function userCanActOnPendingStep(userEmail, userRole, stepRole, ctx) {
     return tl || mgr;
   }
   if (stepRole === "HR") {
-    return HR_ROLES.has(userRole);
+    return hasRole(HR_ROLES, userRole);
   }
   return false;
 }
@@ -972,10 +1086,10 @@ async function syncApprovedExcuseToAttendance(leaveDoc) {
   });
   if (!att) return;
 
-  const SYNCABLE = new Set(["LATE", "EXCUSED", "ABSENT"]);
+  const SYNCABLE = new Set(["LATE", "EXCUSED", "PARTIAL_EXCUSED", "ABSENT"]);
   if (!SYNCABLE.has(att.status)) return;
 
-  if (att.status === "EXCUSED" && att.excuseLeaveRequestId
+  if ((att.status === "EXCUSED" || att.status === "PARTIAL_EXCUSED") && att.excuseLeaveRequestId
       && String(att.excuseLeaveRequestId) !== String(leaveDoc._id)) {
     return;
   }
@@ -1014,20 +1128,64 @@ async function syncApprovedExcuseToAttendance(leaveDoc) {
   if (!att.originalStatus) {
     att.originalStatus = att.status;
   }
-  att.status = "EXCUSED";
+  let nextStatus = "EXCUSED";
+  let overageMinutes = 0;
   att.excuseCovered = true;
   att.excuseLeaveRequestId = leaveDoc._id;
+  att.unpaidLeave = leaveDoc.effectivePaymentType === "UNPAID";
 
   const excuseMinutes = leaveDoc.computed?.minutes || 0;
   att.excusedMinutes = (att.excusedMinutes || 0) + excuseMinutes;
 
-  if (leaveDoc.quotaExceeded && leaveDoc.excessDeductionMethod === "SALARY") {
+  const checkInMin = parseTimeToMinutes(att.checkIn);
+  const lateFromShiftStart =
+    shiftStartMin != null && checkInMin != null
+      ? Math.max(0, checkInMin - shiftStartMin)
+      : 0;
+  const allowanceMinutes = resolveExcuseAllowanceMinutes(leaveDoc);
+  overageMinutes = Math.max(0, lateFromShiftStart - allowanceMinutes);
+
+  if (overageMinutes > 0) {
+    nextStatus = "PARTIAL_EXCUSED";
     att.excessExcuse = true;
+    att.excuseOverageMinutes = overageMinutes;
+    const persistedSource = normalizeDecisionSource(att.deductionSource);
+    const persistedType = String(att.deductionValueType || "").toUpperCase();
+    const persistedValue = Number(att.deductionValue);
+    const persistedResolved = Boolean(att.deductionDecisionAt) || Boolean(persistedSource);
+    if (persistedResolved) {
+      att.requiresDeductionDecision = !persistedSource;
+      att.deductionSource = persistedSource;
+      att.deductionValueType = persistedType === "AMOUNT" ? "AMOUNT" : "DAYS";
+      att.deductionValue = Number.isFinite(persistedValue) && persistedValue > 0
+        ? persistedValue
+        : mapExcuseOverageToDeductionFraction(overageMinutes, hoursPerDay * 60);
+    } else {
+      att.requiresDeductionDecision = true;
+      att.deductionSource = undefined;
+      att.deductionValueType = "DAYS";
+      att.deductionValue = mapExcuseOverageToDeductionFraction(overageMinutes, hoursPerDay * 60);
+    }
+    att.excessExcuseFraction = leaveDoc.excessDeductionAmount
+      || mapExcuseOverageToDeductionFraction(overageMinutes, hoursPerDay * 60);
+  } else if (leaveDoc.quotaExceeded && leaveDoc.excessDeductionMethod === "SALARY") {
+    att.excessExcuse = true;
+    att.excuseOverageMinutes = 0;
+    att.requiresDeductionDecision = false;
+    att.deductionSource = leaveDoc.excessDeductionMethod;
+    att.deductionValueType = "DAYS";
+    att.deductionValue = leaveDoc.excessDeductionAmount || (excuseMinutes / (hoursPerDay * 60));
     att.excessExcuseFraction = leaveDoc.excessDeductionAmount || (excuseMinutes / (hoursPerDay * 60));
   } else {
     att.excessExcuse = false;
+    att.excuseOverageMinutes = 0;
+    att.requiresDeductionDecision = false;
+    att.deductionSource = undefined;
+    att.deductionValueType = undefined;
+    att.deductionValue = undefined;
     att.excessExcuseFraction = 0;
   }
+  att.status = nextStatus;
 
   await att.save();
 
@@ -1038,9 +1196,10 @@ async function syncApprovedExcuseToAttendance(leaveDoc) {
     newValues: {
       attendanceId: att._id,
       oldStatus: oldAttStatus,
-      newStatus: "EXCUSED",
+      newStatus: nextStatus,
       excuseDate: leaveDoc.excuseDate,
       excusedMinutes: excuseMinutes,
+      excuseOverageMinutes: overageMinutes || undefined,
       quotaExceeded: leaveDoc.quotaExceeded || undefined,
       excessExcuseFraction: att.excessExcuseFraction || undefined,
     },
@@ -1060,7 +1219,13 @@ async function revertExcuseAttendanceRow(leaveDoc) {
   att.excusedMinutes = Math.max(0, (att.excusedMinutes || 0) - excuseMinutes);
   att.excuseLeaveRequestId = undefined;
   att.excuseCovered = false;
+  att.unpaidLeave = false;
   att.excessExcuse = false;
+  att.excuseOverageMinutes = 0;
+  att.requiresDeductionDecision = false;
+  att.deductionSource = undefined;
+  att.deductionValueType = undefined;
+  att.deductionValue = undefined;
   att.excessExcuseFraction = 0;
 
   if (att.originalStatus) {
@@ -1127,6 +1292,10 @@ async function syncApprovedVacationToAttendance(leaveDoc) {
       existing.remarks = (existing.remarks || "") +
         ` [on approved ${typeLabel} leave]`;
       await existing.save();
+    } else if (String(existing.leaveRequestId) === String(leaveDoc._id)) {
+      // Keep attendance row in sync if payment classification changes.
+      existing.unpaidLeave = isUnpaid;
+      await existing.save();
     }
 
     cursor.setUTCDate(cursor.getUTCDate() + 1);
@@ -1189,7 +1358,7 @@ export async function createLeaveRequest(user, body) {
   let isOnBehalf = false;
 
   if (body.employeeId && String(body.employeeId) !== String(user.id)) {
-    if (!HR_ROLES.has(user.role)) {
+    if (!hasRole(HR_ROLES, user.role)) {
       throw new ApiError(403, "Only HR can create leave requests on behalf of another employee");
     }
     employee = await Employee.findById(body.employeeId);
@@ -1274,10 +1443,10 @@ export async function createLeaveRequest(user, body) {
 
   const { teamLeaderEmail, managerEmail } =
     await resolveApproverEmails(employee);
-  const approvals = buildApprovalPipeline(
+  const approvals = buildApprovalPipelineForEmployee(
+    employee,
     teamLeaderEmail,
     managerEmail,
-    employee.email,
   );
 
   const draft = {
@@ -1442,13 +1611,19 @@ export async function listLeaveRequests(user, query) {
 
     const allPending = await LeaveRequest.find({
       ...filter,
-      status: "PENDING",
+      status: { $in: ["PENDING", "ESCALATED"] },
     })
       .sort({ submittedAt: 1 })
       .lean();
 
     const actionable = [];
     for (const r of allPending) {
+      if (r.status === "ESCALATED") {
+        if (hasRole(ESCALATION_RESOLVER_ROLES, user.role)) {
+          actionable.push(r._id);
+        }
+        continue;
+      }
       const idx = firstPendingIndex(r.approvals || []);
       if (idx < 0) continue;
       const step = r.approvals[idx];
@@ -1497,9 +1672,13 @@ export async function listLeaveRequests(user, query) {
 
   if (
     (query.managed === "true" || query.managed === "1") &&
-    !HR_ROLES.has(user.role)
+    !hasRole(HR_ROLES, user.role)
   ) {
-    const managedIds = await listManagedEmployeeObjectIdsForApprover(user.email);
+    const scoped = await resolveEmployeeScopeIds(user);
+    const managedIds =
+      scoped.scope === "all"
+        ? []
+        : (Array.isArray(scoped.employeeIds) ? scoped.employeeIds : []);
     if (managedIds.length === 0) {
       return {
         requests: [],
@@ -1547,7 +1726,7 @@ export async function listLeaveRequests(user, query) {
     };
   }
 
-  if (HR_ROLES.has(user.role)) {
+  if (hasRole(HR_ROLES, user.role)) {
     const total = await LeaveRequest.countDocuments(filter);
     const list = await LeaveRequest.find(filter)
       .sort({ submittedAt: -1 })
@@ -1611,6 +1790,93 @@ export async function applyLeaveRequestAction(requestId, user, action, comment, 
     }
   }
 
+  const previousStatus = doc.status;
+  if (doc.status === "ESCALATED") {
+    if (!hasRole(ESCALATION_RESOLVER_ROLES, user.role)) {
+      throw new ApiError(403, "Only HR_MANAGER or ADMIN can resolve escalated requests");
+    }
+
+    if (act === "APPROVE" && doc.kind === "EXCUSE") {
+      const qs = await determineExcuseQuotaStatus(doc.employeeId, doc);
+      const exceeded = qs.exceeded || doc.quotaExceeded;
+      doc.quotaExceeded = exceeded;
+      if (exceeded) {
+        const method = extras.excessDeductionMethod || doc.excessDeductionMethod;
+        const amount = Number(extras.excessDeductionAmount ?? doc.excessDeductionAmount);
+        const invalidMethod = !method || !["SALARY", "VACATION_BALANCE"].includes(method);
+        const invalidAmount = !Number.isFinite(amount) || amount <= 0;
+        if (invalidMethod || invalidAmount) {
+          throw new ApiError(400, "Escalated excuse requires excess deduction method and amount");
+        }
+        doc.excessDeductionMethod = method;
+        doc.excessDeductionAmount = amount;
+      }
+    }
+
+    doc.status = act === "APPROVE" ? "APPROVED" : "REJECTED";
+    doc.lastUpdatedAt = new Date();
+    doc.lastUpdatedBy = user.email;
+    doc.finalResolver = user.email;
+    if (!doc.escalationReason) {
+      doc.escalationReason = "Conflicting HR and management decisions";
+    }
+
+    const setFields = {
+      status: doc.status,
+      lastUpdatedAt: doc.lastUpdatedAt,
+      lastUpdatedBy: doc.lastUpdatedBy,
+      finalResolver: doc.finalResolver,
+      escalationReason: doc.escalationReason,
+    };
+    if (doc.quotaExceeded != null) setFields.quotaExceeded = doc.quotaExceeded;
+    if (doc.excessDeductionMethod) {
+      setFields.excessDeductionMethod = doc.excessDeductionMethod;
+      setFields.excessDeductionAmount = doc.excessDeductionAmount;
+    }
+    const savedEscalation = await LeaveRequest.findOneAndUpdate(
+      { _id: doc._id, __v: versionAtRead, status: "ESCALATED" },
+      { $set: setFields, $inc: { __v: 1 } },
+      { new: true },
+    );
+    if (!savedEscalation) {
+      throw new ApiError(409, "This request was modified concurrently — please reload and try again");
+    }
+    Object.assign(doc, savedEscalation.toObject());
+
+    await createAuditLog({
+      entityType: "LeaveRequest",
+      entityId: doc._id,
+      operation: act === "APPROVE" ? "APPROVE" : "REJECT",
+      previousValues: { status: previousStatus },
+      newValues: {
+        action: `ESCALATION_${act}`,
+        processedBy: user.email,
+        comment: (comment || "").trim() || undefined,
+        resultingStatus: doc.status,
+      },
+      performedBy: user.email,
+      ipAddress: user._ip,
+      userAgent: user._ua,
+    });
+
+    if (doc.status === "APPROVED") {
+      if (doc.kind === "VACATION") {
+        const pt = await determineVacationPaymentType(doc.employeeId, doc);
+        doc.effectivePaymentType = pt.type;
+        doc.unpaidReason = pt.reason || undefined;
+        await doc.save();
+        await syncApprovedVacationToAttendance(doc);
+      } else if (doc.kind === "EXCUSE") {
+        const pt = determineExcusePaymentType(doc);
+        doc.effectivePaymentType = pt.type;
+        doc.unpaidReason = pt.reason || undefined;
+        await doc.save();
+        await syncApprovedExcuseToAttendance(doc);
+      }
+    }
+    return doc;
+  }
+
   const idx = firstPendingIndex(doc.approvals);
   if (idx < 0) {
     return doc;
@@ -1629,7 +1895,7 @@ export async function applyLeaveRequestAction(requestId, user, action, comment, 
 
   let forceApproved = false;
   if (!userCanActOnPendingStep(user.email, user.role, step.role, ctx)) {
-    if (HR_ROLES.has(user.role) && act === "APPROVE") {
+    if (hasRole(FORCE_APPROVE_ROLES, user.role) && act === "APPROVE") {
       forceApproved = true;
     } else {
       throw new ApiError(403, "Not authorized for this approval step");
@@ -1651,10 +1917,14 @@ export async function applyLeaveRequestAction(requestId, user, action, comment, 
     step.comment = trimmedComment;
   }
 
-  const previousStatus = doc.status;
   syncDocumentStatus(doc);
   doc.lastUpdatedAt = new Date();
   doc.lastUpdatedBy = user.email;
+  if (doc.status === "ESCALATED" && previousStatus !== "ESCALATED") {
+    doc.escalatedAt = new Date();
+    doc.escalatedBy = user.email;
+    doc.escalationReason = "Conflicting HR and management decisions";
+  }
 
   if (act === "APPROVE" && doc.kind === "EXCUSE" && doc.quotaExceeded) {
     const method = extras.excessDeductionMethod;
@@ -1691,15 +1961,25 @@ export async function applyLeaveRequestAction(requestId, user, action, comment, 
     lastUpdatedAt: doc.lastUpdatedAt,
     lastUpdatedBy: doc.lastUpdatedBy,
   };
+  const unsetFields = {};
   if (doc.quotaExceeded != null) setFields.quotaExceeded = doc.quotaExceeded;
   if (doc.excessDeductionMethod) {
     setFields.excessDeductionMethod = doc.excessDeductionMethod;
     setFields.excessDeductionAmount = doc.excessDeductionAmount;
   }
+  if (doc.escalatedAt) setFields.escalatedAt = doc.escalatedAt;
+  if (doc.escalatedBy) setFields.escalatedBy = doc.escalatedBy;
+  if (doc.escalationReason) setFields.escalationReason = doc.escalationReason;
+  if (doc.finalResolver) setFields.finalResolver = doc.finalResolver;
+  if (doc.status !== "ESCALATED") {
+    unsetFields.escalatedAt = "";
+    unsetFields.escalatedBy = "";
+    unsetFields.escalationReason = "";
+  }
 
   const saved = await LeaveRequest.findOneAndUpdate(
     { _id: doc._id, __v: versionAtRead },
-    { $set: setFields, $inc: { __v: 1 } },
+    { $set: setFields, ...(Object.keys(unsetFields).length ? { $unset: unsetFields } : {}), $inc: { __v: 1 } },
     { new: true },
   );
   if (!saved) {
@@ -1720,6 +2000,7 @@ export async function applyLeaveRequestAction(requestId, user, action, comment, 
       comment: step.comment || undefined,
       resultingStatus: doc.status,
       forceApproved: forceApproved || undefined,
+      escalatedAt: doc.status === "ESCALATED" ? doc.escalatedAt : undefined,
     },
     performedBy: user.email,
     ipAddress: user._ip,
@@ -1734,11 +2015,9 @@ export async function applyLeaveRequestAction(requestId, user, action, comment, 
       await doc.save();
       await syncApprovedVacationToAttendance(doc);
     } else if (doc.kind === "EXCUSE") {
-      if (doc.quotaExceeded && doc.excessDeductionMethod) {
-        doc.effectivePaymentType = doc.excessDeductionMethod === "SALARY" ? "UNPAID" : "PAID";
-      } else {
-        doc.effectivePaymentType = "PAID";
-      }
+      const pt = determineExcusePaymentType(doc);
+      doc.effectivePaymentType = pt.type;
+      doc.unpaidReason = pt.reason || undefined;
       await doc.save();
       await syncApprovedExcuseToAttendance(doc);
     }
@@ -1751,8 +2030,8 @@ export async function applyLeaveRequestAction(requestId, user, action, comment, 
  * without waiting for remaining approval steps.
  */
 export async function recordLeaveRequestDirect(requestId, user, comment, extras = {}) {
-  if (!HR_ROLES.has(user.role)) {
-    throw new ApiError(403, "Only HR/Admin can directly record requests");
+  if (!hasRole(DIRECT_RECORD_ROLES, user.role)) {
+    throw new ApiError(403, "Only HR_MANAGER or ADMIN can directly record requests");
   }
 
   const doc = await LeaveRequest.findById(requestId);
@@ -1780,6 +2059,10 @@ export async function recordLeaveRequestDirect(requestId, user, comment, extras 
   doc.directRecordedBy = user.email;
   doc.directRecordedAt = now;
   doc.directRecordComment = directComment;
+  doc.finalResolver = undefined;
+  doc.escalatedAt = undefined;
+  doc.escalatedBy = undefined;
+  doc.escalationReason = undefined;
 
   if (doc.kind === "VACATION") {
     const pt = await determineVacationPaymentType(doc.employeeId, doc);
@@ -1802,14 +2085,10 @@ export async function recordLeaveRequestDirect(requestId, user, comment, extras 
       doc.excessDeductionMethod = method;
       doc.excessDeductionAmount = amount;
 
-      if (method === "SALARY") {
-        doc.effectivePaymentType = "UNPAID";
-      } else {
-        doc.effectivePaymentType = "PAID";
-      }
-    } else {
-      doc.effectivePaymentType = "PAID";
     }
+    const pt = determineExcusePaymentType(doc);
+    doc.effectivePaymentType = pt.type;
+    doc.unpaidReason = pt.reason || undefined;
   }
   await doc.save();
 
@@ -1853,15 +2132,15 @@ export async function cancelLeaveRequest(requestId, user, reason) {
   }
 
   const isOwner = String(doc.employeeId) === String(user.id);
-  const isHr = HR_ROLES.has(user.role);
+  const isHr = hasRole(HR_ROLES, user.role);
 
   if (doc.status === "PENDING") {
     if (!isOwner && !isHr) {
       throw new ApiError(403, "Only the employee or HR can cancel a pending request");
     }
   } else if (doc.status === "APPROVED") {
-    if (!isHr) {
-      throw new ApiError(403, "Only HR can cancel an approved request");
+    if (!APPROVED_CANCEL_ROLES.has(roleKey(user.role))) {
+      throw new ApiError(403, "Only HR_MANAGER can cancel an approved request");
     }
     const r = (reason || "").trim();
     if (!r) {
@@ -1913,15 +2192,13 @@ export async function getLeaveRequestById(requestId, user) {
     throw new ApiError(404, "Leave request not found");
   }
   if (String(doc.employeeId) === String(user.id)) return doc;
-  if (HR_ROLES.has(user.role)) return doc;
-
-  const subject = await Employee.findById(doc.employeeId);
-  if (!subject) {
-    throw new ApiError(403, "Forbidden");
+  if (hasRole(HR_ROLES, user.role)) return doc;
+  const scoped = await resolveEmployeeScopeIds(user);
+  if (scoped.scope === "all") return doc;
+  if (Array.isArray(scoped.employeeIds)) {
+    const allowed = scoped.employeeIds.some((id) => String(id) === String(doc.employeeId));
+    if (allowed) return doc;
   }
-  const ctx = await resolveApproverEmails(subject);
-  if (normEmail(ctx.teamLeaderEmail) === normEmail(user.email)) return doc;
-  if (normEmail(ctx.managerEmail) === normEmail(user.email)) return doc;
 
   throw new ApiError(403, "Forbidden");
 }

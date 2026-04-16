@@ -9,13 +9,14 @@ import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { fetchDepartmentsThunk, deleteDepartmentThunk } from "../store";
 import { DepartmentBadge } from "@/shared/components/EntityBadges";
 import { Trash2, Edit, Building2, LayoutDashboard, Layers } from "lucide-react";
+import { canManageDepartments } from "@/shared/utils/accessControl";
 
 export function DepartmentsListPage() {
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
   const departments = useAppSelector((state) => state.departments.items);
-  const role = useAppSelector((state) => state.identity.currentUser?.role);
-  const isAdmin = role === "ADMIN" || role === "HR_MANAGER";
+  const currentUser = useAppSelector((state) => state.identity.currentUser);
+  const isAdmin = canManageDepartments(currentUser);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 5;

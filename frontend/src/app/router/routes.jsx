@@ -1,4 +1,5 @@
 import { AuthLayout } from "@/layouts/authLayout/AuthLayout";
+import { Navigate } from "react-router-dom";
 import { DashboardLayout } from "@/layouts/dashboardLayout/DashboardLayoutEnhanced";
 import { coreModuleRoutes } from "@/modules";
 import { DashboardPage } from "@/pages/dashboard/DashboardPage";
@@ -11,10 +12,16 @@ import { ChangePasswordPage } from "@/modules/identity/pages/ChangePasswordPage"
 import { HomePage } from "@/pages/home/HomePage";
 import { PasswordRequestsPage } from "@/pages/admin/PasswordRequestsPage";
 import { ForgotPasswordPage } from "@/modules/identity/pages/ForgotPasswordPage";
-import { RequireAdminOrHrHead } from "@/shared/routing/RequireAdminOrHrHead";
+import { RequirePasswordRequestsAccess } from "@/shared/routing/RequirePasswordRequestsAccess";
+import { RequirePermissionsManager } from "@/shared/routing/RequirePermissionsManager";
+import { RequireReportsView } from "@/shared/routing/RequireReportsView";
+import { RequireDashboardAccess } from "@/shared/routing/RequireDashboardAccess";
 import { OrganizationRulesPage } from "@/modules/organization/pages/OrganizationRulesPage";
-import { HolidaysPage } from "@/modules/organization/pages/HolidaysPage";
+import { LeaveOperationsPage } from "@/modules/organization/pages/LeaveOperationsPage";
 import { WelcomePage } from "@/modules/identity/pages/WelcomePage";
+import { RequireOrganizationRulesManage } from "@/shared/routing/RequireOrganizationRulesManage";
+import { RequireOrganizationsAccess } from "@/shared/routing/RequireOrganizationsAccess";
+import { RequireLeaveOperationsAccess } from "@/shared/routing/RequireLeaveOperationsAccess";
 
 export const appRoutes = [
   {
@@ -36,6 +43,7 @@ export const appRoutes = [
           "EMPLOYEE",
           "TEAM_LEADER",
           "MANAGER",
+          "HR",
           "HR_STAFF",
           "HR_MANAGER",
           "ADMIN",
@@ -46,46 +54,64 @@ export const appRoutes = [
     ),
     children: [
       { path: "/", element: <HomePage /> },
-      { path: "/dashboard", element: <DashboardPage /> },
-      { path: "/organizations", element: <OrganizationStructurePage /> },
+      {
+        path: "/dashboard",
+        element: (
+          <RequireDashboardAccess>
+            <DashboardPage />
+          </RequireDashboardAccess>
+        ),
+      },
+      {
+        path: "/organizations",
+        element: (
+          <RequireOrganizationsAccess>
+            <OrganizationStructurePage />
+          </RequireOrganizationsAccess>
+        ),
+      },
       {
         path: "/admin/users",
         element: (
-          <RequireRole roles={["MANAGER", "HR_STAFF", "HR_MANAGER", "ADMIN"]}>
+          <RequirePermissionsManager>
             <UsersAdminPage />
-          </RequireRole>
+          </RequirePermissionsManager>
         ),
       },
       {
         path: "/admin/password-requests",
         element: (
-          <RequireAdminOrHrHead>
+          <RequirePasswordRequestsAccess>
             <PasswordRequestsPage />
-          </RequireAdminOrHrHead>
+          </RequirePasswordRequestsAccess>
         ),
       },
       {
         path: "/admin/organization-rules",
         element: (
-          <RequireRole roles={["ADMIN"]}>
+          <RequireOrganizationRulesManage>
             <OrganizationRulesPage />
-          </RequireRole>
+          </RequireOrganizationRulesManage>
+        ),
+      },
+      {
+        path: "/leave-operations",
+        element: (
+          <RequireLeaveOperationsAccess>
+            <LeaveOperationsPage />
+          </RequireLeaveOperationsAccess>
         ),
       },
       {
         path: "/admin/holidays",
-        element: (
-          <RequireRole roles={["ADMIN", "HR_MANAGER", "HR_STAFF"]}>
-            <HolidaysPage />
-          </RequireRole>
-        ),
+        element: <Navigate to="/leave-operations" replace />,
       },
       {
         path: "/reports",
         element: (
-          <RequireRole roles={["HR_STAFF", "HR_MANAGER", "ADMIN"]}>
+          <RequireReportsView>
             <ReportsPage />
-          </RequireRole>
+          </RequireReportsView>
         ),
       },
       ...coreModuleRoutes,

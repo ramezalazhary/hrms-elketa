@@ -1,9 +1,33 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useState, useEffect, useMemo, memo } from "react";
+import { useState, useMemo, memo } from "react";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
-import { logoutThunk } from "@/modules/identity/store";
-import { fetchDepartmentsThunk } from "@/modules/departments/store";
+import { logoutThunk, setViewMode } from "@/modules/identity/store";
 import { normaliseRoleKey } from "@/shared/components/EntityBadges";
+import { canManagePermissions } from "@/shared/utils/accessControl";
+import { canReadEmployees } from "@/shared/utils/accessControl";
+import { canAccessLeaveApprovals } from "@/shared/utils/accessControl";
+import { canManageBonusApprovals } from "@/shared/utils/accessControl";
+import { canManagePayroll } from "@/shared/utils/accessControl";
+import { canViewPayroll } from "@/shared/utils/accessControl";
+import { canViewReports } from "@/shared/utils/accessControl";
+import { canAccessAttendance } from "@/shared/utils/accessControl";
+import { canAccessLeaveOperations } from "@/shared/utils/accessControl";
+import { canAccessDashboardPage } from "@/shared/utils/accessControl";
+import { canAccessOrganizations } from "@/shared/utils/accessControl";
+import { canAccessDepartments } from "@/shared/utils/accessControl";
+import { canAccessAdvances } from "@/shared/utils/accessControl";
+import { canManageOrganizationRules } from "@/shared/utils/accessControl";
+import { canAccessPasswordRequests } from "@/shared/utils/accessControl";
+import { getAccessLevelLabel } from "@/shared/utils/accessControl";
+import { getAttendanceAccessLevel } from "@/shared/utils/accessControl";
+import { getAdvancesAccessLevel } from "@/shared/utils/accessControl";
+import { getDepartmentsAccessLevel } from "@/shared/utils/accessControl";
+import { getEmployeesAccessLevel } from "@/shared/utils/accessControl";
+import { getLeaveOperationsAccessLevel } from "@/shared/utils/accessControl";
+import { getOrganizationsAccessLevel } from "@/shared/utils/accessControl";
+import { getPayrollAccessLevel } from "@/shared/utils/accessControl";
+import { getPermissionsAccessLevel } from "@/shared/utils/accessControl";
+import { getReportsAccessLevel } from "@/shared/utils/accessControl";
 import { Breadcrumb } from "@/shared/components/Breadcrumb";
 import {
   Home,
@@ -27,6 +51,8 @@ import {
   Wallet,
   CircleDollarSign,
   CalendarOff,
+  Sparkles,
+  Shield,
 } from "lucide-react";
 
 /**
@@ -53,36 +79,53 @@ export function DashboardLayout() {
 
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { currentUser } = useAppSelector((state) => state.identity);
-  const departments = useAppSelector((state) => state.departments.items);
+  const { currentUser, viewMode } = useAppSelector((state) => state.identity);
   const currentRole = normaliseRoleKey(currentUser?.role);
+  const hrLevel = String(currentUser?.hrLevel || "STAFF").toUpperCase();
 
   const isAdmin = currentRole === "ADMIN";
-  const isHrManager = currentRole === "HR_MANAGER";
-  const isHR = currentRole === "HR_STAFF" || isHrManager || isAdmin;
-  const isHrBonusApprover =
+  const isHRRole =
+    currentRole === "HR" ||
     currentRole === "HR_STAFF" ||
-    currentRole === "HR_MANAGER" ||
-    currentRole === "ADMIN";
+    currentRole === "HR_MANAGER";
+  const isHrManager = isHRRole && hrLevel === "MANAGER";
+  const canOpenLeaveApprovals = canAccessLeaveApprovals(currentUser);
+  const isHrBonusApprover = canManageBonusApprovals(currentUser);
+  const canOpenPayroll = canViewPayroll(currentUser);
+  const canOpenReports = canViewReports(currentUser);
+  const canOpenAttendance = canAccessAttendance(currentUser);
+  const canOpenLeaveOpsPage = canAccessLeaveOperations(currentUser);
+  const canOpenDashboard = canAccessDashboardPage(currentUser);
+  const canOpenOrganizations = canAccessOrganizations(currentUser);
+  const canOpenDepartments = canAccessDepartments(currentUser);
+  const canOpenAdvances = canAccessAdvances(currentUser);
+  const canOpenOrganizationRules = canManageOrganizationRules(currentUser);
+  const canOpenPasswordRequests = canAccessPasswordRequests(currentUser);
+  const canOpenLeaveOperations = canOpenLeaveOpsPage;
 
-  const hasHrOpsAccess =
+  const hasHrOpsAccess = canOpenAttendance;
+  const hasManagementCapabilities =
     isAdmin ||
     isHrManager ||
-    currentUser?.permissions?.some(
-      (p) => p.module === "attendance" && p.actions.includes("view"),
-    );
-
-  const isHrDepartmentHead = useMemo(
-    () =>
-      departments.some((d) => d.name === "HR" && d.head === currentUser?.email),
-    [departments, currentUser?.email],
-  );
-
-  useEffect(() => {
-    if (currentRole === "HR_STAFF" || isAdmin) {
-      void dispatch(fetchDepartmentsThunk());
-    }
-  }, [dispatch, currentRole, isAdmin]);
+    currentRole === "HR_STAFF" ||
+    currentRole === "MANAGER" ||
+    currentRole === "TEAM_LEADER" ||
+    currentRole === "HR" ||
+    (Array.isArray(currentUser?.hrTemplates) &&
+      currentUser.hrTemplates.length > 0) ||
+    (Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0);
+  const isManagementMode = hasManagementCapabilities && viewMode === "management";
+  const canOpenPermissionsPage = canManagePermissions(currentUser);
+  const canOpenEmployeesPages = canReadEmployees(currentUser);
+  const attendanceLevelLabel = getAccessLevelLabel(getAttendanceAccessLevel(currentUser));
+  const advancesLevelLabel = getAccessLevelLabel(getAdvancesAccessLevel(currentUser));
+  const departmentsLevelLabel = getAccessLevelLabel(getDepartmentsAccessLevel(currentUser));
+  const employeesLevelLabel = getAccessLevelLabel(getEmployeesAccessLevel(currentUser));
+  const leaveOpsLevelLabel = getAccessLevelLabel(getLeaveOperationsAccessLevel(currentUser));
+  const organizationsLevelLabel = getAccessLevelLabel(getOrganizationsAccessLevel(currentUser));
+  const payrollLevelLabel = getAccessLevelLabel(getPayrollAccessLevel(currentUser));
+  const reportsLevelLabel = getAccessLevelLabel(getReportsAccessLevel(currentUser));
+  const permissionsLevelLabel = getAccessLevelLabel(getPermissionsAccessLevel(currentUser));
 
   const toggleSidebarSize = () => {
     setIsCollapsed((prev) => {
@@ -101,21 +144,13 @@ export function DashboardLayout() {
   };
 
   const navStructure = useMemo(() => {
-    const structure = [{ type: "link", to: "/", label: "Home", icon: Home }];
+    const structure = [];
 
-    structure.push({
-      type: "link",
-      to: "/employees/time-off",
-      label: "Time off",
-      icon: CalendarCheck,
-    });
+    if (!isManagementMode) {
+      structure.push({ type: "link", to: "/", label: "Home", icon: Home });
+    }
 
-    const canApproveLeave =
-      currentRole === "TEAM_LEADER" ||
-      currentRole === "MANAGER" ||
-      currentRole === "HR_STAFF" ||
-      currentRole === "HR_MANAGER" ||
-      currentRole === "ADMIN";
+    const canApproveLeave = isManagementMode && canOpenLeaveApprovals;
 
     if (canApproveLeave) {
       structure.push({
@@ -126,7 +161,7 @@ export function DashboardLayout() {
       });
     }
 
-    if (isHrBonusApprover) {
+    if (isManagementMode && isHrBonusApprover) {
       structure.push({
         type: "link",
         to: "/employees/bonus-approvals",
@@ -135,40 +170,50 @@ export function DashboardLayout() {
       });
     }
 
-    if (currentRole === "TEAM_LEADER") {
+    if (canOpenDashboard && isManagementMode && currentRole === "TEAM_LEADER") {
       structure.push({
         type: "link",
         to: "/dashboard",
         label: "My Team",
         icon: Users,
       });
-    } else if (currentRole === "MANAGER") {
+    } else if (canOpenDashboard && isManagementMode && currentRole === "MANAGER") {
       structure.push({
         type: "link",
         to: "/dashboard",
         label: "My Department",
         icon: LayoutDashboard,
       });
+    } else if (canOpenDashboard && isManagementMode) {
+      structure.push({
+        type: "link",
+        to: "/dashboard",
+        label: "Management Dashboard",
+        icon: LayoutDashboard,
+      });
     }
 
-    // Organizations & Employees restricted to HR/Admin
-    if (isHR) {
+    if (
+      isManagementMode &&
+      (canOpenOrganizations ||
+        canOpenEmployeesPages ||
+        canOpenDepartments ||
+        canOpenLeaveOperations ||
+        canOpenReports ||
+        canOpenOrganizationRules)
+    ) {
       const orgChildren = [
-        {
-          type: "link",
-          to: "/organizations",
-          label: "Structure",
-          icon: Network,
-        },
-        { type: "link", to: "/employees", label: "Employees", icon: Users },
-        {
-          type: "link",
-          to: "/departments",
-          label: "Departments",
-          icon: Briefcase,
-        },
+        ...(canOpenOrganizations
+          ? [{ type: "link", to: "/organizations", label: `Structure (${organizationsLevelLabel})`, icon: Network }]
+          : []),
+        ...(canOpenEmployeesPages
+          ? [{ type: "link", to: "/employees", label: `Employees (${employeesLevelLabel})`, icon: Users }]
+          : []),
+        ...(canOpenDepartments
+          ? [{ type: "link", to: "/departments", label: `Departments (${departmentsLevelLabel})`, icon: Briefcase }]
+          : []),
       ];
-      if (isAdmin) {
+      if (canOpenOrganizationRules) {
         orgChildren.push({
           type: "link",
           to: "/admin/organization-rules",
@@ -176,18 +221,22 @@ export function DashboardLayout() {
           icon: Settings,
         });
       }
-      orgChildren.push({
-        type: "link",
-        to: "/admin/holidays",
-        label: "Holidays",
-        icon: CalendarOff,
-      });
-      orgChildren.push({
-        type: "link",
-        to: "/reports",
-        label: "Reports",
-        icon: BarChart3,
-      });
+      if (canOpenLeaveOperations) {
+        orgChildren.push({
+          type: "link",
+          to: "/leave-operations",
+          label: `Leave Ops (${leaveOpsLevelLabel})`,
+          icon: CalendarOff,
+        });
+      }
+      if (canOpenReports) {
+        orgChildren.push({
+          type: "link",
+          to: "/reports",
+          label: `Reports (${reportsLevelLabel})`,
+          icon: BarChart3,
+        });
+      }
       structure.push({
         type: "group",
         label: "Organizations",
@@ -196,26 +245,28 @@ export function DashboardLayout() {
       });
     }
 
-    if (hasHrOpsAccess) {
+    if (isManagementMode && hasHrOpsAccess) {
       const hrOpsChildren = [
         {
           type: "link",
           to: "/attendance",
-          label: "Attendance",
+          label: `Attendance (${attendanceLevelLabel})`,
           icon: CalendarRange,
         },
       ];
-      if (isHR) {
+      if (canOpenPayroll) {
         hrOpsChildren.push({
           type: "link",
           to: "/payroll",
-          label: "Payroll",
+          label: `Payroll (${payrollLevelLabel})`,
           icon: Wallet,
         });
+      }
+      if (canOpenAdvances) {
         hrOpsChildren.push({
           type: "link",
           to: "/advances",
-          label: "Advances",
+          label: `Advances (${advancesLevelLabel})`,
           icon: CircleDollarSign,
         });
       }
@@ -228,7 +279,54 @@ export function DashboardLayout() {
     }
 
     return structure;
-  }, [currentRole, isHR, hasHrOpsAccess]);
+  }, [
+    currentRole,
+    hasHrOpsAccess,
+    isManagementMode,
+    isHrBonusApprover,
+    canOpenLeaveApprovals,
+    canOpenOrganizations,
+    canOpenEmployeesPages,
+    canOpenDepartments,
+    canOpenPayroll,
+    canOpenAdvances,
+    canOpenReports,
+    canOpenLeaveOperations,
+    canOpenOrganizationRules,
+    canOpenDashboard,
+    attendanceLevelLabel,
+    advancesLevelLabel,
+    departmentsLevelLabel,
+    employeesLevelLabel,
+    leaveOpsLevelLabel,
+    organizationsLevelLabel,
+    payrollLevelLabel,
+    reportsLevelLabel,
+  ]);
+
+  const filteredNavStructure = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return navStructure;
+    const hits = [];
+    for (const item of navStructure) {
+      if (item.type === "group") {
+        const matchedChildren = (item.children || []).filter((c) =>
+          c.label.toLowerCase().includes(q),
+        );
+        if (item.label.toLowerCase().includes(q) || matchedChildren.length > 0) {
+          hits.push({
+            ...item,
+            children: matchedChildren.length > 0 ? matchedChildren : item.children,
+          });
+        }
+      } else if (item.label.toLowerCase().includes(q)) {
+        hits.push(item);
+      }
+    }
+    return hits;
+  }, [navStructure, searchQuery]);
+
+  const roleLabel = (currentRole || "EMPLOYEE").replaceAll("_", " ");
 
   return (
     <div className="min-h-screen flex overflow-hidden bg-slate-50 text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
@@ -243,7 +341,7 @@ export function DashboardLayout() {
 
       {/* Enhanced Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[70] bg-white border-r border-zinc-200 transition-[width] duration-200 ease-out md:translate-x-0 md:static md:inset-0
+        className={`fixed inset-y-0 left-0 z-[70] border-r border-zinc-200/80 bg-zinc-50/95 backdrop-blur transition-[width] duration-200 ease-out md:translate-x-0 md:static md:inset-0
           ${
             isCollapsed
               ? "w-[4.5rem]"
@@ -251,11 +349,11 @@ export function DashboardLayout() {
           }
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="h-full flex flex-col p-4 relative">
+        <div className="relative flex h-full flex-col p-4">
           <button
             type="button"
             onClick={toggleSidebarSize}
-            className="hidden md:flex absolute -right-2.5 top-16 w-5 h-5 bg-white border border-zinc-200 rounded-full items-center justify-center text-zinc-400 hover:text-zinc-700 z-10"
+            className="absolute -right-2.5 top-16 z-10 hidden h-5 w-5 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-400 hover:text-zinc-700 md:flex"
           >
             {isCollapsed ? (
               <ChevronRight size={12} />
@@ -264,10 +362,10 @@ export function DashboardLayout() {
             )}
           </button>
 
-          <div className="flex items-center justify-between mb-8 h-9 px-2">
+          <div className="mb-5 flex h-9 items-center justify-between px-2">
             {!isCollapsed ? (
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-900 text-white shadow-sm">
                   <span className="text-white font-bold text-sm">H</span>
                 </div>
                 <span className="text-lg font-semibold text-zinc-900">
@@ -275,7 +373,7 @@ export function DashboardLayout() {
                 </span>
               </div>
             ) : (
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mx-auto">
+              <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-900 text-white shadow-sm">
                 <span className="text-white font-bold text-sm">H</span>
               </div>
             )}
@@ -288,24 +386,54 @@ export function DashboardLayout() {
             </button>
           </div>
 
-          {/* Search in sidebar */}
           {!isCollapsed && (
-            <div className="mb-6">
+            <div className="mb-4 space-y-3">
+              <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 py-2">
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
+                  {isManagementMode ? <Shield className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  {isManagementMode ? "Management mode" : "Personal mode"}
+                </div>
+                <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-zinc-600">
+                  {roleLabel}
+                </span>
+              </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-400" />
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder="Quick find pages..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-10 pr-4 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-200"
                 />
               </div>
             </div>
           )}
+          {!isCollapsed && hasManagementCapabilities && (
+            <div className="mb-3 px-1">
+              <button
+                type="button"
+                onClick={() =>
+                  dispatch(
+                    setViewMode(isManagementMode ? "personal" : "management"),
+                  )
+                }
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                title={
+                  isManagementMode
+                    ? "Switch to Personal Mode"
+                    : "Switch to Management Mode"
+                }
+              >
+                {isManagementMode
+                  ? "Switch to Personal Mode"
+                  : "Switch to Management Mode"}
+              </button>
+            </div>
+          )}
 
-          <nav className="flex-1 space-y-1 overflow-y-auto">
-            {navStructure.map((item) => (
+          <nav className="flex-1 space-y-1 overflow-y-auto pr-1">
+            {filteredNavStructure.map((item) => (
               <div key={item.label}>
                 {item.type === "group" ? (
                   <div className="mb-2">
@@ -313,7 +441,7 @@ export function DashboardLayout() {
                       <button
                         type="button"
                         onClick={() => toggleGroup(item.label)}
-                        className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium uppercase tracking-wider text-zinc-400 hover:text-zinc-600 mt-4"
+                        className="mt-3 flex w-full items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-600"
                       >
                         {item.label}
                         <ChevronRight
@@ -325,7 +453,7 @@ export function DashboardLayout() {
                       <div className="h-px bg-zinc-100 my-3 mx-2" />
                     )}
                     {(expandedGroups[item.label] || isCollapsed) && (
-                      <div className="space-y-1 mt-1">
+                      <div className="mt-1 space-y-1">
                         {item.children.map((child) => (
                           <SidebarLink
                             key={child.to}
@@ -351,23 +479,29 @@ export function DashboardLayout() {
               </div>
             ))}
 
-            {(isAdmin || isHrManager || (currentRole === "HR_STAFF" && isHrDepartmentHead)) &&
+            {filteredNavStructure.length === 0 && !isCollapsed && (
+              <div className="rounded-xl border border-dashed border-zinc-200 bg-white/80 px-3 py-4 text-center text-xs text-zinc-500">
+                No matching pages.
+              </div>
+            )}
+
+            {isManagementMode &&
+              canOpenPermissionsPage &&
               !isCollapsed && (
                 <p className="px-3 pt-6 pb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
                   Administration
                 </p>
               )}
-            {isAdmin && (
+            {isManagementMode && canOpenPermissionsPage && (
               <SidebarLink
                 to="/admin/users"
-                label="Permissions"
+                label={`Permissions (${permissionsLevelLabel})`}
                 icon={UserCog}
                 isCollapsed={isCollapsed}
                 closeMobile={() => setSidebarOpen(false)}
               />
             )}
-            {(isAdmin || isHrManager ||
-              (currentRole === "HR_STAFF" && isHrDepartmentHead)) && (
+            {isManagementMode && canOpenPasswordRequests && (
               <SidebarLink
                 to="/admin/password-requests"
                 label="Password requests"
@@ -378,13 +512,11 @@ export function DashboardLayout() {
             )}
           </nav>
 
-          <div
-            className={`mt-auto pt-4 border-t border-zinc-100 ${isCollapsed ? "items-center" : ""}`}
-          >
+          <div className={`mt-auto border-t border-zinc-200/80 pt-4 ${isCollapsed ? "items-center" : ""}`}>
             <div
               className={`mb-3 flex items-center gap-3 ${isCollapsed ? "justify-center" : "px-2"}`}
             >
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-medium shadow-sm">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-white font-medium shadow-sm">
                 {currentUser?.email?.[0].toUpperCase()}
               </div>
               {!isCollapsed && (
@@ -405,7 +537,7 @@ export function DashboardLayout() {
                 await dispatch(logoutThunk());
                 navigate("/login");
               }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50/50 transition-all duration-200 group ${
+              className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 transition-all duration-200 hover:bg-rose-50/70 hover:text-rose-600 ${
                 isCollapsed ? "justify-center" : ""
               }`}
               title="Sign out"
@@ -418,9 +550,9 @@ export function DashboardLayout() {
       </aside>
 
       {/* Enhanced Main Content */}
-      <div className="flex-1 flex flex-col min-h-0 bg-zinc-50 min-w-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-50">
         {/* Enhanced Header */}
-        <header className="md:hidden shrink-0 h-16 bg-white border-b border-zinc-200 flex items-center px-4 justify-between">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 md:hidden">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
@@ -469,11 +601,11 @@ const SidebarLink = memo(function SidebarLink({ to, label, icon: Icon, isCollaps
       onClick={closeMobile}
       title={isCollapsed ? label : ""}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 group
+        `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200
         ${
           isActive
-            ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200/50"
-            : "text-slate-500 hover:bg-white hover:text-indigo-600 hover:shadow-sm"
+            ? "bg-zinc-900 text-white shadow-sm"
+            : "text-slate-600 hover:bg-white hover:text-zinc-900"
         }`
       }
     >
@@ -482,7 +614,7 @@ const SidebarLink = memo(function SidebarLink({ to, label, icon: Icon, isCollaps
           <Icon
             size={18}
             className={`shrink-0 transition-colors ${isCollapsed ? "mx-auto" : ""} ${
-              isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600"
+              isActive ? "text-white" : "text-slate-400 group-hover:text-zinc-700"
             }`}
           />
           {!isCollapsed && <span className="truncate">{label}</span>}

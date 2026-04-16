@@ -23,6 +23,10 @@ import {
   resolveWorkingDaysPerMonth,
   DEFAULT_WORKING_DAYS_PER_MONTH,
 } from "../utils/orgPolicyWorkingDays.js";
+import {
+  fiscalMonthPeriodStartUtc,
+  getCompanyMonthStartDay,
+} from "./leavePolicyService.js";
 
 const DEFAULT_PAYROLL_CONFIG = {
   /** HR-configurable via Organization Policy → Payroll (0–8). */
@@ -415,6 +419,8 @@ function computeEmployeeRecord(emp, attendanceSummary, config, overtimeHrs, extr
   const incompleteDeductionDays = attendanceSummary?.deductions?.incompleteDays || 0;
   const unpaidLeaveDeductionDays = attendanceSummary?.deductions?.unpaidLeaveDays || 0;
   const excessExcuseDeductionDays = attendanceSummary?.deductions?.excessExcuseDays || 0;
+  const excessExcuseDeductionAmountDirect =
+    Number(attendanceSummary?.deductions?.excessExcuseAmountDirect) || 0;
 
   const nonAbsenceDeductionDays =
     lateDeductionDays +
@@ -431,7 +437,7 @@ function computeEmployeeRecord(emp, attendanceSummary, config, overtimeHrs, extr
     fixedBonus: Number(emp.financial?.fixedBonus) || 0,
     assessmentBonus: assessmentNet || 0,
     daysAbsent: attendanceSummary?.absentDays || 0,
-    attendanceDeduction: nonAbsenceDeductionDays * rawDailyRate,
+    attendanceDeduction: (nonAbsenceDeductionDays * rawDailyRate) + excessExcuseDeductionAmountDirect,
     fixedDeduction: Number(emp.financial?.fixedDeduction) || 0,
     advanceAmount: advanceTotal,
     workingDays: attendanceSummary?.workingDays || 0,
@@ -495,6 +501,26 @@ function buildPayrollConfigFromOrgPolicy(orgPolicy) {
   }
   config.workingDaysPerMonth = resolveWorkingDaysPerMonth(orgPolicy);
   return config;
+}
+
+function resolveRunPeriodRange(year, month, companyMonthStartDay) {
+  const refDate = new Date(Date.UTC(year, month - 1, 15));
+  const periodStart = fiscalMonthPeriodStartUtc(refDate, companyMonthStartDay);
+
+  const nextMonthIdx = periodStart.getUTCMonth() + 1;
+  const nextYear =
+    nextMonthIdx > 11
+      ? periodStart.getUTCFullYear() + 1
+      : periodStart.getUTCFullYear();
+  const normalizedNextMonth = nextMonthIdx > 11 ? 0 : nextMonthIdx;
+  const nextMonthLastDay = new Date(
+    Date.UTC(nextYear, normalizedNextMonth + 1, 0),
+  ).getUTCDate();
+  const nextAnchorDay = Math.min(companyMonthStartDay, nextMonthLastDay);
+  const periodEnd = new Date(
+    Date.UTC(nextYear, normalizedNextMonth, nextAnchorDay, 0, 0, 0, 0),
+  );
+  return { periodStart, periodEnd };
 }
 
 export async function resolvePayrollConfig() {
@@ -908,6 +934,49 @@ export async function finalizePayrollRun(runId, userEmail) {
 
   const records = await PayrollRecord.find({ runId }).lean();
   const { year, month } = run.period;
+
+  if (records.length > 0) {
+    const orgPolicy = await OrganizationPolicy.findOne({ name: "default" }).lean();
+    const companyStartDay = getCompanyMonthStartDay(orgPolicy);
+    const { periodStart, periodEnd } = resolveRunPeriodRange(
+      year,
+      month,
+      companyStartDay,
+    );
+    const employeeIds = [...new Set(records.map((r) => String(r.employeeId)))];
+    const partialRows = await Attendance.find({
+      employeeId: { $in: employeeIds },
+      date: { $gte: periodStart, $lt: periodEnd },
+      status: "PARTIAL_EXCUSED",
+    })
+      .select("employeeCode date requiresDeductionDecision deductionSource deductionValueType deductionValue")
+      .sort({ date: 1 })
+      .lean();
+
+    const unresolved = partialRows.filter((r) => {
+      const source = String(r.deductionSource || "").toUpperCase();
+      const type = String(r.deductionValueType || "").toUpperCase();
+      const value = Number(r.deductionValue);
+      if (r.requiresDeductionDecision) return true;
+      if (source !== "SALARY" && source !== "VACATION_BALANCE") return true;
+      if (type !== "DAYS" && type !== "AMOUNT") return true;
+      if (!Number.isFinite(value) || value <= 0) return true;
+      if (source === "VACATION_BALANCE" && type !== "DAYS") return true;
+      return false;
+    });
+
+    if (unresolved.length > 0) {
+      const sample = unresolved
+        .slice(0, 5)
+        .map((r) => `${r.employeeCode || "Unknown"} @ ${new Date(r.date).toISOString().slice(0, 10)}`)
+        .join(", ");
+      throw new Error(
+        `Cannot finalize payroll: ${unresolved.length} PARTIAL_EXCUSED attendance record(s) still require HR deduction source decision. Resolve pending rows first.`
+        + (sample ? ` Sample: ${sample}` : ""),
+      );
+    }
+  }
+
   for (const rec of records) {
     if (rec.advanceAmount > 0) {
       // Re-evaluate what should be deducted in case HR manually edited the advanceAmount in constraints

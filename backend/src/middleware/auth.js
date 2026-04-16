@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { Employee } from "../models/Employee.js";
 import { TokenBlacklist } from "../models/TokenBlacklist.js";
 import { normalizeRole, ROLE_LEVEL } from "../utils/roles.js";
+import { hydrateUserScopeContext } from "../services/scopeService.js";
 
 // Development fallback to avoid a hard failure before you create `.env`.
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -71,7 +72,18 @@ export async function requireAuth(req, res, next) {
       return unauthorized(res);
     }
 
-    req.user = user;
+    req.user = await hydrateUserScopeContext(user);
+    if (!req.user?._hydrated) {
+      return unauthorized(res, "Account not found");
+    }
+    if (req.user.isActive === false) {
+      return unauthorized(res, "Account inactive");
+    }
+    const tokenVersion = Number(decoded?.authzVersion ?? 0);
+    const currentVersion = Number(req.user?.authzVersion ?? -1);
+    if (tokenVersion !== currentVersion) {
+      return unauthorized(res, "Session outdated due to permission update");
+    }
     return next();
   } catch (err) {
     if (err instanceof jwt.TokenExpiredError) {
@@ -98,6 +110,7 @@ export function generateAccessToken(user) {
       sub: user.id,
       email: user.email,
       role: user.role,
+      authzVersion: Number(user?.authzVersion ?? 0),
       type: "access",
     },
     JWT_SECRET,
@@ -117,6 +130,7 @@ export function generateRefreshToken(user) {
       sub: user.id,
       email: user.email,
       role: user.role,
+      authzVersion: Number(user?.authzVersion ?? 0),
       type: "refresh",
     },
     JWT_REFRESH_SECRET,
@@ -146,11 +160,21 @@ export async function verifyRefreshToken(token) {
     if (!employee) {
       return null;
     }
+    if (employee.isActive === false) {
+      return null;
+    }
+
+    const tokenVersion = Number(decoded?.authzVersion ?? 0);
+    const currentVersion = Number(employee?.authzVersion ?? 0);
+    if (tokenVersion !== currentVersion) {
+      return null;
+    }
 
     return {
       id: employee.id,
       email: employee.email,
       role: employee.role,
+      authzVersion: currentVersion,
     };
   } catch (error) {
     return null;

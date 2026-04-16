@@ -14,13 +14,15 @@ import { Attendance } from "../models/Attendance.js";
 import { Alert } from "../models/Alert.js";
 import { ManagementRequest } from "../models/ManagementRequest.js";
 import { LeaveRequest } from "../models/LeaveRequest.js";
-import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
 import { requireAuth } from "../middleware/auth.js";
 import { enforcePolicy } from "../middleware/enforcePolicy.js";
+import { enforceScope } from "../middleware/enforceScope.js";
 import { hashPassword } from "../middleware/auth.js";
 import { resolveEmployeeAccess } from "../services/accessService.js";
-import { editorCanModifyTargetRole } from "../utils/roles.js";
+import { editorCanModifyTargetRole, normalizeRole, ROLE } from "../utils/roles.js";
 import { createAuditLog, detectChanges } from "../services/auditService.js";
+import { HR_TEMPLATES } from "../services/authorizationPolicyService.js";
+import { resolveEmployeeScopeIds, resolveTargetEmployee } from "../services/scopeService.js";
 import { syncEmployeeLeadershipAfterSave } from "../services/employeeOrgSync.js";
 import {
   enrichEmployeesForResponse,
@@ -31,8 +33,14 @@ import {
   sanitizeEmployeeApiPayload,
   stripEmployeeSecrets,
 } from "../utils/employeePrivacySanitizer.js";
+import { bumpAuthzVersion } from "../services/authzVersionService.js";
+import {
+  assertNotCurrentChiefExecutive,
+  getChiefExecutiveId,
+} from "../services/chiefExecutiveService.js";
 
 const router = Router();
+const HR_TEMPLATE_KEYS = Object.freeze(Object.keys(HR_TEMPLATES));
 
 function escapeRegex(s) {
   return String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -70,6 +78,8 @@ async function buildLedTeamRosterClauses(user) {
 
   const idList = [];
   const emailOrs = [];
+  const teamIdList = [];
+  const teamNameList = [];
   const seenEmail = new Set();
 
   const pushEmailClause = (raw) => {
@@ -84,6 +94,8 @@ async function buildLedTeamRosterClauses(user) {
   };
 
   for (const t of ledStandalone) {
+    if (t._id) teamIdList.push(t._id);
+    if (t.name) teamNameList.push(t.name);
     for (const mid of t.memberIds || []) {
       const raw = mid?._id ?? mid;
       if (raw && mongoose.Types.ObjectId.isValid(String(raw))) {
@@ -104,12 +116,25 @@ async function buildLedTeamRosterClauses(user) {
   for (const d of deptMatch) {
     for (const t of d.teams || []) {
       if (!re.test(String(t.leaderEmail || ""))) continue;
+      if (t.name) teamNameList.push(t.name);
       for (const m of t.members || []) pushEmailClause(m);
     }
   }
 
   if (idList.length) clauses.push({ _id: { $in: idList } });
   if (emailOrs.length) clauses.push({ $or: emailOrs });
+
+  // Fallback / Self-inference: if the actor is officially assigned to a team/teamId, include anyone else on that team
+  const actor = await Employee.findOne({ email: user?.email }).select("team teamId").lean();
+  if (actor?.teamId) {
+    teamIdList.push(actor.teamId);
+  }
+  if (actor?.team) {
+    teamNameList.push(actor.team);
+  }
+
+  if (teamIdList.length) clauses.push({ teamId: { $in: teamIdList } });
+  if (teamNameList.length) clauses.push({ team: { $in: teamNameList } });
 
   return clauses;
 }
@@ -133,10 +158,12 @@ async function employeeOnLedTeamRoster(user, employee) {
     status: "ACTIVE",
     $or: leaderOr,
   })
-    .select("members memberIds")
+    .select("name members memberIds")
     .lean();
 
   for (const t of ledStandalone) {
+    if (t._id && employee.teamId && String(employee.teamId) === String(t._id)) return true;
+    if (t.name && employee.team && String(employee.team).trim().toLowerCase() === String(t.name).trim().toLowerCase()) return true;
     for (const mid of t.memberIds || []) {
       const raw = mid?._id ?? mid;
       if (eid && String(raw) === String(eid)) return true;
@@ -162,6 +189,7 @@ async function employeeOnLedTeamRoster(user, employee) {
   for (const d of deptMatch) {
     for (const t of d.teams || []) {
       if (!re.test(String(t.leaderEmail || ""))) continue;
+      if (t.name && employee.team && String(employee.team).trim().toLowerCase() === String(t.name).trim().toLowerCase()) return true;
       for (const m of t.members || []) {
         if (
           emEmail &&
@@ -207,13 +235,6 @@ async function logEmployeePolicyParity(req, action) {
   } catch {
     // parity logging is best-effort during migration
   }
-}
-
-async function getChiefExecutiveId() {
-  const policy = await OrganizationPolicy.findOne({ name: "default" })
-    .select("chiefExecutiveEmployeeId")
-    .lean();
-  return policy?.chiefExecutiveEmployeeId || null;
 }
 
 async function respondWithEnrichedEmployees(
@@ -413,144 +434,51 @@ router.get("/", requireAuth, enforcePolicy("read", "employees"), async (req, res
     ];
   }
 
+  const scoped = await resolveEmployeeScopeIds(req.user);
+  if (scoped.scope !== "all") {
+    query._id = { $in: scoped.employeeIds || [] };
+  }
+
   // Get total count for pagination (only if paginated)
   const totalCount = isPaginated ? await Employee.countDocuments(query) : 0;
 
-  if (access.scope === "all") {
-    const employees = await Employee.find(query)
-      .populate("managerId teamLeaderId branchId")
-      .sort({ fullName: 1 })
-      .skip(skip)
-      .limit(limitNum);
+  let employeeQuery = Employee.find(query)
+    .populate("managerId teamLeaderId branchId")
+    .sort({ fullName: 1 });
+  if (isPaginated) employeeQuery = employeeQuery.skip(skip).limit(limitNum);
+  const employees = await employeeQuery;
 
-    return respondWithEnrichedEmployees(
-      res,
-      employees,
-      isPaginated,
-      isPaginated
-        ? {
-            currentPage: pageNum,
-            totalPages: Math.ceil(totalCount / limitNum),
-            totalCount,
-            limit: limitNum,
-          }
-        : undefined,
-      req.user,
-      access,
-    );
-  }
+  return respondWithEnrichedEmployees(
+    res,
+    employees,
+    isPaginated,
+    isPaginated
+      ? {
+          currentPage: pageNum,
+          totalPages: Math.ceil(totalCount / limitNum),
+          totalCount,
+          limit: limitNum,
+        }
+      : undefined,
+    req.user,
+    access,
+  );
+});
 
-  if (access.scope === "department") {
-    const employeeRecord = await Employee.findOne({ email: req.user.email });
-    let deptNames = await Department.find({ head: req.user.email }).distinct(
-      "name",
-    );
-    if (employeeRecord) deptNames.push(employeeRecord.department);
+router.get("/me", requireAuth, enforcePolicy("read", "employees"), async (req, res) => {
+  await logEmployeePolicyParity(req, "read");
+  const access = accessFromPolicyDecision(req.authzDecision);
+  const employee = await Employee.findOne({ email: req.user.email }).populate(
+    "managerId teamLeaderId",
+  );
+  if (!employee) return res.status(404).json({ error: "Employee not found" });
 
-    const deptQuery = intersectDepartmentFilter(query, deptNames);
-    const deptCount = isPaginated
-      ? await Employee.countDocuments(deptQuery)
-      : 0;
-
-    const employees = await Employee.find(deptQuery)
-      .populate("managerId teamLeaderId branchId")
-      .sort({ fullName: 1 })
-      .skip(skip)
-      .limit(limitNum);
-
-    return respondWithEnrichedEmployees(
-      res,
-      employees,
-      isPaginated,
-      isPaginated
-        ? {
-            currentPage: pageNum,
-            totalPages: Math.ceil(deptCount / limitNum),
-            totalCount: deptCount,
-            limit: limitNum,
-          }
-        : undefined,
-      req.user,
-      access,
-    );
-  }
-
-  if (access.scope === "team") {
-    let finalQuery = { ...query };
-    const rosterClauses = [];
-    if (Array.isArray(access.teams) && access.teams.length > 0) {
-      rosterClauses.push({ team: { $in: access.teams } });
-    }
-    rosterClauses.push(...(await buildLedTeamRosterClauses(req.user)));
-
-    const teamScopeOr = [];
-    if (rosterClauses.length > 0) {
-      teamScopeOr.push({ $or: rosterClauses });
-    }
-    teamScopeOr.push({ email: req.user.email });
-
-    if (finalQuery.$or) {
-      finalQuery.$and = [{ $or: finalQuery.$or }, { $or: teamScopeOr }];
-      delete finalQuery.$or;
-    } else {
-      finalQuery.$or = teamScopeOr;
-    }
-
-    const teamCount = isPaginated
-      ? await Employee.countDocuments(finalQuery)
-      : 0;
-    const employees = await Employee.find(finalQuery)
-      .populate("managerId teamLeaderId branchId")
-      .sort({ fullName: 1 })
-      .skip(skip)
-      .limit(limitNum);
-
-    return respondWithEnrichedEmployees(
-      res,
-      employees,
-      isPaginated,
-      isPaginated
-        ? {
-            currentPage: pageNum,
-            totalPages: Math.ceil(teamCount / limitNum),
-            totalCount: teamCount,
-            limit: limitNum,
-          }
-        : undefined,
-      req.user,
-      access,
-    );
-  }
-
-  if (access.scope === "self") {
-    const selfQuery = { ...query, email: req.user.email };
-    const selfCount = isPaginated
-      ? await Employee.countDocuments(selfQuery)
-      : 0;
-    const employees = await Employee.find(selfQuery)
-      .populate("managerId teamLeaderId")
-      .sort({ fullName: 1 })
-      .skip(skip)
-      .limit(limitNum);
-
-    return respondWithEnrichedEmployees(
-      res,
-      employees,
-      isPaginated,
-      isPaginated
-        ? {
-            currentPage: pageNum,
-            totalPages: Math.ceil(selfCount / limitNum),
-            totalCount: selfCount,
-            limit: limitNum,
-          }
-        : undefined,
-      req.user,
-      access,
-    );
-  }
-
-  return respondWithEnrichedEmployees(res, [], false, undefined, req.user, access);
+  const enriched = await enrichEmployeeForResponse(employee);
+  const sanitized = sanitizeEmployeeApiPayload(enriched, {
+    viewer: req.user,
+    access,
+  });
+  return res.json(sanitized);
 });
 
 router.get("/:id", requireAuth, enforcePolicy("read", "employees"), async (req, res) => {
@@ -570,51 +498,16 @@ router.get("/:id", requireAuth, enforcePolicy("read", "employees"), async (req, 
     });
     return res.json(sanitized);
   };
-
-  if (access.scope === "all") return send();
-
-  if (access.scope === "department") {
-    const isAllowedDept = await checkScopeDepartment(
-      req.user.email,
-      employee.department,
-    );
-    if (isAllowedDept) return send();
-    return res.status(403).json({ error: "Forbidden: Not in your scope" });
+  const scoped = await resolveEmployeeScopeIds(req.user);
+  if (scoped.scope === "all") return send();
+  if (Array.isArray(scoped.employeeIds)) {
+    const allowed = scoped.employeeIds.some((id) => String(id) === String(employee._id));
+    if (allowed) return send();
   }
-
-  if (access.scope === "team") {
-    const selfEmail = (req.user.email || "").toLowerCase().trim();
-    const empEmail = (employee.email || "").toLowerCase().trim();
-    if (empEmail && empEmail === selfEmail) {
-      return send();
-    }
-    const empTeam = (employee.team || "").trim().toLowerCase();
-    const inNamedTeam =
-      Array.isArray(access.teams) &&
-      access.teams.some(
-        (n) =>
-          n != null &&
-          String(n).trim().toLowerCase() === empTeam &&
-          empTeam.length > 0,
-      );
-    if (inNamedTeam) {
-      return send();
-    }
-    if (await employeeOnLedTeamRoster(req.user, employee)) {
-      return send();
-    }
-    return res.status(403).json({ error: "Forbidden: Not in your team scope" });
-  }
-
-  if (access.scope === "self") {
-    if (employee.email === req.user.email) return send();
-    return res.status(403).json({ error: "Forbidden: Can only view self" });
-  }
-
-  return res.status(403).json({ error: "Forbidden" });
+  return res.status(403).json({ error: "Forbidden: Not in your scope" });
 });
 
-router.post("/", requireAuth, enforcePolicy("create", "employees"), async (req, res) => {
+router.post("/", requireAuth, enforcePolicy("manage", "employees"), async (req, res) => {
   await logEmployeePolicyParity(req, "create");
   const access = accessFromPolicyDecision(req.authzDecision);
 
@@ -724,6 +617,19 @@ router.post("/", requireAuth, enforcePolicy("create", "employees"), async (req, 
     } else {
       finalRole = department === "HR" ? "HR_STAFF" : "EMPLOYEE";
     }
+    const normalizedFinalRole = normalizeRole(finalRole);
+    const isHrFinalRole =
+      normalizedFinalRole === ROLE.HR_STAFF ||
+      normalizedFinalRole === ROLE.HR_MANAGER;
+    const requestedTemplates = Array.isArray(req.body?.hrTemplates)
+      ? [...new Set(req.body.hrTemplates.map((x) => String(x).trim()))]
+      : [];
+    const safeTemplates = requestedTemplates.filter((tpl) =>
+      HR_TEMPLATE_KEYS.includes(tpl),
+    );
+    const safeHrLevel = String(req.body?.hrLevel || "STAFF")
+      .trim()
+      .toUpperCase();
 
     const hire = optionalDate(dateOfHire);
     const nextReviewDate = addOneYear(hire);
@@ -786,6 +692,11 @@ router.post("/", requireAuth, enforcePolicy("create", "employees"), async (req, 
       socialInsurance,
       passwordHash: await hashPassword("Welcome123!"),
       role: finalRole,
+      hrTemplates: isHrFinalRole ? safeTemplates : [],
+      hrLevel:
+        isHrFinalRole && (safeHrLevel === "STAFF" || safeHrLevel === "MANAGER")
+          ? safeHrLevel
+          : "STAFF",
       requirePasswordChange: true,
       isActive: true,
       useDefaultReporting:
@@ -832,7 +743,12 @@ router.post("/", requireAuth, enforcePolicy("create", "employees"), async (req, 
   }
 });
 
-router.put("/:id", requireAuth, enforcePolicy("edit", "employees"), async (req, res) => {
+router.put(
+  "/:id",
+  requireAuth,
+  enforcePolicy("manage", "employees"),
+  enforceScope(resolveTargetEmployee),
+  async (req, res) => {
   await logEmployeePolicyParity(req, "edit");
   const access = accessFromPolicyDecision(req.authzDecision);
 
@@ -1010,6 +926,7 @@ router.put("/:id", requireAuth, enforcePolicy("edit", "employees"), async (req, 
       "EMPLOYEE",
       "TEAM_LEADER",
       "MANAGER",
+      "HR",
       "HR_STAFF",
       "HR_MANAGER",
       "ADMIN",
@@ -1017,13 +934,25 @@ router.put("/:id", requireAuth, enforcePolicy("edit", "employees"), async (req, 
     if (!allowedRoles.includes(role)) {
       return res.status(400).json({ error: "Invalid role" });
     }
-    const privileged = ["HR_STAFF", "HR_MANAGER", "ADMIN"];
+    const privileged = ["HR", "HR_STAFF", "HR_MANAGER", "ADMIN"];
     if (privileged.includes(role) && access.scope !== "all") {
       return res
         .status(403)
         .json({ error: "Only administrators can assign HR or Admin roles" });
     }
     employee.role = role;
+    const normalized = normalizeRole(role);
+    const isNowHr =
+      normalized === ROLE.HR ||
+      normalized === ROLE.HR_STAFF ||
+      normalized === ROLE.HR_MANAGER;
+    if (!isNowHr) {
+      employee.hrTemplates = [];
+      employee.hrLevel = "STAFF";
+    } else {
+      if (!Array.isArray(employee.hrTemplates)) employee.hrTemplates = [];
+      if (!employee.hrLevel) employee.hrLevel = "STAFF";
+    }
   }
 
   // Defensive: if frontend sends populated objects, extract the ID
@@ -1143,6 +1072,14 @@ router.put("/:id", requireAuth, enforcePolicy("edit", "employees"), async (req, 
   }
 
   const statusChanged = previousStatus !== employee.status;
+  const shouldBumpAuthzVersion =
+    originalEmployee.role !== employee.role ||
+    previousStatus !== employee.status ||
+    String(originalEmployee.hrLevel || "STAFF") !==
+      String(employee.hrLevel || "STAFF") ||
+    JSON.stringify(originalEmployee.hrTemplates || []) !==
+      JSON.stringify(employee.hrTemplates || []) ||
+    Boolean(originalEmployee.isActive) !== Boolean(employee.isActive);
   if (statusChanged) {
     if (!employee.transferHistory) employee.transferHistory = [];
     const statusChangeDate = new Date();
@@ -1177,7 +1114,13 @@ router.put("/:id", requireAuth, enforcePolicy("edit", "employees"), async (req, 
   }
 
   if (employee.status === "TERMINATED" || employee.status === "RESIGNED") {
+    await assertNotCurrentChiefExecutive(
+      employee._id,
+      "Cannot terminate or resign the current Chief Executive before appointing an active replacement",
+    );
     employee.isActive = false;
+    employee.hrTemplates = [];
+    employee.hrLevel = "STAFF";
     if (employee.status === "TERMINATED") {
       employee.role = "EMPLOYEE";
     }
@@ -1229,6 +1172,13 @@ router.put("/:id", requireAuth, enforcePolicy("edit", "employees"), async (req, 
     employee.isActive = true;
   }
 
+  if (!employee.isActive) {
+    await assertNotCurrentChiefExecutive(
+      employee._id,
+      "Cannot deactivate the current Chief Executive before appointing an active replacement",
+    );
+  }
+
   if (employee.role === "MANAGER") {
     const chiefExecutiveId = await getChiefExecutiveId();
     employee.managerId =
@@ -1239,6 +1189,9 @@ router.put("/:id", requireAuth, enforcePolicy("edit", "employees"), async (req, 
   }
 
   await employee.save();
+  if (shouldBumpAuthzVersion) {
+    await bumpAuthzVersion(employee._id);
+  }
 
   try {
     await syncEmployeeLeadershipAfterSave(employee);
@@ -1322,14 +1275,20 @@ router.put("/:id", requireAuth, enforcePolicy("edit", "employees"), async (req, 
   await employee.populate("managerId teamLeaderId");
   const [updatedEnriched] = await enrichEmployeesForResponse([employee]);
   return res.json(stripEmployeeSecrets(updatedEnriched));
-});
+},
+);
 
 /**
  * POST /api/employees/:id/transfer
  * Transfer an employee to another department.
  * Body: { toDepartment, newPosition, newSalary, resetNextReviewDate, notes } (resetYearlyIncreaseDate accepted as alias)
  */
-router.post("/:id/transfer", requireAuth, enforcePolicy("transfer", "employees"), async (req, res) => {
+router.post(
+  "/:id/transfer",
+  requireAuth,
+  enforcePolicy("manage", "employees"),
+  enforceScope(resolveTargetEmployee),
+  async (req, res) => {
   await logEmployeePolicyParity(req, "transfer");
   const access = accessFromPolicyDecision(req.authzDecision);
 
@@ -1519,9 +1478,15 @@ router.post("/:id/transfer", requireAuth, enforcePolicy("transfer", "employees")
     employee: transferEnriched,
     transferRecord,
   });
-});
+},
+);
 
-router.delete("/:id", requireAuth, enforcePolicy("delete", "employees"), async (req, res) => {
+router.delete(
+  "/:id",
+  requireAuth,
+  enforcePolicy("delete", "employees"),
+  enforceScope(resolveTargetEmployee),
+  async (req, res) => {
   await logEmployeePolicyParity(req, "delete");
   const access = accessFromPolicyDecision(req.authzDecision);
 
@@ -1552,6 +1517,10 @@ router.delete("/:id", requireAuth, enforcePolicy("delete", "employees"), async (
   }
 
   const employee_id = employee._id.toString();
+  await assertNotCurrentChiefExecutive(
+    employee_id,
+    "Cannot delete the current Chief Executive before appointing an active replacement",
+  );
 
   // Check for dependencies before deletion
   const openManagementRequests = await ManagementRequest.countDocuments({
@@ -1628,13 +1597,19 @@ router.delete("/:id", requireAuth, enforcePolicy("delete", "employees"), async (
   });
 
   return res.json({ success: true });
-});
+},
+);
 
 /**
  * Process Annual Salary Increase
  * @route POST /api/employees/:id/process-increase
  */
-router.post("/:id/process-increase", requireAuth, enforcePolicy("process_increase", "employees"), async (req, res) => {
+router.post(
+  "/:id/process-increase",
+  requireAuth,
+  enforcePolicy("manage", "employees"),
+  enforceScope(resolveTargetEmployee),
+  async (req, res) => {
   const { email } = req.user;
   await logEmployeePolicyParity(req, "process_increase");
 
@@ -1754,6 +1729,7 @@ router.post("/:id/process-increase", requireAuth, enforcePolicy("process_increas
     nextIncreaseDate: nextDate,
     nextReviewDate: nextDate,
   });
-});
+},
+);
 
 export default router;

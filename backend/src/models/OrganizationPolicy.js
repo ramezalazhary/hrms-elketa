@@ -37,6 +37,15 @@ const OrganizationPolicySchema = new Schema(
       type: String,
       default: "Chief Executive Officer",
     },
+    partners: [
+      {
+        name: { type: String, required: true, trim: true },
+        title: { type: String, default: "Partner", trim: true },
+        employeeId: { type: Schema.Types.ObjectId, ref: "Employee", default: null },
+        ownershipPercent: { type: Number, min: 0, max: 100, default: null },
+        notes: { type: String, default: "" },
+      },
+    ],
     leavePolicies: [
       {
         version: { type: Number, required: true },
@@ -92,11 +101,16 @@ const OrganizationPolicySchema = new Schema(
       standardStartTime: { type: String, default: "09:00" },
       standardEndTime: { type: String, default: "17:00" },
       gracePeriodMinutes: { type: Number, default: 15, min: 0 },
+      /** When true, only the first N grace-band arrivals per fiscal month stay lenient; then LATE is from shift start. */
+      monthlyGraceUsesEnabled: { type: Boolean, default: false },
+      /** Max grace-band consumptions per fiscal month (0 = feature off even if enabled; UI should pair with enabled). */
+      monthlyGraceUsesAllowed: { type: Number, default: 0, min: 0, max: 31 },
       workingDaysPerMonth: { type: Number, default: 22, min: 1, max: 31 },
+      /** Bounds are minutes after shift start (fractional = sub-minute); UI stores as seconds ÷ 60. */
       lateDeductionTiers: [
         {
           fromMinutes: { type: Number, required: true, min: 0 },
-          toMinutes: { type: Number, required: true, min: 1 },
+          toMinutes: { type: Number, required: true },
           deductionDays: { type: Number, required: true, min: 0 },
         },
       ],

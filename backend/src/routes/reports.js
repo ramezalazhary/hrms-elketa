@@ -7,20 +7,14 @@ import { Team } from "../models/Team.js";
 import { Position } from "../models/Position.js";
 import { Employee } from "../models/Employee.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canViewReports } from "../utils/roles.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import mongoose from "mongoose";
 
 const router = Router();
 
 // GET /reports/summary - Get system summary with aggregation
-router.get("/summary", requireAuth, async (req, res) => {
+router.get("/summary", requireAuth, enforcePolicy("read", "reports"), async (req, res) => {
   try {
-    if (!canViewReports(req.user)) {
-      return res
-        .status(403)
-        .json({ error: "Forbidden: Only Admin, HR_MANAGER, and HR_STAFF can view reports" });
-    }
-
     // Get departments summary
     const departmentStats = await Department.aggregate([
       {
@@ -247,14 +241,8 @@ router.get("/summary", requireAuth, async (req, res) => {
 });
 
 // GET /reports/organizations - Org chart data
-router.get("/organizations", requireAuth, async (req, res) => {
+router.get("/organizations", requireAuth, enforcePolicy("read", "reports"), async (req, res) => {
   try {
-    if (!canViewReports(req.user)) {
-      return res
-        .status(403)
-        .json({ error: "Forbidden: Only Admin, HR_MANAGER, and HR_STAFF can view reports" });
-    }
-
     // Get all departments with their teams and employee counts
     const departments = await Department.find({ status: "ACTIVE" }).lean();
 
@@ -299,14 +287,8 @@ router.get("/organizations", requireAuth, async (req, res) => {
 
 
 // GET /reports/org-consistency — read-only checks for id / collection drift
-router.get("/org-consistency", requireAuth, async (req, res) => {
+router.get("/org-consistency", requireAuth, enforcePolicy("read", "reports"), async (req, res) => {
   try {
-    if (!canViewReports(req.user)) {
-      return res.status(403).json({
-        error: "Forbidden: Only Admin, HR_MANAGER, and HR_STAFF can view this report",
-      });
-    }
-
     const deptIds = (await Department.find().select("_id").lean()).map((d) =>
       d._id.toString(),
     );

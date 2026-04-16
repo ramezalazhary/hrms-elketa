@@ -1,4 +1,5 @@
-import { RequireRole } from "@/shared/routing/RequireRole";
+import { RequirePayrollManager } from "@/shared/routing/RequirePayrollManager";
+import { RequireAdvancesAccess } from "@/shared/routing/RequireAdvancesAccess";
 import { PayrollRunsPage } from "./pages/PayrollRunsPage";
 import { PayrollRunDetailPage } from "./pages/PayrollRunDetailPage";
 import { AdvancesPage } from "./pages/AdvancesPage";
@@ -7,25 +8,25 @@ export const payrollRoutes = [
   {
     path: "/payroll",
     element: (
-      <RequireRole roles={["HR_STAFF", "HR_MANAGER", "ADMIN"]}>
+      <RequirePayrollManager>
         <PayrollRunsPage />
-      </RequireRole>
+      </RequirePayrollManager>
     ),
   },
   {
     path: "/payroll/:id",
     element: (
-      <RequireRole roles={["HR_STAFF", "HR_MANAGER", "ADMIN"]}>
+      <RequirePayrollManager>
         <PayrollRunDetailPage />
-      </RequireRole>
+      </RequirePayrollManager>
     ),
   },
   {
     path: "/advances",
     element: (
-      <RequireRole roles={["HR_STAFF", "HR_MANAGER", "ADMIN", "EMPLOYEE", "MANAGER", "TEAM_LEADER"]}>
+      <RequireAdvancesAccess>
         <AdvancesPage />
-      </RequireRole>
+      </RequireAdvancesAccess>
     ),
   },
 ];

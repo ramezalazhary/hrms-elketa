@@ -5,30 +5,23 @@
  */
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
-import { isHrDepartmentHead } from "../middleware/rbac.js";
 import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { Employee } from "../models/Employee.js";
 import bcrypt from "bcryptjs";
-import { parseRoleInput } from "../utils/roles.js";
+import { CANONICAL_ROLES, isAdminRole, parseRoleInput } from "../utils/roles.js";
+import { bumpAuthzVersion } from "../services/authzVersionService.js";
+import { isHrDepartmentMember } from "../services/authorizationPolicyService.js";
 
 const router = Router();
 
 const HR_DEPARTMENT_NAME = process.env.HR_DEPARTMENT_NAME || "HR";
 
-const VALID_USER_ROLES = [
-  "EMPLOYEE",
-  "TEAM_LEADER",
-  "MANAGER",
-  "HR_STAFF",
-  "HR_MANAGER",
-  "ADMIN",
-];
-
-// List users (admin or Head of HR — HR sees HR accounts only)
+// List users (admin gets all; HR department members get HR accounts only).
 router.get("/", requireAuth, enforcePolicy("manage", "users"), async (_req, res) => {
-  const hrHead = await isHrDepartmentHead(_req.user.email);
+  const actorIsAdmin = isAdminRole(_req.user?.role);
+  const actorIsHrMember = actorIsAdmin ? false : await isHrDepartmentMember(_req.user);
 
-  if (hrHead) {
+  if (!actorIsAdmin && actorIsHrMember) {
     const hrEmployees = await Employee.find({
       department: HR_DEPARTMENT_NAME,
     }).select("_id email role");
@@ -39,6 +32,10 @@ router.get("/", requireAuth, enforcePolicy("manage", "users"), async (_req, res)
         role: e.role,
       })),
     );
+  }
+
+  if (!actorIsAdmin) {
+    return res.status(403).json({ error: "Forbidden" });
   }
 
   const employees = await Employee.find()
@@ -55,15 +52,15 @@ router.get("/", requireAuth, enforcePolicy("manage", "users"), async (_req, res)
 
 // Update role (admin only — HR Head cannot change roles)
 router.put("/:id/role", requireAuth, enforcePolicy("manage", "users"), async (req, res) => {
-  const hrHead = await isHrDepartmentHead(req.user.email);
-  if (hrHead) {
+  const actorIsAdmin = isAdminRole(req.user?.role);
+  if (!actorIsAdmin) {
     return res
       .status(403)
-      .json({ error: "HR Head cannot change system roles" });
+      .json({ error: "Only ADMIN can change system roles" });
   }
 
   const role = parseRoleInput(req.body?.role);
-  if (!VALID_USER_ROLES.includes(role)) {
+  if (!role) {
     return res.status(400).json({ error: "Invalid role" });
   }
 
@@ -72,6 +69,7 @@ router.put("/:id/role", requireAuth, enforcePolicy("manage", "users"), async (re
 
   employee.role = role;
   await employee.save();
+  await bumpAuthzVersion(employee._id);
 
   return res.json({
     success: true,
@@ -83,10 +81,10 @@ router.put("/:id/role", requireAuth, enforcePolicy("manage", "users"), async (re
   });
 });
 
-// Create login account (admin or HR Head — HR only for HR employees)
+// Create login account (admin can create all; HR members can create HR employee logins only)
 router.post("/", requireAuth, enforcePolicy("manage", "users"), async (req, res) => {
-  const actorEmail = req.user.email;
-  const hrHead = await isHrDepartmentHead(actorEmail);
+  const actorIsAdmin = isAdminRole(req.user?.role);
+  const actorIsHrMember = actorIsAdmin ? false : await isHrDepartmentMember(req.user);
 
   const { email, password, role } = req.body ?? {};
   if (!email || !password) {
@@ -102,10 +100,10 @@ router.post("/", requireAuth, enforcePolicy("manage", "users"), async (req, res)
       .json({ error: "Employee record not found for email" });
   }
 
-  if (hrHead && employee.department !== HR_DEPARTMENT_NAME) {
+  if (!actorIsAdmin && actorIsHrMember && employee.department !== HR_DEPARTMENT_NAME) {
     return res
       .status(403)
-      .json({ error: "HR Head can only create accounts for HR employees" });
+      .json({ error: "HR members can only create accounts for HR employees" });
   }
 
   // Check if employee already has password set
@@ -117,9 +115,9 @@ router.post("/", requireAuth, enforcePolicy("manage", "users"), async (req, res)
     return res.status(400).json({ error: "Invalid role" });
   }
   const parsedRequestedRole = parseRoleInput(role);
-  const chosenRole = hrHead
+  const chosenRole = !actorIsAdmin
     ? "EMPLOYEE"
-    : VALID_USER_ROLES.includes(parsedRequestedRole)
+    : parsedRequestedRole && CANONICAL_ROLES.includes(parsedRequestedRole)
       ? parsedRequestedRole
       : "EMPLOYEE";
 

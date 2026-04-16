@@ -8,11 +8,30 @@ const EmployeeSchema = new Schema(
     passwordHash: { type: String },
     role: {
       type: String,
-      enum: ["EMPLOYEE", "TEAM_LEADER", "MANAGER", "HR_STAFF", "HR_MANAGER", "ADMIN"],
+      enum: [
+        "EMPLOYEE",
+        "TEAM_LEADER",
+        "MANAGER",
+        "HR",
+        "HR_STAFF",
+        "HR_MANAGER",
+        "ADMIN",
+      ],
       default: "EMPLOYEE",
+    },
+    hrLevel: {
+      type: String,
+      enum: ["STAFF", "MANAGER"],
+      default: "STAFF",
+    },
+    hrTemplates: {
+      type: [String],
+      default: [],
     },
     requirePasswordChange: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
+    /** Incremented whenever access-related state changes (role/templates/permissions/status). */
+    authzVersion: { type: Number, default: 0 },
 
     // ******************************************************* Personal Information *******************************************************
     fullName: { type: String, required: true },

@@ -1,6 +1,8 @@
 {
   "scripts": {
     "test:frontend": "npm run test --prefix frontend",
+    "test:policy-parity": "npm --prefix frontend run test -- src/shared/utils/accessControl.parity.test.js",
+    "test:ci-access": "npm run test:policy-parity && npm --prefix frontend run test -- src/shared/utils/accessControl.leaveApprovals.test.js",
     "test:api": "npm run test:api --prefix backend",
     "test": "npm run test:frontend && npm run test:api"
   },

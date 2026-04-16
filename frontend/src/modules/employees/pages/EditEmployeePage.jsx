@@ -10,6 +10,12 @@ import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { getBranchesApi } from "@/modules/branches/api";
 import { getTeamsApi } from "@/modules/teams/api";
 import { getDocumentRequirementsApi } from "@/modules/organization/api";
+import {
+  ACCESS_LEVEL,
+  getEmployeesAccessLevel,
+  hasAccessLevel,
+} from "@/shared/utils/accessControl";
+import { API_URL } from "@/shared/api/apiBase";
 import { EGYPT_GOVERNORATES, getCitiesForGovernorate } from "@/shared/data/egyptGovernorates";
 import { skillsFromCommaText } from "@/shared/utils/skillsFromText";
 import { languagesFromText, languagesToFormString } from "@/shared/utils/employeeFormLanguages";
@@ -315,7 +321,10 @@ export function EditEmployeePage() {
     }
   };
 
-  const canAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "HR_MANAGER";
+  const employeesAccessLevel = getEmployeesAccessLevel(currentUser);
+  const canAdmin =
+    (currentUser?.role === "ADMIN" || currentUser?.role === "HR_MANAGER") &&
+    hasAccessLevel(employeesAccessLevel, ACCESS_LEVEL.EDIT);
   const canEditReporting =
     canAdmin || currentUser?.role === "HR_STAFF";
 
@@ -400,21 +409,21 @@ export function EditEmployeePage() {
         <div className="flex items-center gap-2">
           {canAdmin && (
             <div className="relative group z-50">
-              <button className="inline-flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-700 shadow-sm transition hover:bg-teal-100">       
+              <button type="button" className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/90 bg-white px-3 py-2 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50">       
                 <Settings className="h-4 w-4" />
                 Manage
               </button>
-              <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+              <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-2xl border border-zinc-200/90 bg-white p-1 opacity-0 shadow-xl ring-1 ring-zinc-950/[0.06] transition-all invisible group-hover:visible group-hover:opacity-100">
                 <button
                   onClick={() => setShowTransferModal(true)}
-                  className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition"
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
                 >
                   <ArrowRightLeft className="h-4 w-4" />
                   Transfer Employee
                 </button>
                 <button
                   onClick={() => setShowSalaryModal(true)}
-                  className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition"
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
                 >
                   <TrendingUp className="h-4 w-4" />
                   Increase Salary
@@ -422,7 +431,7 @@ export function EditEmployeePage() {
               </div>
             </div>
           )}
-          {currentUser?.role === "ADMIN" && (
+          {canAdmin && currentUser?.role === "ADMIN" && (
             <button
               onClick={() => setShowResetModal(true)}
               className="rounded-lg border border-red-200 bg-red-50 text-red-600 px-3 py-1.5 text-sm font-medium transition hover:bg-red-100 shadow-sm"
@@ -437,8 +446,8 @@ export function EditEmployeePage() {
       {showResetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/30 backdrop-blur-[2px] p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl relative z-10">
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Reset User Password</h2>
-            <p className="text-sm text-slate-600 mb-6">
+            <h2 className="text-xl font-bold text-zinc-800 mb-2">Reset User Password</h2>
+            <p className="text-sm text-zinc-600 mb-6">
               You are about to forcibly override the password for <strong>{employee?.email}</strong>.
             </p>
             <FormBuilder
@@ -489,7 +498,7 @@ export function EditEmployeePage() {
                 <Clock className="h-3.5 w-3.5" />
                 Transfer History
                 {transferHistory.length > 0 && (
-                  <span className="ml-1 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5">
+                  <span className="ml-1 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-700 ring-1 ring-zinc-200/70">
                     {transferHistory.length}
                   </span>
                 )}
@@ -999,19 +1008,19 @@ export function EditEmployeePage() {
           />
 
           {/* Document Checklist Section */}
-          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mt-8 rounded-[20px] bg-white p-6 shadow-sm ring-1 ring-zinc-950/[0.06]">
             <div className="flex items-center justify-between border-b pb-4 mb-4">
                <div>
-                  <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wide">Document Checklist</h3>
-                  <p className="text-xs text-slate-500 italic">Mark documents as received from the employee.</p>
+                  <h3 className="text-lg font-bold text-zinc-800 uppercase tracking-wide">Document Checklist</h3>
+                  <p className="text-xs text-zinc-500 italic">Mark documents as received from the employee.</p>
                </div>
                <div className="text-right">
-                  <span className="text-sm font-bold text-indigo-600">
+                  <span className="text-sm font-semibold text-zinc-800">
                      {documentChecklist.filter(d => d.status === "RECEIVED").length} / {documentChecklist.length} Submitted
                   </span>
-                  <div className="w-48 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                  <div className="w-48 h-1.5 bg-zinc-100 rounded-full mt-1 overflow-hidden">
                      <div
-                       className="h-full bg-indigo-500 transition-all duration-500"
+                       className="h-full bg-zinc-800 transition-all duration-500"
                        style={{ width: `${(documentChecklist.filter(d => d.status === "RECEIVED").length / Math.max(1, documentChecklist.length)) * 100}%` }}
                      />
                   </div>
@@ -1019,7 +1028,7 @@ export function EditEmployeePage() {
             </div>
             <div className="grid md:grid-cols-2 gap-4">
                {documentChecklist.map((doc, idx) => (
-                 <div key={idx} className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${doc.status === "RECEIVED" ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                 <div key={idx} className={`flex items-center gap-4 rounded-xl border p-4 transition-colors ${doc.status === "RECEIVED" ? 'border-zinc-200/90 bg-zinc-50' : 'border-zinc-100 bg-zinc-50/60'}`}>
                     <input
                       type="checkbox"
                       id={`doc-${idx}`}
@@ -1032,21 +1041,21 @@ export function EditEmployeePage() {
                         }
                         setDocumentChecklist(next);
                       }}
-                      className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      className="h-5 w-5 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400/30"
                     />
                     <div className="flex-1">
-                       <label htmlFor={`doc-${idx}`} className="text-sm font-bold text-slate-800 block cursor-pointer">{doc.documentName}</label>
-                       {doc.description && <p className="text-[10px] text-slate-500 italic">{doc.description}</p>}
+                       <label htmlFor={`doc-${idx}`} className="text-sm font-bold text-zinc-800 block cursor-pointer">{doc.documentName}</label>
+                       {doc.description && <p className="text-[10px] text-zinc-500 italic">{doc.description}</p>}
                     </div>
                     {doc.status === "RECEIVED" && doc.submissionDate && (
-                      <span className="text-[10px] font-medium text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-700 ring-1 ring-zinc-200/70">
                          Received {new Date(doc.submissionDate).toLocaleDateString()}
                       </span>
                     )}
                  </div>
                ))}
                {documentChecklist.length === 0 && (
-                 <p className="col-span-2 text-center py-6 text-slate-400 text-sm italic">
+                 <p className="col-span-2 text-center py-6 text-zinc-400 text-sm italic">
                    No documents required for this department.
                  </p>
                )}
@@ -1055,25 +1064,25 @@ export function EditEmployeePage() {
         </>
       ) : (
         /* Transfer History Tab */
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-[20px] bg-white p-6 shadow-sm ring-1 ring-zinc-950/[0.06]">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-bold text-slate-800">Transfer History</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Department transfers for {employee.fullName}</p>
+              <h3 className="text-lg font-bold text-zinc-800">Transfer History</h3>
+              <p className="text-xs text-zinc-500 mt-0.5">Department transfers for {employee.fullName}</p>
             </div>
-            <span className="text-sm font-semibold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1">
+            <span className="rounded-full border border-zinc-200/80 bg-zinc-100 px-3 py-1 text-sm font-semibold text-zinc-800">
               {transferHistory.length} record{transferHistory.length !== 1 ? "s" : ""}
             </span>
           </div>
 
           {transferHistory.length === 0 ? (
             <div className="py-16 text-center">
-              <ArrowRightLeft className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-400 italic text-sm">No transfers recorded yet.</p>
+              <ArrowRightLeft className="h-10 w-10 text-zinc-300 mx-auto mb-3" />
+              <p className="text-zinc-400 italic text-sm">No transfers recorded yet.</p>
             </div>
           ) : (
             <div className="relative">
-              <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-100" />
+              <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-zinc-100" />
               <ol className="space-y-6">
                 {[...transferHistory].reverse().map((record, idx) => {
                   const noteText = String(record.notes || "").toLowerCase();
@@ -1084,58 +1093,58 @@ export function EditEmployeePage() {
                     noteText.includes("to terminated") ||
                     noteText.includes("to resigned");
                   const markerClass = isReactivated
-                    ? "bg-emerald-500"
+                    ? "bg-zinc-700"
                     : isTerminated
                       ? "bg-rose-500"
-                      : "bg-indigo-500";
+                      : "bg-zinc-500";
                   const cardClass = isReactivated
-                    ? "rounded-xl border border-emerald-200 bg-emerald-50/60 p-4"
+                    ? "rounded-xl border border-zinc-200/90 bg-zinc-50 p-4"
                     : isTerminated
                       ? "rounded-xl border border-rose-200 bg-rose-50/60 p-4"
-                      : "rounded-xl border border-slate-200 bg-slate-50/60 p-4";
+                      : "rounded-xl border border-zinc-200 bg-zinc-50/60 p-4";
                   const toDeptClass = isReactivated
-                    ? "text-emerald-700"
+                    ? "text-zinc-800"
                     : isTerminated
                       ? "text-rose-700"
-                      : "text-indigo-700";
+                      : "text-zinc-700";
                   const arrowClass = isReactivated
-                    ? "h-3.5 w-3.5 text-emerald-500"
+                    ? "h-3.5 w-3.5 text-zinc-600"
                     : isTerminated
                       ? "h-3.5 w-3.5 text-rose-500"
-                      : "h-3.5 w-3.5 text-indigo-500";
+                      : "h-3.5 w-3.5 text-zinc-500";
 
                   return (
                   <li key={idx} className="relative pl-12">
                     <div className={`absolute left-3.5 top-1.5 w-3 h-3 rounded-full border-2 border-white shadow ${markerClass}`} />
                     <div className={cardClass}>
                       <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                          <span className="text-slate-500">{record.fromDepartmentName || "—"}</span>
+                        <div className="flex items-center gap-2 text-sm font-semibold text-zinc-800">
+                          <span className="text-zinc-500">{record.fromDepartmentName || "—"}</span>
                           <ArrowRightLeft className={arrowClass} />
                           <span className={toDeptClass}>{record.toDepartmentName}</span>
                         </div>
-                        <span className="text-xs text-slate-500 bg-white border border-slate-200 rounded-full px-2.5 py-0.5">
+                        <span className="text-xs text-zinc-500 bg-white border border-zinc-200 rounded-full px-2.5 py-0.5">
                           {new Date(record.transferDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
                         {record.newPosition && (
                           <div>
-                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">New Position</p>
-                            <p className="font-medium text-slate-700">{record.newPosition}</p>
+                            <p className="text-zinc-400 uppercase tracking-wide mb-0.5">New Position</p>
+                            <p className="font-medium text-zinc-700">{record.newPosition}</p>
                           </div>
                         )}
                         {record.newSalary && (
                           <div>
-                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">New Salary</p>
-                            <p className="font-medium text-slate-700">{new Intl.NumberFormat("en-EG", { style: "currency", currency: "EGP", maximumFractionDigits: 0 }).format(record.newSalary)}</p>
+                            <p className="text-zinc-400 uppercase tracking-wide mb-0.5">New Salary</p>
+                            <p className="font-medium text-zinc-700">{new Intl.NumberFormat("en-EG", { style: "currency", currency: "EGP", maximumFractionDigits: 0 }).format(record.newSalary)}</p>
                           </div>
                         )}
                         {((record.nextReviewDateReset && record.nextReviewDateAfterTransfer) ||
                           (record.yearlyIncreaseDateChanged && record.newYearlyIncreaseDate)) && (
                           <div>
-                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">Next review after transfer</p>
-                            <p className="font-medium text-indigo-600">
+                            <p className="text-zinc-400 uppercase tracking-wide mb-0.5">Next review after transfer</p>
+                            <p className="font-medium text-zinc-800">
                               {new Date(
                                 record.nextReviewDateAfterTransfer || record.newYearlyIncreaseDate,
                               ).toLocaleDateString()}
@@ -1144,14 +1153,14 @@ export function EditEmployeePage() {
                         )}
                         {record.processedBy && (
                           <div className="col-span-full">
-                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">Processed By</p>
-                            <p className="font-medium text-slate-600">{record.processedBy}</p>
+                            <p className="text-zinc-400 uppercase tracking-wide mb-0.5">Processed By</p>
+                            <p className="font-medium text-zinc-600">{record.processedBy}</p>
                           </div>
                         )}
                         {record.notes && (
-                          <div className="col-span-full border-t border-slate-200 pt-2 mt-1">
-                            <p className="text-slate-400 uppercase tracking-wide mb-0.5">Notes</p>
-                            <p className="text-slate-600">{record.notes}</p>
+                          <div className="col-span-full border-t border-zinc-200 pt-2 mt-1">
+                            <p className="text-zinc-400 uppercase tracking-wide mb-0.5">Notes</p>
+                            <p className="text-zinc-600">{record.notes}</p>
                           </div>
                         )}
                       </div>

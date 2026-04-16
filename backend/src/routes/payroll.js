@@ -174,6 +174,24 @@ router.patch("/runs/:runId/records/:recordId", enforcePolicy("manage", "payroll"
   }
 });
 
+router.get("/me/history", enforcePolicy("view", "payroll"), async (req, res) => {
+  try {
+    const lastMonthCutoff = new Date();
+    lastMonthCutoff.setDate(lastMonthCutoff.getDate() - 30);
+    const records = await PayrollRecord.find({
+      employeeId: req.user.id,
+      createdAt: { $gte: lastMonthCutoff },
+    })
+      .populate("runId", "period status finalizedAt")
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json(records);
+  } catch (err) {
+    console.error("GET /payroll/me/history error:", err);
+    res.status(500).json({ error: "Failed to fetch your payroll history" });
+  }
+});
+
 router.get("/employees/:employeeId/history", enforcePolicy("view", "payroll"), async (req, res) => {
   try {
     const records = await PayrollRecord.find({ employeeId: req.params.employeeId })

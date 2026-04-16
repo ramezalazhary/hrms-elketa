@@ -48,18 +48,16 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/shared/components/EntityBadges";
 import {
-  listManagementRequestsApi,
   createManagementRequestApi,
-  updateManagementRequestStatusApi,
   getDashboardAlertsApi,
   getDashboardMetricsApi,
 } from "@/modules/dashboard/api";
 import { getEmployeeAttendanceApi, getTodayAttendanceApi } from "@/modules/attendance/api";
-import { getAssessmentRemindersApi } from "@/modules/employees/api";
+import { getAssessmentRemindersApi, listLeaveRequestsApi } from "@/modules/employees/api";
 import { formatTotalHours } from "@/modules/attendance/utils";
 import { DashboardAlerts } from "./DashboardAlerts";
 import { employeeBelongsToDepartment } from "@/shared/utils/departmentMembership";
-import { mergedTeamNamesForDepartment } from "@/shared/utils/mergeDepartmentTeams";
+import { mergeTeamsForDepartment, mergedTeamNamesForDepartment } from "@/shared/utils/mergeDepartmentTeams";
 
 function AssessmentReminderWidget() {
   const [data, setData] = useState(null);
@@ -377,7 +375,7 @@ const EmployeeDashboard = memo(function EmployeeDashboard({ currentUser, employe
                             record.status === 'LATE' ? 'bg-amber-50 text-amber-600 border-amber-100' :
                             'bg-rose-50 text-rose-600 border-rose-100'
                           }`}>
-                            {record.status}
+                            {record.status}{record.unpaidLeave ? " · UNPAID" : ""}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-xs font-mono text-zinc-500">{record.checkIn || '—'} / {record.checkOut || '—'}</td>
@@ -476,6 +474,7 @@ const EmployeeDashboard = memo(function EmployeeDashboard({ currentUser, employe
 function teamRosterMembers(team, employees) {
   const name = (team.name || "").trim();
   const nameKey = name.toLowerCase();
+  const teamId = String(team.id ?? team._id ?? "");
   const memberEmails = new Set(
     (team.members || []).map((m) => String(m).toLowerCase().trim()).filter(Boolean),
   );
@@ -489,13 +488,24 @@ function teamRosterMembers(team, employees) {
     if (memberEmails.has(em)) return true;
     const eid = String(emp.id ?? emp._id ?? "");
     if (eid && memberIdSet.has(eid)) return true;
+    if (teamId) {
+      const popTeamId = String(emp.teamId ?? emp.team?.id ?? emp.team?._id ?? "");
+      if (popTeamId && popTeamId === teamId) return true;
+    }
     const tn = (emp.team || "").trim().toLowerCase();
     if (nameKey && tn === nameKey) return true;
     return false;
   });
 }
 
-const TeamLeaderDashboard = memo(function TeamLeaderDashboard({ teams, employees, currentUserEmployee, currentUser }) {
+const TeamLeaderDashboard = memo(function TeamLeaderDashboard({
+  teams,
+  employees,
+  currentUserEmployee,
+  currentUser,
+  employeesLoading = false,
+  canFetchAttendance = false,
+}) {
   const [dailyAttendance, setDailyAttendance] = useState([]);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [evaluateTarget, setEvaluateTarget] = useState(null);
@@ -506,6 +516,11 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({ teams, employees
   );
 
   useEffect(() => {
+    if (!canFetchAttendance) {
+      setDailyAttendance([]);
+      setLoadingAttendance(false);
+      return;
+    }
     const fetchDaily = async () => {
       setLoadingAttendance(true);
       try {
@@ -518,35 +533,107 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({ teams, employees
       }
     };
     fetchDaily();
-  }, []);
+  }, [canFetchAttendance]);
 
   const primaryTeam = teams[0] || {};
+  const evaluableFallbackMembers = useMemo(
+    () =>
+      employees.filter((emp) =>
+        canManagerOrTeamLeaderEvaluateEmployee(emp, currentUser, {
+          excludeHrAdminRoles: true,
+          ledTeamNames,
+          evaluatorEmployee: currentUserEmployee,
+        }) && emp.status !== "TERMINATED" && emp.status !== "RESIGNED",
+      ),
+    [employees, currentUser, ledTeamNames, currentUserEmployee],
+  );
   const formattedHireDate = currentUserEmployee?.dateOfHire 
     ? new Date(currentUserEmployee.dateOfHire).toLocaleDateString()
     : "N/A";
+  const userId = currentUser?.id != null ? String(currentUser.id) : "";
+  const userEmail = (currentUser?.email || "").trim().toLowerCase();
+  const teamRosterEmployees = useMemo(() => {
+    const merged = teams.flatMap((team) => teamRosterMembers(team, employees));
+    const seen = new Set();
+    return merged.filter((emp) => {
+      const id = String(emp.id ?? emp._id ?? "");
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [teams, employees]);
+  const directLedEmployees = useMemo(
+    () =>
+      employees.filter((emp) => {
+        const refs = [emp?.teamLeaderId, emp?.effectiveTeamLeader];
+        return refs.some((ref) => {
+          if (!ref) return false;
+          if (typeof ref === "object") {
+            const rid = ref._id ?? ref.id;
+            const remail = (ref.email || "").trim().toLowerCase();
+            return (userId && rid != null && String(rid) === userId)
+              || (userEmail && remail && remail === userEmail);
+          }
+          return userId && String(ref) === userId;
+        });
+      }),
+    [employees, userId, userEmail],
+  );
+  const teamLeaderScopeEmployees = useMemo(() => {
+    const merged = [...teamRosterEmployees, ...directLedEmployees];
+    const seen = new Set();
+    return merged.filter((emp) => {
+      const id = String(emp.id ?? emp._id ?? "");
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [teamRosterEmployees, directLedEmployees]);
+  const teamLeaderScopeIds = useMemo(
+    () => new Set(teamLeaderScopeEmployees.map((emp) => String(emp.id ?? emp._id ?? ""))),
+    [teamLeaderScopeEmployees],
+  );
+  const scopedDailyAttendance = useMemo(
+    () =>
+      dailyAttendance.filter((record) => {
+        const rid = String(record?.employeeId?._id ?? record?.employeeId ?? "");
+        return rid && teamLeaderScopeIds.has(rid);
+      }),
+    [dailyAttendance, teamLeaderScopeIds],
+  );
+
+  if (employeesLoading) {
+    return (
+      <Layout title="Team Leadership" description={primaryTeam.name || "Operations"}>
+        <section className="rounded-[20px] border border-zinc-200/80 bg-white p-8 text-sm text-zinc-600 shadow-sm ring-1 ring-zinc-950/[0.05]">
+          Synchronizing team roster...
+        </section>
+      </Layout>
+    );
+  }
 
   return (
     <Layout title="Team Leadership" description={primaryTeam.name || "Operations"}>
       <div className="space-y-8 text-zinc-900">
         {/* Leadership Overview Banner - No Approval Required */}
-        <section className="p-8 rounded-3xl border border-white/20 glass-premium shadow-premium flex flex-col lg:flex-row items-start lg:items-center gap-8 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 -mr-12 -mt-12 h-40 w-40 rounded-full bg-emerald-500/5 blur-3xl group-hover:bg-emerald-500/10 transition-colors" />
-          <div className="h-24 w-24 rounded-3xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white text-4xl font-black shadow-xl shadow-emerald-200/50 shrink-0 transition-transform group-hover:scale-105">
+        <section className="relative flex flex-col items-start gap-8 overflow-hidden rounded-[20px] bg-white p-8 shadow-sm ring-1 ring-zinc-950/[0.06] lg:flex-row lg:items-center">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-zinc-200/40 blur-2xl" />
+          <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-zinc-700 to-zinc-900 text-3xl font-semibold tracking-tight text-white shadow-md">
             {primaryTeam.name?.[0] || "T"}
           </div>
-          <div className="flex-1 text-left space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 rounded-full border border-emerald-100">
-               <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-               <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest leading-none">Active Leader</span>
+          <div className="relative flex-1 space-y-3 text-left">
+            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-zinc-50 px-3 py-1">
+               <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-500" />
+               <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Active leader</span>
             </div>
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">{primaryTeam.leaderTitle || "Team Leader"} Overview</h2>
-            <p className="text-sm text-slate-500 font-medium leading-relaxed max-w-3xl">
+            <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 md:text-3xl">{primaryTeam.leaderTitle || "Team Leader"} overview</h2>
+            <p className="max-w-3xl text-sm font-medium leading-relaxed text-zinc-500">
               {primaryTeam.leaderResponsibility || "Managing operational excellence and team performance within the unit."}
             </p>
-            <div className="pt-2 flex flex-wrap justify-start gap-3">
-               <div className="px-4 py-2 bg-white/60 backdrop-blur-md rounded-xl border border-white/40 flex items-center gap-3 shadow-sm hover-lift">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Commission Date</span>
-                  <span className="text-xs font-black text-slate-700">{formattedHireDate}</span>
+            <div className="flex flex-wrap justify-start gap-3 pt-2">
+               <div className="flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-4 py-2 shadow-sm">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Commission date</span>
+                  <span className="text-xs font-semibold text-zinc-900">{formattedHireDate}</span>
                </div>
             </div>
           </div>
@@ -559,42 +646,51 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({ teams, employees
 
         {/* Daily Attendance Widget */}
         <section className="space-y-4">
-           <div className="flex justify-between items-center px-1">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <Calendar size={14} className="text-indigo-500" /> Active Unit Presence
+           <div className="flex items-center justify-between px-1">
+              <h3 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+                <Calendar size={14} className="text-zinc-600" /> Active unit presence
               </h3>
-              {dailyAttendance.length > 0 && (
-                <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 uppercase tracking-tighter">
-                   Operational Cycle: {new Date(dailyAttendance[0].date).toLocaleDateString()}
+              {scopedDailyAttendance.length > 0 && (
+                <span className="rounded-full border border-zinc-200/90 bg-zinc-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-700">
+                   Cycle: {new Date(scopedDailyAttendance[0].date).toLocaleDateString()}
                 </span>
               )}
            </div>
            
-           <div className="rounded-3xl border border-white/20 glass-premium shadow-premium overflow-hidden">
+           <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
              <div className="overflow-x-auto">
              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-white/40 border-b border-slate-100">
-                    <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest">Employee</th>
-                    <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest">Signed In</th>
-                    <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest">Status</th>
-                    <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-right">Activity</th>
+                  <tr className="border-b border-zinc-100 bg-zinc-50/80">
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Employee</th>
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Signed in</th>
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Status</th>
+                    <th className="px-6 py-4 text-right font-medium uppercase tracking-wide text-zinc-500">Activity</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
                   {loadingAttendance ? (
-                    <tr><td colSpan="4" className="px-6 py-12 text-center text-slate-400 animate-pulse font-bold">Synchronizing Daily Logs...</td></tr>
-                  ) : dailyAttendance.length === 0 ? (
-                    <tr><td colSpan="4" className="px-6 py-12 text-center text-slate-400 italic font-bold">No attendance logs detected for the current operational cycle.</td></tr>
+                    <tr><td colSpan="4" className="px-6 py-12 text-center text-sm font-medium text-zinc-400 animate-pulse">Synchronizing daily logs…</td></tr>
+                  ) : scopedDailyAttendance.length === 0 ? (
+                    <tr><td colSpan="4" className="px-6 py-12 text-center text-sm font-medium italic text-zinc-500">No attendance logs for the current cycle.</td></tr>
                   ) : (
-                    dailyAttendance.map(record => (
+                    scopedDailyAttendance.map(record => (
                       <tr key={record._id} className="hover:bg-white/50 transition-colors group">
                         <td className="px-6 py-4">
                            <div className="font-bold text-zinc-900">{(record.employeeId?.fullName || "Staff").split(' ')[0]}</div>
                            <div className="text-[10px] text-zinc-400">{record.employeeCode}</div>
                         </td>
                         <td className="px-6 py-4 font-bold text-zinc-700">{record.checkIn || "—"}</td>
-                        <td className="px-6 py-4"><StatusBadge status={record.status} /></td>
+                        <td className="px-6 py-4">
+                          <div className="inline-flex items-center gap-1.5">
+                            <StatusBadge status={record.status} />
+                            {record.unpaidLeave && (
+                              <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                                UNPAID
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-6 py-4 text-right pr-8">
                            <span className="text-[10px] font-bold text-zinc-400 italic">Verified Log</span>
                         </td>
@@ -617,24 +713,24 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({ teams, employees
                 key={team.id || `${team.name || "team"}-${teamIdx}`}
                 className="space-y-6"
               >
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-                  <article className="rounded-2xl border border-white/20 glass-premium p-5 shadow-premium hover-lift">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Headcount</p>
-                    <p className="mt-1 text-2xl font-black text-slate-900">{teamMembers.length}</p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Headcount</p>
+                    <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{teamMembers.length}</p>
                   </article>
-                  <article className="rounded-2xl border border-white/20 glass-premium p-5 shadow-premium hover-lift">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Members</p>
-                    <p className="mt-1 text-2xl font-black text-emerald-600">{activeCount}</p>
+                  <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Active members</p>
+                    <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{activeCount}</p>
                   </article>
-                  <article className="rounded-2xl border border-white/20 glass-premium p-5 shadow-premium hover-lift">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Team Unit</p>
-                    <p className="mt-1 text-sm font-black text-indigo-600 uppercase tracking-tight truncate">{team.name}</p>
+                  <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Team unit</p>
+                    <p className="mt-1 truncate text-sm font-semibold uppercase tracking-tight text-zinc-900">{team.name}</p>
                   </article>
                 </div>
 
-                <div className="overflow-hidden rounded-3xl border border-white/20 glass-premium shadow-premium">
-                  <div className="px-6 py-4 border-b border-slate-100 bg-white/40">
-                    <h2 className="text-xs font-black uppercase tracking-widest text-slate-900 border-l-4 border-indigo-500 pl-3">Team Roster</h2>
+                <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+                  <div className="border-b border-zinc-100 bg-zinc-50/70 px-6 py-4">
+                    <h2 className="border-l-4 border-zinc-900 pl-3 text-xs font-semibold uppercase tracking-wide text-zinc-900">Team roster</h2>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
@@ -680,14 +776,14 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({ teams, employees
                                     <button
                                       type="button"
                                       onClick={() => setEvaluateTarget(emp)}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-amber-100 transition-colors"
+                                      className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/90 bg-amber-50/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-950 transition-colors hover:bg-amber-100"
                                     >
                                       <Star size={12} /> Evaluate
                                     </button>
                                   ) : null}
                                   <Link
                                     to={`/employees/${emp.id || emp._id}`}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-zinc-600 hover:bg-zinc-100 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-zinc-200 transition-colors"
+                                    className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 transition-colors hover:bg-zinc-50"
                                   >
                                     View
                                   </Link>
@@ -704,9 +800,62 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({ teams, employees
               </div>
             );
           })}
-          {teams.length === 0 && (
-            <div className="rounded-xl border border-dashed border-zinc-200 p-12 text-center text-zinc-500 italic">
+          {teams.length === 0 && evaluableFallbackMembers.length === 0 && (
+            <div className="rounded-[20px] border border-dashed border-zinc-200/90 bg-zinc-50/40 p-12 text-center text-sm text-zinc-500 ring-1 ring-zinc-950/[0.04]">
               You are not currently assigned as a leader to any active teams.
+            </div>
+          )}
+          {teams.length === 0 && evaluableFallbackMembers.length > 0 && (
+            <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+              <div className="border-b border-zinc-100 bg-zinc-50/70 px-6 py-4">
+                <h2 className="border-l-4 border-zinc-900 pl-3 text-xs font-semibold uppercase tracking-wide text-zinc-900">
+                  Team members available for evaluation
+                </h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-100 bg-white">
+                      <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Employee</th>
+                      <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Information</th>
+                      <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Status</th>
+                      <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 text-xs text-zinc-800">
+                    {evaluableFallbackMembers.map((emp) => (
+                      <tr key={emp.id || emp._id} className="hover:bg-zinc-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-zinc-900">{emp.fullName}</div>
+                          <div className="text-[10px] font-mono text-zinc-400">{emp.employeeCode}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-zinc-600 font-medium">{emp.position}</div>
+                          <div className="text-[10px] text-zinc-400">{emp.email}</div>
+                        </td>
+                        <td className="px-6 py-4"><StatusBadge status={emp.status} /></td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEvaluateTarget(emp)}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/90 bg-amber-50/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-950 transition-colors hover:bg-amber-100"
+                            >
+                              <Star size={12} /> Evaluate
+                            </button>
+                            <Link
+                              to={`/employees/${emp.id || emp._id}`}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 transition-colors hover:bg-zinc-50"
+                            >
+                              View
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -722,7 +871,16 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({ teams, employees
   );
 });
 
-const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({ department, employees, requests, onHandleRequest, currentUserEmployee, currentUser, alertsSummary }) {
+const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({
+  department,
+  employees,
+  requests,
+  currentUserEmployee,
+  currentUser,
+  alertsSummary,
+  employeesLoading = false,
+  canFetchAttendance = false,
+}) {
   const [dailyAttendance, setDailyAttendance] = useState([]);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [evaluateTarget, setEvaluateTarget] = useState(null);
@@ -762,6 +920,11 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({ de
   }, [department, standaloneTeamsForDept]);
 
   useEffect(() => {
+    if (!canFetchAttendance) {
+      setDailyAttendance([]);
+      setLoadingAttendance(false);
+      return;
+    }
     const fetchDaily = async () => {
       setLoadingAttendance(true);
       try {
@@ -774,45 +937,73 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({ de
       }
     };
     fetchDaily();
-  }, []);
+  }, [canFetchAttendance]);
 
-  const deptEmployees = employees.filter((emp) =>
-    employeeBelongsToDepartment(emp, department),
+  const managerId = currentUser?.id != null ? String(currentUser.id) : "";
+  const managerEmail = (currentUser?.email || "").trim().toLowerCase();
+  const directReportEmployees = useMemo(
+    () =>
+      employees.filter((emp) => {
+        const mgr = emp?.managerId;
+        const effMgr = emp?.effectiveManager;
+        const refs = [mgr, effMgr];
+        return refs.some((ref) => {
+          if (!ref) return false;
+          if (typeof ref === "object") {
+            const rid = ref._id ?? ref.id;
+            const remail = (ref.email || "").trim().toLowerCase();
+            return (managerId && rid != null && String(rid) === managerId)
+              || (managerEmail && remail && remail === managerEmail);
+          }
+          return managerId && String(ref) === managerId;
+        });
+      }),
+    [employees, managerId, managerEmail],
+  );
+  const deptEmployees = useMemo(() => {
+    const mergedTeams = mergeTeamsForDepartment(department, standaloneTeamsForDept);
+    const rosterMembers = mergedTeams.flatMap((team) => teamRosterMembers(team, employees));
+    const merged = [
+      ...employees.filter((emp) => employeeBelongsToDepartment(emp, department)),
+      ...directReportEmployees,
+      ...rosterMembers,
+    ];
+    const seen = new Set();
+    return merged.filter((emp) => {
+      const id = String(emp.id ?? emp._id ?? "");
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [employees, department, directReportEmployees, standaloneTeamsForDept]);
+  const managerScopeIds = useMemo(
+    () => new Set(deptEmployees.map((emp) => String(emp.id ?? emp._id ?? ""))),
+    [deptEmployees],
+  );
+  const scopedDailyAttendance = useMemo(
+    () =>
+      dailyAttendance.filter((record) => {
+        const rid = String(record?.employeeId?._id ?? record?.employeeId ?? "");
+        return rid && managerScopeIds.has(rid);
+      }),
+    [dailyAttendance, managerScopeIds],
   );
   const activeCount = deptEmployees.filter(e => e.status === 'ACTIVE').length;
   const pendingRequests = requests.filter(r => r.status === 'PENDING');
 
-  const isCurrentUserHr = useMemo(() => {
-    const k = normaliseRoleKey(currentUser?.role);
-    return k === "HR_STAFF" || k === "HR_MANAGER" || k === "ADMIN";
-  }, [currentUser?.role]);
-
-  /** HR_MODULES: disable Approve/Deny when this user cannot act on the current dual-approval step. */
-  const dualActionDisabled = (req) => {
-    if (req.type !== "HR_MODULES") return false;
-    const ma = req.managerApproval?.status;
-    const ha = req.hrApproval?.status;
-    if (ma === "PENDING") return false;
-    if (ma === "APPROVED" && ha === "PENDING") return !isCurrentUserHr;
-    return true;
-  };
-
-  const dualStatusLabel = (req) => {
-    if (req.type !== "HR_MODULES") return null;
-    const ma = req.managerApproval?.status;
-    const ha = req.hrApproval?.status;
-    if (ma === "PENDING") return "Pending department head approval";
-    if (ma === "APPROVED" && ha === "PENDING") {
-      return isCurrentUserHr
-        ? "Manager approved — confirm as HR (final step)"
-        : "Manager approved (waiting for HR)";
-    }
-    return null;
-  };
-
   const formattedHireDate = currentUserEmployee?.dateOfHire 
     ? new Date(currentUserEmployee.dateOfHire).toLocaleDateString()
     : "N/A";
+
+  if (employeesLoading) {
+    return (
+      <Layout title={`${department.name} Department`} description={department.headTitle}>
+        <section className="rounded-[20px] border border-zinc-200/80 bg-white p-8 text-sm text-zinc-600 shadow-sm ring-1 ring-zinc-950/[0.05]">
+          Synchronizing department roster...
+        </section>
+      </Layout>
+    );
+  }
 
   return (
     <Layout title={`${department.name} Department`} description={department.headTitle}>
@@ -822,63 +1013,63 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({ de
         <AssessmentReminderWidget />
       </div>
 
-      <section className="mb-10 p-8 rounded-3xl border border-white/20 glass-premium shadow-premium flex flex-col md:flex-row items-center gap-8 relative overflow-hidden group">
-        <div className="absolute top-0 right-0 -mr-12 -mt-12 h-40 w-40 rounded-full bg-indigo-500/5 blur-3xl group-hover:bg-indigo-500/10 transition-colors" />
-        <div className="h-24 w-24 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-4xl font-black shadow-xl shadow-indigo-200/50 shrink-0 transition-transform group-hover:scale-105">
+      <section className="relative mb-10 flex flex-col items-center gap-8 overflow-hidden rounded-[20px] bg-white p-8 shadow-sm ring-1 ring-zinc-950/[0.06] md:flex-row">
+        <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-zinc-200/40 blur-2xl" />
+        <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-zinc-700 to-zinc-900 text-3xl font-semibold tracking-tight text-white shadow-md">
           {department.name[0]}
         </div>
-        <div className="flex-1 text-center md:text-left space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 rounded-full border border-indigo-100">
-             <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
-             <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest leading-none">Institutional Head</span>
+        <div className="relative flex-1 space-y-3 text-center md:text-left">
+          <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-zinc-50 px-3 py-1">
+             <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-500" />
+             <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Department head</span>
           </div>
-          <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">{department.headTitle} Overview</h2>
-          <p className="text-sm text-slate-500 font-medium leading-relaxed max-w-3xl">
+          <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 md:text-3xl">{department.headTitle} overview</h2>
+          <p className="max-w-3xl text-sm font-medium leading-relaxed text-zinc-500">
             {department.headResponsibility || "No specific responsibility defined for this department head position."}
           </p>
-          <div className="pt-2 flex flex-wrap justify-center md:justify-start gap-4">
-             <div className="px-4 py-2 bg-white/60 backdrop-blur-md rounded-xl border border-white/40 flex items-center gap-3 shadow-sm hover-lift">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Commission Date</span>
-                <span className="text-xs font-black text-slate-700">{formattedHireDate}</span>
+          <div className="flex flex-wrap justify-center gap-4 pt-2 md:justify-start">
+             <div className="flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-4 py-2 shadow-sm">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Commission date</span>
+                <span className="text-xs font-semibold text-zinc-900">{formattedHireDate}</span>
              </div>
-             <div className="px-4 py-2 bg-white/60 backdrop-blur-md rounded-xl border border-white/40 flex items-center gap-3 shadow-sm hover-lift">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Direct Report</span>
-                <span className="text-xs font-black text-slate-700">HR Director</span>
+             <div className="flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-4 py-2 shadow-sm">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Direct report</span>
+                <span className="text-xs font-semibold text-zinc-900">HR Director</span>
              </div>
           </div>
         </div>
       </section>
 
       <section className="mb-10 space-y-4">
-         <div className="flex justify-between items-center px-1">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <Calendar size={14} className="text-indigo-500" /> Institutional Presence Log
+         <div className="flex items-center justify-between px-1">
+            <h3 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+              <Calendar size={14} className="text-zinc-600" /> Department presence
             </h3>
-            {dailyAttendance.length > 0 && (
-              <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 uppercase tracking-tighter">
-                 Operational Cycle: {new Date(dailyAttendance[0].date).toLocaleDateString()}
+            {scopedDailyAttendance.length > 0 && (
+              <span className="rounded-full border border-zinc-200/90 bg-zinc-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-700">
+                 Cycle: {new Date(scopedDailyAttendance[0].date).toLocaleDateString()}
               </span>
             )}
          </div>
          
-         <div className="rounded-3xl border border-white/20 glass-premium shadow-premium overflow-hidden">
+         <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
            <div className="overflow-x-auto">
              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-white/40 border-b border-slate-100">
-                    <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest">Personnel</th>
-                    <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest">Operational Role</th>
-                    <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest">Arrival</th>
-                    <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest">Status</th>
+                  <tr className="border-b border-zinc-100 bg-zinc-50/80">
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Personnel</th>
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Role</th>
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Arrival</th>
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 italic font-medium text-slate-800">
+                <tbody className="divide-y divide-zinc-100 font-medium text-zinc-800 not-italic">
                   {loadingAttendance ? (
-                    <tr><td colSpan="4" className="px-6 py-12 text-center text-slate-400 animate-pulse font-bold">Fetching Institutional Presence Logs...</td></tr>
-                  ) : dailyAttendance.length === 0 ? (
-                    <tr><td colSpan="4" className="px-6 py-12 text-center text-slate-400 italic font-bold">No personnel have signed in for the current operational cycle.</td></tr>
+                    <tr><td colSpan="4" className="px-6 py-12 text-center text-sm font-medium text-zinc-400 animate-pulse">Loading presence…</td></tr>
+                  ) : scopedDailyAttendance.length === 0 ? (
+                    <tr><td colSpan="4" className="px-6 py-12 text-center text-sm font-medium italic text-zinc-500">No sign-ins for the current cycle.</td></tr>
                   ) : (
-                    dailyAttendance.map(record => (
+                    scopedDailyAttendance.map(record => (
                       <tr key={record._id} className="hover:bg-white/50 transition-colors group">
                         <td className="px-6 py-4">
                            <div className="font-bold text-zinc-900">{record.employeeId?.fullName}</div>
@@ -888,7 +1079,16 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({ de
                            <div className="font-bold text-zinc-600 uppercase tracking-tighter text-[10px]">{record.employeeId?.department}</div>
                         </td>
                         <td className="px-6 py-4 font-black text-zinc-900">{record.checkIn || "—"}</td>
-                        <td className="px-6 py-4 shrink-0"><StatusBadge status={record.status} /></td>
+                        <td className="px-6 py-4 shrink-0">
+                          <div className="inline-flex items-center gap-1.5">
+                            <StatusBadge status={record.status} />
+                            {record.unpaidLeave && (
+                              <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                                UNPAID
+                              </span>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -899,88 +1099,68 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({ de
       </section>
 
       {pendingRequests.length > 0 && (
-      <section className="mb-10 p-4 sm:p-6 lg:p-8 rounded-2xl sm:rounded-[2rem] border border-indigo-100 bg-indigo-50/20 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 -mr-12 -mt-12 h-40 w-40 rounded-full bg-indigo-500/5 blur-3xl group-hover:bg-indigo-500/10 transition-colors" />
-          <h3 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-6 flex items-center gap-2 relative z-10">
-            <ShieldAlert size={14} className="text-indigo-400" /> Unit Management Requests
+      <section className="relative mb-10 overflow-hidden rounded-[20px] bg-zinc-50/90 p-4 ring-1 ring-zinc-200/80 sm:p-6 lg:p-8">
+          <h3 className="relative z-10 mb-6 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-800">
+            <ShieldAlert size={14} className="text-zinc-500" /> Pending leave approvals
           </h3>
-          <div className="space-y-4 relative z-10">
+          <div className="relative z-10 space-y-4">
             {pendingRequests.map(req => (
-              <div key={req._id} className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-white/80 backdrop-blur-md rounded-2xl border border-indigo-100 shadow-sm hover:shadow-md transition-all gap-4">
+              <div key={req._id} className="flex flex-col gap-4 rounded-[20px] border border-zinc-200/80 bg-white p-6 shadow-sm transition-shadow hover:shadow-md md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
-                  <p className="text-sm font-black text-slate-900">{req.senderName} <span className="text-slate-400 font-bold ml-2">requested {req.type.replace('_', ' ')}</span></p>
-                  <p className="text-xs text-slate-500 font-medium italic">"{req.message}"</p>
-                  {req.type === "HR_MODULES" && (
-                     <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 rounded-lg border border-indigo-100">
-                       <RefreshCw size={10} className="text-indigo-500 animate-spin-slow" />
-                       <span className="text-[9px] font-black uppercase text-indigo-600 tracking-widest leading-none">
-                         {dualStatusLabel(req) || "Processing"}
-                       </span>
-                     </div>
-                  )}
+                  <p className="text-sm font-semibold text-zinc-900">
+                    {(req.employeeId?.fullName || req.employeeEmail || "Employee")}{" "}
+                    <span className="ml-2 font-medium text-zinc-500">
+                      requested {req.kind === "EXCUSE" ? "excuse" : (req.leaveType || "vacation").toLowerCase()}
+                    </span>
+                  </p>
+                  <p className="text-xs font-medium italic text-zinc-500">
+                    {req.kind === "EXCUSE"
+                      ? `${new Date(req.excuseDate).toLocaleDateString()} ${req.startTime || ""}-${req.endTime || ""}`
+                      : `${new Date(req.startDate).toLocaleDateString()} - ${new Date(req.endDate).toLocaleDateString()}`}
+                  </p>
                 </div>
-                <div className="flex gap-3 shrink-0">
-                  <button
-                    onClick={() => onHandleRequest(req._id, 'APPROVED')}
-                    disabled={dualActionDisabled(req)}
-                    className={`px-6 py-2.5 text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all active:scale-95 ${
-                      dualActionDisabled(req)
-                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none' 
-                        : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700'
-                    }`}
-                  >
-                    {req.type === "HR_MODULES" && req.managerApproval?.status === "APPROVED" && req.hrApproval?.status === "PENDING" && isCurrentUserHr
-                      ? "Approve (HR)"
-                      : "Approve"}
-                  </button>
-                  <button
-                    onClick={() => onHandleRequest(req._id, 'REJECTED')}
-                    disabled={dualActionDisabled(req)}
-                    className={`px-6 py-2.5 text-[10px] font-black rounded-xl border transition-all active:scale-95 uppercase tracking-widest ${
-                      dualActionDisabled(req)
-                        ? "bg-slate-50 text-slate-400 border-slate-100 cursor-not-allowed"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    Deny
-                  </button>
-                </div>
+                <Link
+                  to="/employees/leave-approvals"
+                  className="inline-flex shrink-0 items-center justify-center rounded-full bg-zinc-900 px-5 py-2 text-[10px] font-semibold uppercase tracking-wide text-white hover:bg-zinc-800"
+                >
+                  Open approvals
+                </Link>
               </div>
             ))}
           </div>
         </section>
       )}
       
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 mb-10">
-        <article className="rounded-2xl border border-white/20 glass-premium p-5 shadow-premium hover-lift">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Staff</p>
-          <p className="mt-1 text-2xl font-black text-slate-900">{deptEmployees.length}</p>
+      <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Total staff</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{deptEmployees.length}</p>
         </article>
-        <article className="rounded-2xl border border-white/20 glass-premium p-5 shadow-premium hover-lift">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Now</p>
-          <p className="mt-1 text-2xl font-black text-emerald-600">{activeCount}</p>
+        <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Active now</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{activeCount}</p>
         </article>
-        <article className="rounded-2xl border border-white/20 glass-premium p-5 shadow-premium hover-lift">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sub-Units</p>
-          <p className="mt-1 text-2xl font-black text-indigo-600">{(department.teams || []).length}</p>
+        <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Sub-units</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{(department.teams || []).length}</p>
         </article>
       </div>
 
       <div className="space-y-10">
         <section>
-          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-1 flex items-center gap-2">
-            <Briefcase size={14} className="text-purple-500" /> Organizational Units
+          <h3 className="mb-4 flex items-center gap-2 px-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            <Briefcase size={14} className="text-zinc-600" /> Organizational units
           </h3>
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {(department.teams || []).map(team => (
-              <div key={team.id} className="rounded-3xl border border-white/20 glass-premium p-6 shadow-premium hover-lift group relative overflow-hidden">
-                <div className="absolute top-0 right-0 -mr-6 -mt-6 h-20 w-20 rounded-full bg-slate-500/5 blur-xl group-hover:bg-slate-500/10 transition-colors" />
-                <div className="flex justify-between items-start mb-6 relative z-10">
+              <div key={team.id} className="group relative overflow-hidden rounded-[20px] bg-white p-6 shadow-sm ring-1 ring-zinc-950/[0.06]">
+                <div className="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-zinc-200/30 blur-xl transition-opacity group-hover:opacity-80" />
+                <div className="relative z-10 mb-6 flex items-start justify-between">
                   <div>
-                    <h4 className="text-lg font-black text-slate-900 tracking-tight">{team.name}</h4>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">{team.leaderTitle}: {team.leaderEmail || "Unassigned"}</p>
+                    <h4 className="text-lg font-semibold tracking-tight text-zinc-900">{team.name}</h4>
+                    <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">{team.leaderTitle}: {team.leaderEmail || "Unassigned"}</p>
                   </div>
-                  <span className="px-3 py-1 bg-white/60 backdrop-blur-md text-[10px] font-black rounded-full border border-white/40 shadow-sm transition-transform group-hover:scale-105">{(team.members || []).length} Members</span>
+                  <span className="rounded-full border border-zinc-200/80 bg-zinc-50 px-3 py-1 text-[10px] font-semibold text-zinc-700 shadow-sm">{(team.members || []).length} members</span>
                 </div>
                 <div className="flex -space-x-2 overflow-hidden">
                   {(team.members || []).slice(0, 5).map((m, i) => (
@@ -999,22 +1179,22 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({ de
           </div>
         </section>
 
-        <section className="rounded-3xl border border-white/20 glass-premium shadow-premium overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white/40">
-            <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-l-4 border-indigo-500 pl-3">Department Personnel</h3>
-            <span className="text-[10px] font-black text-slate-400 bg-white/80 px-3 py-1 rounded-full border border-slate-100">{deptEmployees.length} Records</span>
+        <section className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+          <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/70 px-6 py-5">
+            <h3 className="border-l-4 border-zinc-900 pl-3 text-xs font-semibold uppercase tracking-wide text-zinc-900">Department personnel</h3>
+            <span className="rounded-full border border-zinc-200/80 bg-white px-3 py-1 text-[10px] font-medium text-zinc-500">{deptEmployees.length} records</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-white/40 border-b border-slate-100">
-                  <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest">Employee</th>
-                  <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest">Operational Role</th>
-                  <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest">Status</th>
-                  <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+                <tr className="border-b border-zinc-100 bg-zinc-50/80">
+                  <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Employee</th>
+                  <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Role</th>
+                  <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Status</th>
+                  <th className="px-6 py-4 text-right font-medium uppercase tracking-wide text-zinc-500">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 italic font-medium text-slate-800">
+              <tbody className="divide-y divide-zinc-100 font-medium text-zinc-800 not-italic">
                 {deptEmployees.map(emp => (
                   <tr key={emp.id} className="hover:bg-zinc-50/50 transition-colors">
                     <td className="px-6 py-4">
@@ -1035,14 +1215,14 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({ de
                           <button
                             type="button"
                             onClick={() => setEvaluateTarget(emp)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-amber-100 transition-colors"
+                            className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/90 bg-amber-50/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-950 transition-colors hover:bg-amber-100"
                           >
                             <Star size={12} /> Evaluate
                           </button>
                         ) : null}
                         <Link
                           to={`/employees/${emp.id || emp._id}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-zinc-600 hover:bg-zinc-100 text-[10px] font-bold uppercase tracking-widest rounded-lg border border-zinc-200 transition-colors"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 transition-colors hover:bg-zinc-50"
                         >
                           View
                         </Link>
@@ -1066,7 +1246,7 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({ de
   );
 });
 
-const AdminDashboard = memo(function AdminDashboard({ employees, departments, employeesPerDepartment, requests, onHandleRequest, alertsSummary, metricsSummary }) {
+const AdminDashboard = memo(function AdminDashboard({ employees, departments, employeesPerDepartment, requests, alertsSummary, metricsSummary }) {
   const pendingRequests = requests.filter(r => r.status === 'PENDING');
   const totalPayroll = useMemo(() => {
     return employees.reduce((sum, emp) => sum + (emp.financial?.baseSalary || 0), 0);
@@ -1111,7 +1291,7 @@ const AdminDashboard = memo(function AdminDashboard({ employees, departments, em
       {/* Management Requests Section for Admin/HR */}
       <section className="mb-10">
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-1 flex items-center gap-2">
-          <ShieldAlert size={14} className="text-rose-500" /> Pending Management Requests
+          <ShieldAlert size={14} className="text-rose-500" /> Pending Leave Approvals
         </h3>
         {pendingRequests.length > 0 ? (
           <div className="space-y-4">
@@ -1119,40 +1299,31 @@ const AdminDashboard = memo(function AdminDashboard({ employees, departments, em
               <div key={req._id} className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between p-4 rounded-2xl border border-white/20 glass-premium shadow-premium hover-lift transition-all hover:border-indigo-100 group">
                  <div className="flex gap-4 items-start sm:items-center">
                     <div className="h-10 w-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-black shadow-lg shadow-indigo-200 group-hover:scale-110 transition-transform">
-                      {req.senderName[0].toUpperCase()}
+                      {(req.employeeId?.fullName || req.employeeEmail || "E")[0].toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-[11px] font-black text-slate-900 leading-tight">{req.senderName} <span className="text-[9px] text-slate-400 uppercase tracking-widest ml-1">{req.senderRole}</span></p>
-                      <p className="text-xs text-slate-500 font-medium mt-0.5">{req.message}</p>
-                      {req.type === "HR_MODULES" && (
-                         <div className="flex gap-2 mt-2">
-                            <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
-                               Manager Approval: {req.managerApproval?.status}
-                            </span>
-                         </div>
-                      )}
+                      <p className="text-[11px] font-black text-slate-900 leading-tight">
+                        {(req.employeeId?.fullName || req.employeeEmail || "Employee")}
+                      </p>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        {req.kind === "EXCUSE"
+                          ? `Excuse ${new Date(req.excuseDate).toLocaleDateString()} ${req.startTime || ""}-${req.endTime || ""}`
+                          : `${req.leaveType || "Vacation"} ${new Date(req.startDate).toLocaleDateString()} - ${new Date(req.endDate).toLocaleDateString()}`}
+                      </p>
                     </div>
                  </div>
-                 <div className="flex w-full sm:w-auto gap-2">
-                    <button
-                      onClick={() => onHandleRequest(req._id, 'APPROVED')}
-                      className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 text-white text-[10px] font-black rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 uppercase tracking-widest"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => onHandleRequest(req._id, 'REJECTED')}
-                      className="flex-1 sm:flex-none px-4 py-2 bg-white text-slate-600 text-[10px] font-black rounded-xl border border-slate-200 hover:bg-slate-50 transition-all active:scale-95 uppercase tracking-widest"
-                    >
-                      Deny
-                    </button>
-                  </div>
+                 <Link
+                   to="/employees/leave-approvals"
+                   className="inline-flex w-full sm:w-auto items-center justify-center px-4 py-2 bg-indigo-600 text-white text-[10px] font-black rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 uppercase tracking-widest"
+                 >
+                   Open approvals
+                 </Link>
                </div>
              ))}
           </div>
         ) : (
           <div className="p-8 text-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50">
-             <p className="text-xs text-zinc-400 italic">No pending management requests at this time.</p>
+             <p className="text-xs text-zinc-400 italic">No pending leave approvals at this time.</p>
           </div>
         )}
       </section>
@@ -1316,7 +1487,7 @@ export function DashboardPage() {
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
   const { currentUser } = useAppSelector((state) => state.identity);
-  const { items: employees } = useAppSelector((state) => state.employees);
+  const { items: employees, isLoading: employeesLoading } = useAppSelector((state) => state.employees);
   const { items: departments } = useAppSelector((state) => state.departments);
 
   const [requests, setRequests] = useState([]);
@@ -1325,8 +1496,8 @@ export function DashboardPage() {
 
   const refreshRequests = async () => {
     try {
-      const data = await listManagementRequestsApi();
-      setRequests(Array.isArray(data) ? data : []);
+      const data = await listLeaveRequestsApi({ queue: "1", limit: "100" });
+      setRequests(Array.isArray(data?.requests) ? data.requests : []);
     } catch (e) {
       console.error("Failed to fetch requests", e);
     }
@@ -1343,31 +1514,47 @@ export function DashboardPage() {
     }
   };
 
-  const handleUpdateRequest = async (id, status) => {
-    try {
-      await updateManagementRequestStatusApi(id, status);
-      await refreshRequests();
-      showToast(`Request ${status.toLowerCase()} successfully`, "success");
-    } catch (e) {
-      console.error("Update failed", e);
-      showToast(e?.error || e?.message || "Failed to update request", "error");
-    }
-  };
-
   useEffect(() => {
+    const roleKey = normaliseRoleKey(currentUser?.role);
+    const mayReadEmployees =
+      roleKey === "ADMIN" ||
+      roleKey === "HR" ||
+      roleKey === "HR_STAFF" ||
+      roleKey === "HR_MANAGER" ||
+      roleKey === "MANAGER" ||
+      roleKey === "TEAM_LEADER";
+    const mayReadAttendance = mayReadEmployees;
+    const mayApproveLeaves =
+      roleKey === "ADMIN" ||
+      roleKey === "HR_MANAGER" ||
+      roleKey === "MANAGER" ||
+      roleKey === "TEAM_LEADER";
+    const shouldLoadDashboardSummaries =
+      roleKey === "ADMIN" ||
+      roleKey === "HR" ||
+      roleKey === "HR_STAFF" ||
+      roleKey === "HR_MANAGER";
     void dispatch(fetchDepartmentsThunk());
-    void dispatch(fetchEmployeesThunk());
+    if (mayReadEmployees) {
+      void dispatch(fetchEmployeesThunk());
+    }
     let cancelled = false;
     void (async () => {
       try {
-        const reqs = await listManagementRequestsApi().catch(() => null);
-        if (!cancelled && reqs != null) setRequests(Array.isArray(reqs) ? reqs : []);
+        if (mayApproveLeaves) {
+          const reqs = await listLeaveRequestsApi({ queue: "1", limit: "100" }).catch(() => null);
+          if (!cancelled && reqs != null) setRequests(Array.isArray(reqs?.requests) ? reqs.requests : []);
+        } else if (!cancelled) {
+          setRequests([]);
+        }
 
-        const alerts = await getDashboardAlertsApi().catch(() => null);
-        if (!cancelled && alerts != null) setAlertsSummary(alerts);
+        if (shouldLoadDashboardSummaries && mayReadAttendance) {
+          const alerts = await getDashboardAlertsApi().catch(() => null);
+          if (!cancelled && alerts != null) setAlertsSummary(alerts);
 
-        const metrics = await getDashboardMetricsApi().catch(() => null);
-        if (!cancelled && metrics != null) setMetricsSummary(metrics);
+          const metrics = await getDashboardMetricsApi().catch(() => null);
+          if (!cancelled && metrics != null) setMetricsSummary(metrics);
+        }
       } catch (e) {
         console.error("Failed to fetch dashboard summaries", e);
       }
@@ -1375,9 +1562,16 @@ export function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [dispatch]);
+  }, [dispatch, currentUser]);
 
   const dashboardRoleKey = normaliseRoleKey(currentUser?.role);
+  const isManagementRole =
+    dashboardRoleKey === "ADMIN" ||
+    dashboardRoleKey === "HR" ||
+    dashboardRoleKey === "HR_STAFF" ||
+    dashboardRoleKey === "HR_MANAGER" ||
+    dashboardRoleKey === "MANAGER" ||
+    dashboardRoleKey === "TEAM_LEADER";
 
   const managedDepartments = useMemo(
     () => departments.filter((d) => departmentHeadedByUser(d, currentUser)),
@@ -1387,10 +1581,12 @@ export function DashboardPage() {
   const managedTeams = useMemo(() => {
     const teams = [];
     const em = (currentUser?.email || "").toLowerCase().trim();
+    const uid = currentUser?.id ? String(currentUser.id) : "";
     departments.forEach((dept) => {
       (dept.teams || []).forEach((team) => {
         const le = (team.leaderEmail || "").toLowerCase().trim();
-        if (em && le === em) {
+        const lid = team.leaderId?.id ?? team.leaderId?._id ?? team.leaderId;
+        if ((em && le === em) || (uid && lid != null && String(lid) === uid)) {
           teams.push({ ...team, departmentName: dept.name });
         }
       });
@@ -1428,6 +1624,10 @@ export function DashboardPage() {
     };
   }, [dashboardRoleKey, currentUser?.email, currentUser?.id]);
 
+  const currentUserEmployee = useMemo(() => 
+    employees.find(e => e.email === currentUser?.email),
+  [employees, currentUser]);
+
   const mergedManagedTeams = useMemo(() => {
     const fromDept = managedTeams;
     const seen = new Set(
@@ -1442,13 +1642,41 @@ export function DashboardPage() {
         id: t.id,
         name: t.name,
         members: t.members || [],
+        memberIds: t.memberIds || [],
         leaderEmail: t.leaderEmail,
         leaderTitle: t.leaderTitle,
         leaderResponsibility: t.leaderResponsibility,
         departmentName: t.departmentId?.name || "",
       }));
-    return [...fromDept, ...extra];
-  }, [managedTeams, standaloneTeamsLed]);
+    const finalTeams = [...fromDept, ...extra];
+    
+    // Fallback inference: if user is TEAM_LEADER but explicit leader ties are missing,
+    // infer their team based on their employment record.
+    if (finalTeams.length === 0 && dashboardRoleKey === "TEAM_LEADER" && currentUserEmployee) {
+      const myTeam = currentUserEmployee.team || currentUserEmployee.teamId;
+      if (myTeam) {
+         let inferredTeam = null;
+         let isStandalone = false;
+         
+         // Search in departments
+         departments.forEach(d => {
+             (d.teams || []).forEach(t => {
+                if (String(t._id || t.id) === String(myTeam) || t.name === myTeam) {
+                   inferredTeam = { ...t, departmentName: d.name };
+                }
+             })
+         });
+         
+         if (inferredTeam) {
+             finalTeams.push(inferredTeam);
+         } else {
+             finalTeams.push({ id: myTeam, name: currentUserEmployee.team || "My Team", departmentName: currentUserEmployee.department || "" });
+         }
+      }
+    }
+    
+    return finalTeams;
+  }, [managedTeams, standaloneTeamsLed, dashboardRoleKey, currentUserEmployee, departments]);
 
   const employeesPerDepartment = useMemo(() => {
     const counts = new Map();
@@ -1462,39 +1690,41 @@ export function DashboardPage() {
     }));
   }, [departments, employees]);
 
-  const currentUserEmployee = useMemo(() => 
-    employees.find(e => e.email === currentUser?.email),
-    [employees, currentUser]);
 
-  if (currentUser?.role === "ADMIN") {
+
+  if (!isManagementRole) {
+    return (
+      <Layout
+        title="Management Dashboard"
+        description="This space is reserved for management responsibilities."
+      >
+        <section className="rounded-3xl border border-zinc-200 bg-white p-8 shadow-sm">
+          <p className="text-sm font-semibold text-zinc-900">No management assignment detected for your account.</p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Continue from Home for your personal workspace.
+          </p>
+          <Link
+            to="/"
+            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-zinc-800"
+          >
+            Go to home
+          </Link>
+        </section>
+      </Layout>
+    );
+  }
+
+  if (dashboardRoleKey === "ADMIN") {
     return (
       <AdminDashboard
         employees={employees}
         departments={departments}
         employeesPerDepartment={employeesPerDepartment}
         requests={requests}
-        onHandleRequest={handleUpdateRequest}
         alertsSummary={alertsSummary}
         metricsSummary={metricsSummary}
       />
     );
-  }
-
-  const isEmployee = currentUser?.role === "EMPLOYEE";
-
-  if (isEmployee) {
-    return <EmployeeDashboard 
-      currentUser={currentUser} 
-      employees={employees} 
-      onSendRequest={(data) => {
-        const dept = departments.find(d => d.name === currentUserEmployee?.department);
-        return handleSendRequest({
-          ...data,
-          departmentId: dept?._id || dept?.id,
-          departmentName: currentUserEmployee?.department || "Unassigned"
-        });
-      }}
-    />;
   }
 
   if (managedDepartments.length > 0) {
@@ -1502,10 +1732,11 @@ export function DashboardPage() {
       department={managedDepartments[0]}
       employees={employees}
       requests={requests}
-      onHandleRequest={handleUpdateRequest}
       currentUserEmployee={currentUserEmployee}
       currentUser={currentUser}
       alertsSummary={alertsSummary}
+      employeesLoading={employeesLoading}
+      canFetchAttendance={true}
     />;
   }
 
@@ -1516,20 +1747,22 @@ export function DashboardPage() {
       employees={employees}
       currentUserEmployee={currentUserEmployee}
       currentUser={currentUser}
+      employeesLoading={employeesLoading}
+      canFetchAttendance={true}
     />;
   }
 
-  return <EmployeeDashboard 
-    currentUser={currentUser} 
-    employees={employees}
-    requests={requests} 
-    onSendRequest={(data) => {
-      const dept = departments.find(d => d.name === currentUserEmployee?.department);
-      return handleSendRequest({
-        ...data,
-        departmentId: dept?._id || dept?.id,
-        departmentName: currentUserEmployee?.department || "Unassigned"
-      });
-    }} 
-  />;
+  return (
+    <Layout
+      title="Management Dashboard"
+      description="Operational dashboard for management roles."
+    >
+      <section className="rounded-3xl border border-zinc-200 bg-white p-8 shadow-sm">
+        <p className="text-sm font-semibold text-zinc-900">Management dashboard is ready.</p>
+        <p className="mt-2 text-sm text-zinc-500">
+          Your role has access, but there is no active department or team assignment to render detailed modules.
+        </p>
+      </section>
+    </Layout>
+  );
 }

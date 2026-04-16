@@ -1,0 +1,21 @@
+{
+  "leaveApprovals": [
+    { "role": "ADMIN", "level": "ADMIN", "canAccess": true, "canApprove": true },
+    { "role": "HR_MANAGER", "level": "EDIT", "canAccess": true, "canApprove": true },
+    { "role": "HR", "level": "NONE", "canAccess": false, "canApprove": false },
+    { "role": "HR_STAFF", "level": "NONE", "canAccess": false, "canApprove": false },
+    { "role": "MANAGER", "level": "EDIT", "canAccess": true, "canApprove": true },
+    { "role": "TEAM_LEADER", "level": "EDIT", "canAccess": true, "canApprove": true },
+    { "role": "EMPLOYEE", "level": "NONE", "canAccess": false, "canApprove": false }
+  ],
+  "dashboardAccess": [
+    { "role": "ADMIN", "canAccess": true },
+    { "role": "HR_MANAGER", "canAccess": true },
+    { "role": "HR", "canAccess": true },
+    { "role": "HR_STAFF", "canAccess": true },
+    { "role": "MANAGER", "canAccess": true },
+    { "role": "TEAM_LEADER", "canAccess": true },
+    { "role": "EMPLOYEE", "canAccess": false }
+  ]
+}
+

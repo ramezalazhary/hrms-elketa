@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { Fragment, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import {
   ChevronUp,
@@ -29,6 +29,8 @@ export function DataTable({
   emptyState,
   emptyText,
   getRowKey,
+  expandedRowKey = null,
+  renderExpandedRow,
   ...props
 }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -200,24 +202,24 @@ export function DataTable({
       {...props}
     >
       {/* Header */}
-      <div className="p-4 border-b border-zinc-200 bg-zinc-50/50">
-        <div className="flex items-center justify-between gap-4">
+      <div className="border-b border-zinc-200 bg-zinc-50/50 p-3 sm:p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-4">
             {searchable && (
-              <div className="relative">
+              <div className="relative w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-400" />
                 <input
                   type="text"
                   placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-zinc-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full sm:w-64 pl-10 pr-4 py-2 border border-zinc-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors">
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -233,14 +235,15 @@ export function DataTable({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full table-fixed">
           <thead className="bg-zinc-50 border-b border-zinc-200">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column.accessor || column.key}
                   className={cn(
-                    "px-4 py-3 text-left text-xs font-medium text-zinc-700 uppercase tracking-wider",
+                    "px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-700 sm:px-4 sm:py-3 sm:text-xs",
+                    column.headerClassName,
                     sortable &&
                       column.sortable !== false &&
                       "cursor-pointer hover:bg-zinc-100 transition-colors",
@@ -262,42 +265,62 @@ export function DataTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
-            {paginatedData.map((row, rowIndex) => (
-              <tr
-                key={getRowKey ? getRowKey(row) : (row.id || row._id || rowIndex)}
-                className={cn(
-                  "hover:bg-zinc-50 transition-colors",
-                  onRowClick && "cursor-pointer",
-                )}
-                onClick={() => onRowClick?.(row)}
-              >
-                {columns.map((column) => (
-                  <td
-                    key={column.accessor || column.key}
-                    className="px-4 py-3 text-sm text-zinc-900"
+            {paginatedData.map((row, rowIndex) => {
+              const key = getRowKey ? getRowKey(row) : (row.id || row._id || rowIndex);
+              const isExpanded = expandedRowKey != null && String(expandedRowKey) === String(key);
+              return (
+                <Fragment key={key}>
+                  <tr
+                    className={cn(
+                      "hover:bg-zinc-50 transition-colors",
+                      onRowClick && "cursor-pointer",
+                      isExpanded && "bg-zinc-50/60",
+                    )}
+                    onClick={(e) => {
+                      const interactive = e.target?.closest?.("button,input,a,textarea,select,label");
+                      if (interactive) return;
+                      onRowClick?.(row);
+                    }}
                   >
-                    {column.render ? column.render(row) : (column.cell ? column.cell(row) : row[column.accessor || column.key])}
-                  </td>
-                ))}
-              </tr>
-            ))}
+                    {columns.map((column) => (
+                      <td
+                        key={column.accessor || column.key}
+                    className={cn(
+                      "min-w-0 px-3 py-2.5 text-xs text-zinc-900 sm:px-4 sm:py-3 sm:text-sm",
+                      column.cellClassName,
+                    )}
+                      >
+                        {column.render ? column.render(row) : (column.cell ? column.cell(row) : row[column.accessor || column.key])}
+                      </td>
+                    ))}
+                  </tr>
+                  {isExpanded && typeof renderExpandedRow === "function" && (
+                    <tr className="bg-zinc-50/40">
+                      <td colSpan={columns.length} className="px-4 py-4">
+                        {renderExpandedRow(row)}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {/* Pagination */}
       {pagination && totalPages > 1 && (
-        <div className="px-4 py-3 border-t border-zinc-200 bg-zinc-50/50">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-zinc-700">
+        <div className="border-t border-zinc-200 bg-zinc-50/50 px-3 py-3 sm:px-4">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="text-xs text-zinc-700 sm:text-sm">
               Showing {startRecord} to {endRecord} of {processedData.length}{" "}
               results
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <button
                 onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-1 text-sm border border-zinc-300 rounded-md hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-2.5 py-1 text-xs sm:text-sm border border-zinc-300 rounded-md hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Previous
               </button>
@@ -320,7 +343,7 @@ export function DataTable({
                       key={pageNum}
                       onClick={() => setCurrentPage(pageNum)}
                       className={cn(
-                        "px-3 py-1 text-sm border rounded-md transition-colors",
+                        "px-2.5 py-1 text-xs sm:text-sm border rounded-md transition-colors",
                         currentPage === pageNum
                           ? "bg-indigo-600 text-white border-indigo-600"
                           : "border-zinc-300 hover:bg-zinc-100",
@@ -337,7 +360,7 @@ export function DataTable({
                   setCurrentPage((prev) => Math.min(prev + 1, totalPages))
                 }
                 disabled={currentPage === totalPages}
-                className="px-3 py-1 text-sm border border-zinc-300 rounded-md hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-2.5 py-1 text-xs sm:text-sm border border-zinc-300 rounded-md hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Next
               </button>

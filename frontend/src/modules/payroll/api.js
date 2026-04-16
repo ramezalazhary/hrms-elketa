@@ -94,9 +94,19 @@ export const getEmployeePayrollHistoryApi = async (employeeId) => {
   return handleApiResponse(response);
 };
 
+export const getMyPayrollHistoryApi = async () => {
+  const response = await fetchWithAuth(`${API_URL}/payroll/me/history`);
+  return handleApiResponse(response);
+};
+
 export const getAdvancesApi = async (params) => {
   const q = params ? `?${new URLSearchParams(params).toString()}` : "";
   const response = await fetchWithAuth(`${API_URL}/advances${q}`);
+  return handleApiResponse(response);
+};
+
+export const getMyAdvancesApi = async () => {
+  const response = await fetchWithAuth(`${API_URL}/advances/mine`);
   return handleApiResponse(response);
 };
 

@@ -86,6 +86,43 @@ export function fiscalMonthPeriodStartUtc(isoDate, rawStartDay) {
 }
 
 /**
+ * First instant of the fiscal month **after** `periodStart` (same rules as payroll month end).
+ * @param {Date} periodStart - UTC midnight, from {@link fiscalMonthPeriodStartUtc}
+ * @param {number} [companyMonthStartDay=1]
+ * @returns {Date} UTC midnight, exclusive upper bound for `[periodStart, periodEnd)`
+ */
+export function fiscalMonthPeriodEndExclusiveUtc(periodStart, companyMonthStartDay) {
+  const S = getCompanyMonthStartDay({ companyMonthStartDay });
+  const nextMonthIdx = periodStart.getUTCMonth() + 1;
+  const nextYear =
+    nextMonthIdx > 11
+      ? periodStart.getUTCFullYear() + 1
+      : periodStart.getUTCFullYear();
+  const normalizedNextMonth = nextMonthIdx > 11 ? 0 : nextMonthIdx;
+
+  const nextMonthLastDay = new Date(
+    Date.UTC(nextYear, normalizedNextMonth + 1, 0),
+  ).getUTCDate();
+  const nextAnchorDay = Math.min(S, nextMonthLastDay);
+  return new Date(
+    Date.UTC(nextYear, normalizedNextMonth, nextAnchorDay, 0, 0, 0, 0),
+  );
+}
+
+/**
+ * Fiscal month `[start, end)` in UTC containing `utcDateMidnight`.
+ * @param {Date} utcDateMidnight
+ * @param {number} companyMonthStartDay
+ */
+export function fiscalMonthRangeContainingUtcDate(utcDateMidnight, companyMonthStartDay) {
+  const z = new Date(utcDateMidnight);
+  z.setUTCHours(0, 0, 0, 0);
+  const periodStart = fiscalMonthPeriodStartUtc(z, companyMonthStartDay);
+  const periodEnd = fiscalMonthPeriodEndExclusiveUtc(periodStart, companyMonthStartDay);
+  return { periodStart, periodEnd };
+}
+
+/**
  * Period key for excuse limits / monthly excuse usage (UTC).
  * MONTH with company start day 1 keeps legacy `M|YYYY-MM` keys; otherwise `M|YYYY-MM-DD` of period start.
  * @param {Date|string} excuseDate

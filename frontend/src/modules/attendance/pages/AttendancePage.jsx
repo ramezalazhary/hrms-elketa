@@ -3,12 +3,21 @@ import { Layout } from "@/shared/components/Layout";
 import { DataTable } from "@/shared/components/DataTable";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { useToast } from "@/shared/components/ToastProvider";
-import { fetchAttendanceThunk, importAttendanceThunk, createAttendanceThunk, updateAttendanceThunk, deleteAttendanceThunk, bulkDeleteAttendanceThunk, fetchMonthlyReportThunk } from "../store";
+import {
+  fetchAttendanceThunk,
+  importAttendanceThunk,
+  createAttendanceThunk,
+  updateAttendanceThunk,
+  deleteAttendanceThunk,
+  fetchMonthlyReportThunk,
+  updateAttendanceDeductionSourceThunk,
+} from "../store";
 import { Pagination } from "@/shared/components/Pagination";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
 import { StatusBadge } from "@/shared/components/EntityBadges";
 import { FileUp, Trash2, Edit2, Plus, ShieldCheck, AlertTriangle, Download, Info, Search, Clock, CalendarRange, BarChart3, ChevronDown, ChevronRight, AlertCircle } from "lucide-react";
 import { downloadAttendanceTemplateApi, downloadMonthlyReportExcelApi } from "../api";
+import { getLeaveRequestByIdApi } from "@/modules/employees/api";
 import {
   formatAttendanceDate,
   formatTotalHours,
@@ -17,6 +26,16 @@ import {
   getAttendancePunchIssue,
   summarizeAttendancePunchIssues,
 } from "../utils";
+import { formatLateTierStoredRange } from "@/shared/utils/lateTierTimeFormat";
+import {
+  ACCESS_LEVEL,
+  canAccessAttendance,
+  canManageAttendance,
+  canViewAttendanceAnalysis,
+  getAccessLevelLabel,
+  getAttendanceAccessLevel,
+  isHrRole,
+} from "@/shared/utils/accessControl";
 
 function PunchIssueBadge({ issue }) {
   if (!issue) {
@@ -51,6 +70,19 @@ function PunchIssueBadge({ issue }) {
   );
 }
 
+function AttendanceStatusCell({ row }) {
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <StatusBadge status={row.status} />
+      {row?.unpaidLeave && (
+        <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+          UNPAID
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function AttendancePage() {
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
@@ -72,16 +104,26 @@ export function AttendancePage() {
   const [isImporting, setIsImporting] = useState(false);
   const [isOverwriteEnabled, setIsOverwriteEnabled] = useState(false);
 
-  // Pagination & Selection
+  // Pagination
   const [page, setPage] = useState(1);
   const pageSize = 50;
-  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [expandedRowId, setExpandedRowId] = useState(null);
+  const [linkedLeaveById, setLinkedLeaveById] = useState({});
+  const [linkedLeaveLoadingId, setLinkedLeaveLoadingId] = useState(null);
 
 
   // Manual Entry State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [deductionDecisionModal, setDeductionDecisionModal] = useState({
+    open: false,
+    rowId: "",
+    source: "SALARY",
+    valueType: "DAYS",
+    value: "0.25",
+    saving: false,
+  });
   const [formData, setFormData] = useState({
     employeeId: "",
     date: todayStr,
@@ -91,11 +133,13 @@ export function AttendancePage() {
     remarks: ""
   });
 
-  const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "HR_STAFF";
-  const canViewMonthlyReport =
-    currentUser?.role === "ADMIN" ||
-    currentUser?.role === "HR_STAFF" ||
-    currentUser?.role === "HR_MANAGER";
+  const canManageAttendanceActions = canManageAttendance(currentUser);
+  const canUseAttendancePage = canAccessAttendance(currentUser);
+  const canViewMonthlyReport = canViewAttendanceAnalysis(currentUser);
+  const attendanceAccessLevel = getAttendanceAccessLevel(currentUser);
+  const canDeleteAttendance = attendanceAccessLevel === ACCESS_LEVEL.ADMIN;
+  const canResolveDeductionSource =
+    isHrRole(currentUser) || attendanceAccessLevel === ACCESS_LEVEL.ADMIN;
 
   // Tab state
   const [activeTab, setActiveTab] = useState("daily"); // "daily" | "monthly"
@@ -110,16 +154,16 @@ export function AttendancePage() {
   /** Params sent to GET /attendance (empty employee code is omitted so the API filters correctly). */
   const listQuery = useMemo(() => {
     const q = { startDate, endDate };
-    if (isAdmin && employeeCode.trim()) q.employeeCode = employeeCode.trim();
+    if (canManageAttendanceActions && employeeCode.trim()) q.employeeCode = employeeCode.trim();
     return q;
-  }, [startDate, endDate, employeeCode, isAdmin]);
+  }, [startDate, endDate, employeeCode, canManageAttendanceActions]);
 
   useEffect(() => {
+    if (!canUseAttendancePage) return;
     void dispatch(fetchAttendanceThunk(listQuery));
-    if (isAdmin) void dispatch(fetchEmployeesThunk());
+    if (canManageAttendanceActions) void dispatch(fetchEmployeesThunk());
     setPage(1); // Reset page on filter change
-    setSelectedIds(new Set()); // Reset selection
-  }, [dispatch, listQuery, isAdmin]);
+  }, [dispatch, listQuery, canManageAttendanceActions, canUseAttendancePage]);
 
   const pagedItems = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -220,34 +264,90 @@ export function AttendancePage() {
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedIds.size} records?`)) return;
+  const openDeductionDecisionModal = (row, source) => {
+    const defaultValueType = source === "VACATION_BALANCE" ? "DAYS" : "DAYS";
+    const suggestedValue =
+      Number(row?.deductionValue) > 0
+        ? String(row.deductionValue)
+        : Number(row?.excessExcuseFraction) > 0
+          ? String(row.excessExcuseFraction)
+          : "0.25";
+    setDeductionDecisionModal({
+      open: true,
+      rowId: row?._id || "",
+      source,
+      valueType: defaultValueType,
+      value: suggestedValue,
+      saving: false,
+    });
+  };
 
+  const closeDeductionDecisionModal = () => {
+    setDeductionDecisionModal((prev) => ({ ...prev, open: false, saving: false }));
+  };
+
+  const handleResolveDeductionSource = async () => {
+    const rowId = deductionDecisionModal.rowId;
+    const source = deductionDecisionModal.source;
+    if (!rowId) return;
+    const deductionValueType = String(deductionDecisionModal.valueType || "").trim().toUpperCase();
+    if (!["DAYS", "AMOUNT"].includes(deductionValueType)) {
+      showToast("Deduction type must be DAYS or AMOUNT", "error");
+      return;
+    }
+    if (source === "VACATION_BALANCE" && deductionValueType !== "DAYS") {
+      showToast("Vacation balance deduction must use DAYS", "error");
+      return;
+    }
+    const deductionValue = Number(deductionDecisionModal.value);
+    if (!Number.isFinite(deductionValue) || deductionValue <= 0) {
+      showToast("Deduction value must be a positive number", "error");
+      return;
+    }
+
+    setDeductionDecisionModal((prev) => ({ ...prev, saving: true }));
     try {
-      const ids = Array.from(selectedIds);
-      await dispatch(bulkDeleteAttendanceThunk(ids)).unwrap();
-      showToast(`Deleted ${ids.length} records`, "success");
-      setSelectedIds(new Set());
+      await dispatch(
+        updateAttendanceDeductionSourceThunk({
+          id: rowId,
+          deductionSource: source,
+          deductionValueType,
+          deductionValue,
+        }),
+      ).unwrap();
+      showToast("Deduction decision saved", "success");
+      closeDeductionDecisionModal();
       void dispatch(fetchAttendanceThunk(listQuery));
-    } catch (err) {
-      showToast("Bulk delete failed", "error");
+    } catch (error) {
+      showToast(error?.message || "Failed to update deduction source", "error");
+      setDeductionDecisionModal((prev) => ({ ...prev, saving: false }));
     }
   };
 
-  const toggleSelectAll = () => {
-    if (selectedIds.size === pagedItems.length && pagedItems.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(pagedItems.map(item => item._id)));
+  const loadLinkedLeave = async (leaveRequestId) => {
+    if (!leaveRequestId || linkedLeaveById[leaveRequestId]) return;
+    setLinkedLeaveLoadingId(leaveRequestId);
+    try {
+      const doc = await getLeaveRequestByIdApi(leaveRequestId);
+      setLinkedLeaveById((prev) => ({ ...prev, [leaveRequestId]: doc || null }));
+    } catch {
+      setLinkedLeaveById((prev) => ({ ...prev, [leaveRequestId]: null }));
+    } finally {
+      setLinkedLeaveLoadingId((prev) => (prev === leaveRequestId ? null : prev));
     }
   };
 
-  const toggleSelectItem = (id) => {
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedIds(next);
+  const formatWorkDateTime = (value) => {
+    if (!value) return "—";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
 
@@ -282,14 +382,15 @@ export function AttendancePage() {
   };
 
   const STATUS_COLORS = {
-    PRESENT: "bg-emerald-50 text-emerald-700",
-    LATE: "bg-amber-50 text-amber-700",
-    ABSENT: "bg-red-50 text-red-700",
-    ON_LEAVE: "bg-sky-50 text-sky-700",
-    EXCUSED: "bg-teal-50 text-teal-700",
-    EARLY_DEPARTURE: "bg-orange-50 text-orange-700",
-    INCOMPLETE: "bg-yellow-50 text-yellow-700",
-    HOLIDAY: "bg-indigo-50 text-indigo-700",
+    PRESENT: "bg-zinc-100 text-zinc-800",
+    LATE: "bg-amber-50 text-amber-800",
+    ABSENT: "bg-red-50 text-red-800",
+    ON_LEAVE: "bg-zinc-50 text-zinc-700 ring-1 ring-zinc-200/80",
+    EXCUSED: "bg-zinc-100 text-zinc-700",
+    PARTIAL_EXCUSED: "bg-violet-50 text-violet-800",
+    EARLY_DEPARTURE: "bg-orange-50 text-orange-800",
+    INCOMPLETE: "bg-yellow-50 text-yellow-800",
+    HOLIDAY: "bg-zinc-100 text-zinc-800",
   };
 
   return (
@@ -297,59 +398,52 @@ export function AttendancePage() {
       title="Attendance"
       description="Daily check-in/out per employee and monthly attendance analysis (no salary totals on the monthly tab)."
       actions={
-        isAdmin && activeTab === "daily" && (
-          <div className="flex items-center gap-3">
+        canManageAttendanceActions && activeTab === "daily" && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               onClick={() => { 
                 setEditingId(null); 
                 setFormData({ employeeId: "", date: todayStr, checkIn: "09:00:00 AM", checkOut: "05:00:00 PM", status: "PRESENT", remarks: "" });
                 setIsAddModalOpen(true); 
               }}
-              className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 transition"
+              className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] motion-reduce:active:scale-100"
             >
               <Plus size={16} />
               Add Manual
             </button>
             <button
                onClick={handleDownloadTemplate}
-               className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+               className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50"
              >
                <Download size={16} />
                Download Template
              </button>
-             <label className="cursor-pointer relative group">
+             <label className="relative cursor-pointer">
                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} disabled={isImporting} />
-               <div className={`flex items-center gap-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 ${isImporting ? 'opacity-50 cursor-not-allowed' : ''}`}>
+               <div className={`inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 ${isImporting ? "pointer-events-none opacity-50" : ""}`}>
                  <FileUp size={16} />
                  {isImporting ? "Importing..." : "Import Excel"}
                </div>
              </label>
-             {selectedIds.size > 0 && (
-               <button
-                 onClick={handleBulkDelete}
-                 className="flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 transition"
-               >
-                 <Trash2 size={16} />
-                 Delete ({selectedIds.size})
-               </button>
-             )}
           </div>
         )
       }
     >
-      {/* Tab Bar */}
-      <div className="mb-6 flex gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1 shadow-sm">
+      {/* Tab bar — segmented */}
+      <div className="mb-8 inline-flex w-full max-w-md gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 sm:w-auto">
         <button
+          type="button"
           onClick={() => setActiveTab("daily")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${activeTab === "daily" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${activeTab === "daily" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}
         >
           <CalendarRange size={16} />
           Daily Records
         </button>
         {canViewMonthlyReport && (
           <button
+            type="button"
             onClick={() => setActiveTab("monthly")}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${activeTab === "monthly" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${activeTab === "monthly" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}
           >
             <BarChart3 size={16} />
             Monthly Report
@@ -364,34 +458,37 @@ export function AttendancePage() {
         </div>
       )}
 
-      <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-teal-100 bg-gradient-to-r from-teal-50/90 via-white to-cyan-50/80 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-6 flex flex-col gap-4 rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-600 text-white shadow-md">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 ring-1 ring-zinc-200/80 text-zinc-700">
             <CalendarRange className="h-5 w-5" strokeWidth={1.75} />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-900">Records in view</p>
-            <p className="text-xs text-slate-600">
-              <span className="font-semibold text-teal-800">{items.length}</span> row{items.length === 1 ? "" : "s"}{" "}
+            <p className="text-[15px] font-semibold tracking-tight text-zinc-900">Records in view</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
+              <span className="mr-2 rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 font-semibold text-zinc-700">
+                {getAccessLevelLabel(attendanceAccessLevel)}
+              </span>
+              <span className="font-semibold text-zinc-900">{items.length}</span> row{items.length === 1 ? "" : "s"}{" "}
               · {startDate} → {endDate}
-              {isAdmin && employeeCode.trim() ? (
-                <span className="text-violet-700"> · code contains “{employeeCode.trim()}”</span>
+              {canManageAttendanceActions && employeeCode.trim() ? (
+                <span className="text-zinc-700"> · code contains “{employeeCode.trim()}”</span>
               ) : null}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <Clock className="h-4 w-4 shrink-0 text-teal-600" />
+        <div className="flex items-center gap-2 text-xs leading-relaxed text-zinc-500">
+          <Clock className="h-4 w-4 shrink-0 text-zinc-400" />
           Times are stored as 24h on the server; this table shows the saved values.
         </div>
       </div>
 
       {punchSummary.affectedRows > 0 && (
         <div
-          className="mb-6 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm sm:flex-row sm:items-start"
+          className="mb-6 flex flex-col gap-3 rounded-[20px] border border-amber-200/80 bg-amber-50/40 p-5 shadow-sm ring-1 ring-amber-900/5 sm:flex-row sm:items-start"
           role="status"
         >
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-md">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-800 ring-1 ring-amber-200/80">
             <AlertTriangle className="h-5 w-5" strokeWidth={2} aria-hidden />
           </div>
           <div className="min-w-0 flex-1 space-y-2">
@@ -430,11 +527,11 @@ export function AttendancePage() {
         </div>
       )}
 
-      {isAdmin && (
-        <div className="mb-6 flex items-start gap-3 rounded-xl border border-sky-100 bg-sky-50/60 p-4 shadow-sm">
-          <Info size={18} className="mt-0.5 shrink-0 text-sky-600" />
-          <div className="text-xs font-medium text-sky-900">
-            <p className="mb-1 font-semibold text-sky-950">Import & template</p>
+      {canManageAttendanceActions && (
+        <div className="mb-6 flex items-start gap-3 rounded-2xl bg-zinc-100/70 p-4 ring-1 ring-zinc-200/80">
+          <Info size={18} className="mt-0.5 shrink-0 text-zinc-400" />
+          <div className="text-xs font-medium leading-relaxed text-zinc-600">
+            <p className="mb-1 font-semibold text-zinc-900">Import & template</p>
             <p>
               Excel columns (flexible names):{" "}
               <strong>Employee Code</strong>, <strong>Date</strong>, <strong>Check In</strong>, <strong>Check Out</strong>.
@@ -444,30 +541,30 @@ export function AttendancePage() {
         </div>
       )}
 
-      {/* Search & Filter Bar */}
-      <div className="mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+      {/* Search & filters */}
+      <div className="mb-6 grid grid-cols-1 gap-5 rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] md:grid-cols-2 lg:grid-cols-4 sm:p-6">
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Start Date</label>
+          <label className="text-xs font-medium text-zinc-500">Start date</label>
           <input 
             type="date" 
-            className="px-3 py-2 rounded-lg border border-zinc-200 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none transition" 
+            className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" 
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Until Date</label>
+          <label className="text-xs font-medium text-zinc-500">Until date</label>
           <input 
             type="date" 
-            className="px-3 py-2 rounded-lg border border-zinc-200 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none transition" 
+            className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" 
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
           />
         </div>
 
-        {isAdmin && (
+        {canManageAttendanceActions && (
           <div className="flex flex-col gap-1.5 flex-1">
-             <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Search Employee Code</label>
+             <label className="text-xs font-medium text-zinc-500">Search employee code</label>
              <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                 <input 
@@ -475,15 +572,15 @@ export function AttendancePage() {
                   placeholder="e.g. #IT-001"
                   value={employeeCode}
                   onChange={(e) => setEmployeeCode(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2 rounded-lg border border-zinc-200 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none transition" 
+                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 py-2.5 pl-10 pr-3 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" 
                 />
              </div>
           </div>
         )}
 
-        {isAdmin && (
-          <div className="flex items-center justify-end">
-            <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-zinc-50 border border-zinc-200 h-full">
+        {canManageAttendanceActions && (
+          <div className="flex items-center justify-end lg:items-end">
+            <div className="flex h-full w-full items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-4 py-3 lg:w-auto">
               <div className="flex items-center gap-2">
                  <ShieldCheck size={16} className={isOverwriteEnabled ? "text-amber-600" : "text-zinc-400"} />
                  <span className="text-xs font-bold text-zinc-700">Overwrite</span>
@@ -500,56 +597,195 @@ export function AttendancePage() {
       </div>
 
       <DataTable
+        className="overflow-hidden rounded-[24px] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-zinc-950/[0.04] backdrop-blur"
+        onRowClick={(row) => {
+          const rowId = row?._id;
+          if (!rowId) return;
+          const leaveRefId = row?.excuseLeaveRequestId || row?.leaveRequestId;
+          if (leaveRefId) {
+            void loadLinkedLeave(String(leaveRefId));
+          }
+          setExpandedRowId((prev) => (prev === rowId ? null : rowId));
+        }}
+        expandedRowKey={expandedRowId}
+        renderExpandedRow={(row) => {
+          const leaveRefId = String(row?.excuseLeaveRequestId || row?.leaveRequestId || "");
+          const linkedLeave = leaveRefId ? linkedLeaveById[leaveRefId] : null;
+          const leaveLoading = leaveRefId && linkedLeaveLoadingId === leaveRefId;
+          return (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Date</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-900">{formatAttendanceDate(row.date)}</p>
+            </div>
+            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Attendance status</p>
+              <div className="mt-1 flex items-center gap-2">
+                <StatusBadge status={row.status} />
+                {row?.unpaidLeave && (
+                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                    UNPAID
+                  </span>
+                )}
+              </div>
+              {row?.status === "PARTIAL_EXCUSED" && (
+                <p className="mt-1 text-[11px] font-medium text-violet-700">
+                  Overage: {Number(row?.excuseOverageMinutes || 0)} min
+                </p>
+              )}
+            </div>
+            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Check window</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-900 tabular-nums">
+                {row.checkIn || "—"} → {row.checkOut || "—"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Total hours</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-900 tabular-nums">{formatTotalHours(row.totalHours)}</p>
+            </div>
+            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Punch check</p>
+              <div className="mt-1"><PunchIssueBadge issue={getAttendancePunchIssue(row)} /></div>
+            </div>
+            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 sm:col-span-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Employee</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-900">
+                {getAttendanceEmployee(row)?.fullName || row.employeeCode || "—"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 sm:col-span-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Employee code</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-900">{row.employeeCode || "—"}</p>
+            </div>
+            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 sm:col-span-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Notes</p>
+              <p className="mt-1 text-xs text-zinc-700">{row.remarks || "No additional notes."}</p>
+            </div>
+            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 sm:col-span-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Created</p>
+              <p className="mt-1 text-xs text-zinc-700">{formatWorkDateTime(row.createdAt)}</p>
+            </div>
+            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 sm:col-span-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Last update</p>
+              <p className="mt-1 text-xs text-zinc-700">{formatWorkDateTime(row.updatedAt)}</p>
+            </div>
+            {canManageAttendanceActions && (
+              <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-3 sm:col-span-2 lg:col-span-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Row actions</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleEditClick(row)}
+                    className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                  >
+                    <Edit2 size={12} />
+                    Edit
+                  </button>
+                  {canDeleteAttendance && (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteId(row._id)}
+                      className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                    >
+                      <Trash2 size={12} />
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {(row?.excuseLeaveRequestId || row?.leaveRequestId) && (
+              <div className="rounded-xl border border-violet-200/80 bg-violet-50/50 px-3 py-3 sm:col-span-2 lg:col-span-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-500">Linked leave approval</p>
+                {leaveLoading ? (
+                  <p className="mt-1 text-xs text-violet-700">Loading leave approval details...</p>
+                ) : linkedLeave ? (
+                  <div className="mt-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs text-zinc-700">
+                    <p><span className="font-semibold text-zinc-900">Type:</span> {linkedLeave.kind === "EXCUSE" ? "Excuse" : (linkedLeave.leaveType || linkedLeave.kind || "Leave")}</p>
+                    <p><span className="font-semibold text-zinc-900">Request status:</span> {linkedLeave.status || "—"}</p>
+                    <p><span className="font-semibold text-zinc-900">Payment:</span> {linkedLeave.effectivePaymentType || "—"}</p>
+                    <p><span className="font-semibold text-zinc-900">Source:</span> {row?.excuseLeaveRequestId ? "Excuse coverage" : "Vacation approval"}</p>
+                    {linkedLeave.unpaidReason && (
+                      <p className="sm:col-span-2 lg:col-span-4">
+                        <span className="font-semibold text-zinc-900">Unpaid reason:</span> {linkedLeave.unpaidReason}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs text-violet-700">
+                    Leave reference detected ({leaveRefId}), but full approval details are unavailable for your scope.
+                  </p>
+                )}
+              </div>
+            )}
+            {row?.status === "PARTIAL_EXCUSED" && (
+              <div className="rounded-xl border border-violet-200/80 bg-violet-50/60 px-3 py-3 sm:col-span-2 lg:col-span-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-500">
+                  Deduction decision
+                </p>
+                <p className="mt-1 text-xs text-violet-900">
+                  Source:{" "}
+                  <strong>
+                    {row?.deductionSource === "SALARY"
+                      ? "Salary"
+                      : row?.deductionSource === "VACATION_BALANCE"
+                        ? "Vacation balance"
+                        : "Pending HR decision"}
+                  </strong>
+                  {row?.deductionValueType && Number(row?.deductionValue) > 0
+                    ? ` · Value: ${Number(row.deductionValue).toFixed(2)} ${row.deductionValueType === "AMOUNT" ? "amount" : "day(s)"}`
+                    : Number(row?.excessExcuseFraction || 0) > 0
+                      ? ` · Suggested: ${Number(row.excessExcuseFraction).toFixed(2)} day(s)`
+                      : ""}
+                </p>
+                {row?.requiresDeductionDecision && (
+                  <p className="mt-1 text-xs font-semibold text-amber-700">
+                    HR must choose deduction source before payroll finalization.
+                  </p>
+                )}
+                {canResolveDeductionSource && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openDeductionDecisionModal(row, "SALARY")}
+                      className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                    >
+                      Set Salary
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openDeductionDecisionModal(row, "VACATION_BALANCE")}
+                      className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                    >
+                      Set Vacation Balance
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          );
+        }}
         columns={[
-          {
-            key: "selection",
-            header: (
-              <input
-                type="checkbox"
-                className="rounded border-zinc-300 text-teal-600 focus:ring-teal-500"
-                checked={pagedItems.length > 0 && selectedIds.size === pagedItems.length}
-                onChange={toggleSelectAll}
-              />
-            ),
-            render: (row) => (
-              <input
-                type="checkbox"
-                className="rounded border-zinc-300 text-teal-600 focus:ring-teal-500"
-                checked={selectedIds.has(row._id)}
-                onChange={() => toggleSelectItem(row._id)}
-              />
-            ),
-          },
-          {
-            key: "code",
-            header: "Code",
-            render: (row) => {
-              const emp = getAttendanceEmployee(row);
-              const code = emp?.employeeCode || row.employeeCode || "—";
-              return (
-                <span className="rounded-md border border-teal-200/80 bg-teal-50/80 px-2 py-0.5 font-mono text-xs font-semibold text-teal-900">
-                  {code}
-                </span>
-              );
-            },
-          },
           {
             key: "employee",
             header: "Employee",
+            cellClassName: "max-w-[12rem] sm:max-w-[16rem]",
             render: (row) => {
               const emp = getAttendanceEmployee(row);
               const name = emp?.fullName;
               const dept = emp?.department;
               return (
-                <div>
-                  <p className="font-semibold text-zinc-900">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-zinc-900">
                     {name || (
                       <span className="text-zinc-500 italic">
                         {row.employeeCode ? `Not linked (${row.employeeCode})` : "No profile"}
                       </span>
                     )}
                   </p>
-                  <p className="text-[10px] leading-none text-zinc-500">{dept || "—"}</p>
+                  <p className="truncate text-[10px] leading-none text-zinc-500">{dept || "—"}</p>
                 </div>
               );
             },
@@ -557,65 +793,28 @@ export function AttendancePage() {
           {
             key: "date",
             header: "Work date",
+            cellClassName: "whitespace-nowrap",
             render: (row) => (
-              <span className="whitespace-nowrap text-sm font-medium text-zinc-700">
+              <span className="text-sm font-medium text-zinc-700">
                 {formatAttendanceDate(row.date)}
               </span>
             ),
           },
           {
-            key: "in",
-            header: "Check in",
+            key: "timeWindow",
+            header: "Time window",
+            cellClassName: "whitespace-nowrap",
             render: (row) => (
-              <div className="text-xs font-semibold text-emerald-700">{row.checkIn || "—"}</div>
-            ),
-          },
-          {
-            key: "out",
-            header: "Check out",
-            render: (row) => (
-              <div className="text-xs font-semibold text-amber-700">{row.checkOut || "—"}</div>
-            ),
-          },
-          {
-            key: "punchAlert",
-            header: "Punch check",
-            render: (row) => <PunchIssueBadge issue={getAttendancePunchIssue(row)} />,
-          },
-          {
-            key: "hours",
-            header: "Hours",
-            render: (row) => (
-              <span className="font-mono text-sm font-semibold text-slate-700">{formatTotalHours(row.totalHours)}</span>
+              <div className="rounded-lg border border-zinc-200/80 bg-zinc-50/70 px-2.5 py-1 text-xs font-semibold text-zinc-800 tabular-nums">
+                {(row.checkIn || "—")} {"->"} {(row.checkOut || "—")}
+              </div>
             ),
           },
           {
             key: "status",
             header: "Status",
-            render: (row) => <StatusBadge status={row.status} />,
-          },
-          {
-            key: "remarks",
-            header: "Note",
-            render: (row) => (
-              <span className="line-clamp-2 max-w-[10rem] text-xs text-zinc-500" title={row.remarks || ""}>
-                {row.remarks || "—"}
-              </span>
-            ),
-          },
-          {
-            key: "actions",
-            header: "",
-            render: (row) => isAdmin && (
-              <div className="flex items-center justify-end gap-2">
-                <button onClick={() => handleEditClick(row)} className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition border border-transparent hover:border-indigo-100">
-                  <Edit2 size={14} />
-                </button>
-                <button onClick={() => setDeleteId(row._id)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-md transition border border-transparent hover:border-red-100">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ),
+            cellClassName: "whitespace-nowrap",
+            render: (row) => <AttendanceStatusCell row={row} />,
           },
         ]}
         data={pagedItems}
@@ -632,15 +831,15 @@ export function AttendancePage() {
       {/* Manual Add/Edit Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-[480px] rounded-2xl bg-white p-6 shadow-2xl border border-zinc-200 animate-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-bold text-zinc-900 mb-1">{editingId ? "Edit Record" : "Add Manual Attendance"}</h3>
-            <p className="text-sm text-zinc-500 mb-6">Enter explicit check-in/out times for an employee.</p>
+          <div className="w-[480px] max-w-[calc(100vw-2rem)] rounded-[20px] bg-white p-6 shadow-xl ring-1 ring-zinc-950/[0.08] animate-in zoom-in-95 duration-200">
+            <h3 className="text-[17px] font-semibold tracking-tight text-zinc-900">{editingId ? "Edit Record" : "Add Manual Attendance"}</h3>
+            <p className="mt-1 text-sm leading-relaxed text-zinc-500">Enter explicit check-in/out times for an employee.</p>
             
-            <div className="space-y-4">
+            <div className="mt-6 space-y-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-zinc-600 uppercase">Employee</label>
+                <label className="text-xs font-medium text-zinc-500">Employee</label>
                 <select 
-                  className="px-3 py-2 rounded-lg border border-zinc-200 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
                   value={formData.employeeId}
                   onChange={(e) => setFormData({...formData, employeeId: e.target.value})}
                   disabled={!!editingId}
@@ -652,47 +851,45 @@ export function AttendancePage() {
                 </select>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-zinc-600 uppercase">Date</label>
-                  <input type="date" className="px-3 py-2 rounded-lg border border-zinc-200 text-sm" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} disabled={!!editingId} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-zinc-600 uppercase">Status</label>
-                  <select className="px-3 py-2 rounded-lg border border-zinc-200 text-sm" value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value})}>
-                    <option value="PRESENT">Present</option>
-                    <option value="ABSENT">Absent</option>
-                    <option value="LATE">Late Arrival</option>
-                    <option value="EXCUSED">Excused (approved permission)</option>
-                    <option value="EARLY_DEPARTURE">Early Departure</option>
-                    <option value="INCOMPLETE">Incomplete (no checkout)</option>
-                    <option value="ON_LEAVE">On Leave</option>
-                  </select>
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-zinc-500">Date</label>
+                <input type="date" className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} disabled={!!editingId} />
               </div>
+              {editingId && formData.status && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+                  <span className="font-semibold text-zinc-700">Saved status</span>
+                  <StatusBadge status={formData.status} />
+                  <span className="text-zinc-500">Saving recomputes from times and policy.</span>
+                </div>
+              )}
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                Present / Late / Early departure / Incomplete is always calculated on the server from the times below and company attendance rules (including approved leave or excuses where applicable).
+              </p>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-zinc-600 uppercase">Check in</label>
-                  <input type="text" placeholder="09:00:00 AM or 09:00" className="px-3 py-2 rounded-lg border border-zinc-200 text-sm" value={formData.checkIn} onChange={(e) => setFormData({...formData, checkIn: e.target.value})} />
+                  <label className="text-xs font-medium text-zinc-500">Check in</label>
+                  <input type="text" placeholder="09:00:00 AM or 09:00" className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" value={formData.checkIn} onChange={(e) => setFormData({...formData, checkIn: e.target.value})} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-zinc-600 uppercase">Check out</label>
-                  <input type="text" placeholder="05:00:00 PM or 17:00" className="px-3 py-2 rounded-lg border border-zinc-200 text-sm" value={formData.checkOut} onChange={(e) => setFormData({...formData, checkOut: e.target.value})} />
+                  <label className="text-xs font-medium text-zinc-500">Check out</label>
+                  <input type="text" placeholder="05:00:00 PM or 17:00" className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" value={formData.checkOut} onChange={(e) => setFormData({...formData, checkOut: e.target.value})} />
                 </div>
               </div>
             </div>
 
             <div className="mt-8 flex items-center justify-end gap-3">
               <button 
+                type="button"
                 onClick={() => setIsAddModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 rounded-lg transition"
+                className="rounded-full px-4 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100"
               >
                 Cancel
               </button>
               <button 
+                type="button"
                 onClick={handleSaveManual}
-                className="px-6 py-2 text-sm font-bold text-white bg-zinc-900 rounded-lg shadow-lg hover:shadow-zinc-900/20 transition active:scale-[0.98]"
+                className="rounded-full bg-zinc-900 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] motion-reduce:active:scale-100"
               >
                 {editingId ? "Save Changes" : "Confirm Entry"}
               </button>
@@ -703,27 +900,131 @@ export function AttendancePage() {
 
       {/* Delete Confirmation Modal */}
       {deleteId && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="w-[400px] rounded-2xl bg-white p-8 shadow-2xl border border-red-100 animate-in zoom-in-95 duration-200">
-            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600">
-              <AlertTriangle size={32} />
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-[400px] max-w-[calc(100vw-2rem)] rounded-[20px] bg-white p-8 shadow-xl ring-1 ring-zinc-950/[0.08] animate-in zoom-in-95 duration-200">
+            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600 ring-1 ring-red-100/80">
+              <AlertTriangle size={26} />
             </div>
-            <h3 className="text-xl font-bold text-zinc-900 mb-2">Confirm Deletion</h3>
-            <p className="text-sm text-zinc-500 mb-8 leading-relaxed">
+            <h3 className="text-[17px] font-semibold tracking-tight text-zinc-900">Confirm deletion</h3>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-500">
               Are you sure you want to delete this attendance record? This action is permanent and cannot be undone.
             </p>
-            <div className="flex items-center gap-3">
+            <div className="mt-8 flex items-center gap-3">
               <button 
+                type="button"
                 onClick={() => setDeleteId(null)}
-                className="flex-1 px-4 py-2.5 text-sm font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition"
+                className="flex-1 rounded-full px-4 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100"
               >
                 Cancel
               </button>
               <button 
+                type="button"
                 onClick={handleConfirmDelete}
-                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-lg shadow-red-600/20 transition active:scale-[0.98]"
+                className="flex-1 rounded-full bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 active:scale-[0.98] motion-reduce:active:scale-100"
               >
-                Delete Now
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deduction Decision Modal */}
+      {deductionDecisionModal.open && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/35 backdrop-blur-xl animate-in fade-in duration-200">
+          <div className="w-[460px] max-w-[calc(100vw-2rem)] rounded-[28px] border border-white/70 bg-white/90 p-6 shadow-2xl ring-1 ring-zinc-950/[0.06] animate-in zoom-in-95 duration-200">
+            <div className="mb-5">
+              <h3 className="text-[20px] font-semibold tracking-tight text-zinc-900">Deduction Decision</h3>
+              <p className="mt-1 text-sm text-zinc-500">
+                Set final payroll routing and value for this partial excuse row.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Deduction Source</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {["SALARY", "VACATION_BALANCE"].map((source) => (
+                    <button
+                      key={source}
+                      type="button"
+                      onClick={() =>
+                        setDeductionDecisionModal((prev) => ({
+                          ...prev,
+                          source,
+                          valueType: source === "VACATION_BALANCE" ? "DAYS" : prev.valueType,
+                        }))
+                      }
+                      className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                        deductionDecisionModal.source === source
+                          ? "border-zinc-900 bg-zinc-900 text-white"
+                          : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                      }`}
+                    >
+                      {source === "SALARY" ? "Salary" : "Vacation Balance"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-500">Value Type</label>
+                  <select
+                    value={deductionDecisionModal.valueType}
+                    onChange={(e) =>
+                      setDeductionDecisionModal((prev) => ({
+                        ...prev,
+                        valueType: e.target.value,
+                      }))
+                    }
+                    disabled={deductionDecisionModal.source === "VACATION_BALANCE"}
+                    className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80 disabled:opacity-60"
+                  >
+                    <option value="DAYS">Days</option>
+                    <option value="AMOUNT">Amount</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-500">
+                    {deductionDecisionModal.valueType === "AMOUNT" ? "Amount" : "Days"}
+                  </label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={deductionDecisionModal.value}
+                    onChange={(e) =>
+                      setDeductionDecisionModal((prev) => ({ ...prev, value: e.target.value }))
+                    }
+                    className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 py-2 text-xs text-zinc-600">
+                {deductionDecisionModal.source === "VACATION_BALANCE"
+                  ? "Vacation balance supports DAYS only."
+                  : "Salary supports both DAYS and AMOUNT."}
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeDeductionDecisionModal}
+                disabled={deductionDecisionModal.saving}
+                className="rounded-full px-4 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleResolveDeductionSource}
+                disabled={deductionDecisionModal.saving}
+                className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-60"
+              >
+                {deductionDecisionModal.saving ? "Saving..." : "Save Decision"}
               </button>
             </div>
           </div>
@@ -736,23 +1037,23 @@ export function AttendancePage() {
       {activeTab === "monthly" && canViewMonthlyReport && (
         <div className="space-y-6">
           {/* Controls */}
-          <div className="flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-4 rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:flex-row sm:items-end sm:justify-between">
             <div className="flex flex-wrap gap-4">
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Year</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">Year</label>
                 <input
                   type="number"
                   min={2020}
                   max={2100}
-                  className="w-28 rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                  className="w-28 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
                   value={reportYear}
                   onChange={(e) => setReportYear(Number(e.target.value))}
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Month</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">Month</label>
                 <select
-                  className="w-36 rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                  className="w-36 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
                   value={reportMonth}
                   onChange={(e) => setReportMonth(Number(e.target.value))}
                 >
@@ -764,20 +1065,22 @@ export function AttendancePage() {
                 </select>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-2 sm:gap-3">
               <button
+                type="button"
                 onClick={handleLoadMonthlyReport}
                 disabled={monthlyReportLoading}
-                className="flex items-center gap-2 rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-50 active:scale-[0.98] motion-reduce:active:scale-100"
               >
                 <BarChart3 size={16} />
                 {monthlyReportLoading ? "Loading..." : "Generate Report"}
               </button>
               {monthlyReport && (
                 <button
+                  type="button"
                   onClick={handleExportExcel}
                   disabled={isExporting}
-                  className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50"
                 >
                   <Download size={16} />
                   {isExporting ? "Exporting..." : "Export Excel"}
@@ -795,18 +1098,19 @@ export function AttendancePage() {
           {monthlyReport && (
             <>
               {/* Period info */}
-              <div className="flex flex-wrap items-center gap-4 rounded-xl border border-teal-100 bg-teal-50/60 px-4 py-3 text-sm text-teal-900">
-                <span className="font-semibold">Fiscal Period:</span>
-                {monthlyReport.period.periodStart?.slice(0, 10)} to {monthlyReport.period.periodEnd?.slice(0, 10)}
-                <span className="text-teal-600">|</span>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[20px] bg-zinc-50/80 px-4 py-3 text-sm text-zinc-800 ring-1 ring-zinc-200/80">
+                <span className="font-semibold text-zinc-900">Fiscal period</span>
+                <span className="hidden text-zinc-300 sm:inline">·</span>
+                <span>{monthlyReport.period.periodStart?.slice(0, 10)} to {monthlyReport.period.periodEnd?.slice(0, 10)}</span>
+                <span className="hidden text-zinc-300 sm:inline">·</span>
                 <span>{monthlyReport.period.expectedWorkingDays} expected working days</span>
-                <span className="text-teal-600">|</span>
+                <span className="hidden text-zinc-300 sm:inline">·</span>
                 <span>{monthlyReport.summary?.length || 0} employees</span>
               </div>
 
               {monthlyPunchSummary.affectedRows > 0 && (
                 <div
-                  className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950"
+                  className="flex flex-col gap-2 rounded-[20px] bg-amber-50/80 px-4 py-3 text-sm text-amber-950 ring-1 ring-amber-200/70"
                   role="status"
                 >
                   <div className="flex items-center gap-2 font-semibold">
@@ -839,9 +1143,9 @@ export function AttendancePage() {
               )}
 
               {monthlyReport.policySnapshot && (
-                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-900">
+                <div className="rounded-[20px] bg-zinc-50/90 px-4 py-3 text-sm text-zinc-800 ring-1 ring-zinc-200/80">
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <span className="font-semibold">Attendance Rules Used:</span>
+                    <span className="font-semibold text-zinc-900">Attendance rules used</span>
                     <span>
                       Shift:{" "}
                       <strong>
@@ -885,7 +1189,10 @@ export function AttendancePage() {
                         {Array.isArray(monthlyReport.policySnapshot.lateDeductionTiers) &&
                         monthlyReport.policySnapshot.lateDeductionTiers.length > 0
                           ? monthlyReport.policySnapshot.lateDeductionTiers
-                              .map((tier) => `${tier.fromMinutes}-${tier.toMinutes}m=${tier.deductionDays}d`)
+                              .map(
+                                (tier) =>
+                                  `${formatLateTierStoredRange(tier.fromMinutes, tier.toMinutes)}=${tier.deductionDays}d`,
+                              )
                               .join(" | ")
                           : "none"}
                       </strong>
@@ -895,7 +1202,7 @@ export function AttendancePage() {
               )}
 
               {/* Summary Table */}
-              <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm">
+              <div className="overflow-x-auto rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
                 <table className="min-w-full divide-y divide-zinc-200 text-sm">
                   <thead className="bg-zinc-50 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">
                     <tr>
@@ -938,17 +1245,17 @@ export function AttendancePage() {
                               {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                             </td>
                             <td className="px-3 py-2.5">
-                              <span className="rounded-md border border-teal-200/80 bg-teal-50/80 px-2 py-0.5 font-mono text-xs font-semibold text-teal-900">
+                              <span className="rounded-lg border border-zinc-200/80 bg-zinc-100/80 px-2 py-0.5 font-mono text-xs font-semibold text-zinc-800">
                                 {s.employeeCode}
                               </span>
                             </td>
                             <td className="px-3 py-2.5 font-medium text-zinc-900">{s.fullName}</td>
                             <td className="px-3 py-2.5 text-zinc-500">{s.department || "—"}</td>
-                            <td className="px-3 py-2.5 text-center font-semibold text-emerald-700">{s.presentDays}</td>
-                            <td className="px-3 py-2.5 text-center font-semibold text-amber-700">{s.lateDays || "—"}</td>
+                            <td className="px-3 py-2.5 text-center font-semibold text-zinc-800">{s.presentDays}</td>
+                            <td className="px-3 py-2.5 text-center font-semibold text-amber-800">{s.lateDays || "—"}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-red-700">{s.absentDays || "—"}</td>
-                            <td className="px-3 py-2.5 text-center font-semibold text-sky-700">{s.onLeaveDays || "—"}</td>
-                            <td className="px-3 py-2.5 text-center font-semibold text-indigo-700">{s.holidayDays || "—"}</td>
+                            <td className="px-3 py-2.5 text-center font-semibold text-zinc-700">{s.onLeaveDays || "—"}</td>
+                            <td className="px-3 py-2.5 text-center font-semibold text-zinc-700">{s.holidayDays || "—"}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-orange-700">{s.earlyDepartureDays || "—"}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-yellow-700">{s.incompleteDays || "—"}</td>
                             <td className="px-3 py-2.5 text-right font-mono text-zinc-700">{s.totalHoursWorked}</td>
@@ -956,7 +1263,7 @@ export function AttendancePage() {
                               {s.deductions.totalDeductionDays > 0 ? `-${s.deductions.totalDeductionDays}` : "0"}
                             </td>
                             <td className="px-3 py-2.5 text-right font-bold text-zinc-900">{s.netEffectiveDays}</td>
-                            <td className="px-3 py-2.5 text-right font-mono font-semibold text-violet-800">
+                            <td className="px-3 py-2.5 text-right font-mono font-semibold text-zinc-800">
                               {Number.isFinite(Number(s.approvedOvertimeUnits))
                                 ? Number(s.approvedOvertimeUnits).toLocaleString()
                                 : "—"}
@@ -965,7 +1272,7 @@ export function AttendancePage() {
                           {isExpanded && empDetail && (
                             <tr>
                               <td colSpan={15} className="bg-zinc-50/50 px-4 py-3">
-                                <div className="overflow-x-auto rounded-xl border border-zinc-200">
+                                <div className="overflow-x-auto rounded-2xl bg-white ring-1 ring-zinc-200/80">
                                   <table className="min-w-full divide-y divide-zinc-200 text-xs">
                                     <thead className="bg-zinc-100 text-left text-[10px] font-medium uppercase tracking-wider text-zinc-500">
                                       <tr>
@@ -999,13 +1306,13 @@ export function AttendancePage() {
                                               {day.status}
                                             </span>
                                           </td>
-                                          <td className="px-3 py-1.5 text-emerald-700">{day.checkIn || "—"}</td>
-                                          <td className="px-3 py-1.5 text-amber-700">{day.checkOut || "—"}</td>
+                                          <td className="px-3 py-1.5 text-zinc-800">{day.checkIn || "—"}</td>
+                                          <td className="px-3 py-1.5 text-zinc-800">{day.checkOut || "—"}</td>
                                           <td className="px-3 py-1.5">
                                             <PunchIssueBadge issue={punchIssue} />
                                           </td>
                                           <td className="px-3 py-1.5 text-right font-mono">{day.rawHours || "—"}</td>
-                                          <td className="px-3 py-1.5 text-right font-mono text-teal-600">{day.excusedMinutes > 0 ? `${day.excusedMinutes}m` : "—"}</td>
+                                          <td className="px-3 py-1.5 text-right font-mono text-zinc-700">{day.excusedMinutes > 0 ? `${day.excusedMinutes}m` : "—"}</td>
                                           <td className="px-3 py-1.5 text-right font-mono font-semibold">{day.effectiveHours ? Math.round(day.effectiveHours * 100) / 100 : "—"}</td>
                                           <td className="px-3 py-1.5 text-right font-semibold text-red-600">{day.deduction > 0 ? `-${day.deduction}` : "—"}</td>
                                           <td className="px-3 py-1.5 text-zinc-500 max-w-[16rem] truncate" title={day.notes?.join("; ")}>
@@ -1030,7 +1337,7 @@ export function AttendancePage() {
           )}
 
           {!monthlyReport && !monthlyReportLoading && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/30 py-16 text-center">
+            <div className="flex flex-col items-center justify-center rounded-[20px] border border-dashed border-zinc-200/90 bg-zinc-50/40 py-16 text-center ring-1 ring-zinc-950/[0.04]">
               <BarChart3 className="h-12 w-12 text-zinc-300" />
               <p className="mt-4 text-sm font-medium text-zinc-600">No report generated yet</p>
               <p className="mt-1 text-sm text-zinc-500">

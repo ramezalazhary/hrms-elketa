@@ -1,29 +1,16 @@
 import { Router } from "express";
 import { CompanyHoliday } from "../models/CompanyHoliday.js";
 import { requireAuth } from "../middleware/auth.js";
-import { normalizeRole, ROLE } from "../utils/roles.js";
+import { enforcePolicy } from "../middleware/enforcePolicy.js";
 
 const router = Router();
-
-function isHROrAdmin(user) {
-  const role = normalizeRole(user.role);
-  return role === ROLE.ADMIN || role === ROLE.HR_MANAGER || role === ROLE.HR_STAFF;
-}
-
-function canManage(user) {
-  const role = normalizeRole(user.role);
-  return role === ROLE.ADMIN || role === ROLE.HR_MANAGER;
-}
 
 /**
  * GET /api/holidays
  * List declared holidays. Optional filters: year, month.
  * Accessible to all HR roles.
  */
-router.get("/", requireAuth, async (req, res) => {
-  if (!isHROrAdmin(req.user)) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+router.get("/", requireAuth, enforcePolicy("read", "holidays"), async (req, res) => {
   try {
     const filter = {};
     const { year, month } = req.query;
@@ -57,10 +44,7 @@ router.get("/", requireAuth, async (req, res) => {
  * POST /api/holidays
  * Create a new declared holiday. Requires ADMIN or HR_MANAGER.
  */
-router.post("/", requireAuth, async (req, res) => {
-  if (!canManage(req.user)) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+router.post("/", requireAuth, enforcePolicy("manage", "holidays"), async (req, res) => {
   try {
     const { title, startDate, endDate, scope, targetDepartmentId, targetEmployeeId } = req.body;
 
@@ -115,10 +99,7 @@ router.post("/", requireAuth, async (req, res) => {
  * PUT /api/holidays/:id
  * Update a declared holiday. Requires ADMIN or HR_MANAGER.
  */
-router.put("/:id", requireAuth, async (req, res) => {
-  if (!canManage(req.user)) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+router.put("/:id", requireAuth, enforcePolicy("manage", "holidays"), async (req, res) => {
   try {
     const holiday = await CompanyHoliday.findById(req.params.id);
     if (!holiday) return res.status(404).json({ error: "Holiday not found" });
@@ -166,10 +147,7 @@ router.put("/:id", requireAuth, async (req, res) => {
  * DELETE /api/holidays/:id
  * Delete a declared holiday. Requires ADMIN or HR_MANAGER.
  */
-router.delete("/:id", requireAuth, async (req, res) => {
-  if (!canManage(req.user)) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+router.delete("/:id", requireAuth, enforcePolicy("manage", "holidays"), async (req, res) => {
   try {
     const holiday = await CompanyHoliday.findByIdAndDelete(req.params.id);
     if (!holiday) return res.status(404).json({ error: "Holiday not found" });
