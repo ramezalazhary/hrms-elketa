@@ -240,7 +240,7 @@ function EditDepartmentForm({ department, departmentEmployees }) {
           <button
             type="button"
             onClick={() => setRemoveCurrentLeader((prev) => !prev)}
-            className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
+            className="rounded-md border border-amber-300 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
           >
             {removeCurrentLeader
               ? "Keep current leader"
@@ -250,7 +250,7 @@ function EditDepartmentForm({ department, departmentEmployees }) {
       </div>
 
       <div className="mt-8 space-y-8">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white dark:bg-zinc-900 p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between border-b pb-4">
             <h3 className="text-lg font-bold uppercase tracking-wide text-slate-800">
               Department Positions
@@ -258,7 +258,7 @@ function EditDepartmentForm({ department, departmentEmployees }) {
             <button
               type="button"
               onClick={addPosition}
-              className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50"
+              className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
             >
               + Add position
             </button>
@@ -285,7 +285,7 @@ function EditDepartmentForm({ department, departmentEmployees }) {
                       type="text"
                       value={pos.title}
                       onChange={(e) => updatePosition(index, "title", e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2"
+                      className="w-full rounded-lg border border-slate-200 bg-white dark:bg-zinc-900 px-3 py-2"
                       placeholder="e.g. Lead Engineer"
                     />
                   </div>
@@ -297,7 +297,7 @@ function EditDepartmentForm({ department, departmentEmployees }) {
                       type="text"
                       value={pos.level}
                       onChange={(e) => updatePosition(index, "level", e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2"
+                      className="w-full rounded-lg border border-slate-200 bg-white dark:bg-zinc-900 px-3 py-2"
                       placeholder="e.g. Junior, Senior"
                     />
                   </div>
@@ -324,7 +324,7 @@ function EditDepartmentForm({ department, departmentEmployees }) {
                       updatePosition(index, "responsibility", e.target.value)
                     }
                     rows={2}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-slate-200 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
                     placeholder="Summarize what this role does..."
                   />
                 </div>
@@ -333,7 +333,7 @@ function EditDepartmentForm({ department, departmentEmployees }) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white dark:bg-zinc-900 p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between border-b pb-4">
             <div>
               <h3 className="flex items-center gap-2 text-lg font-bold uppercase tracking-wide text-slate-800">
@@ -380,7 +380,7 @@ function EditDepartmentForm({ department, departmentEmployees }) {
                         type="text"
                         value={team.name}
                         onChange={(e) => updateTeam(index, "name", e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm"
+                        className="w-full rounded-lg border border-slate-200 bg-white dark:bg-zinc-900 px-3 py-2 shadow-sm"
                         placeholder="e.g., UI/UX Team"
                       />
                     </div>
@@ -419,7 +419,7 @@ function EditDepartmentForm({ department, departmentEmployees }) {
                         onChange={(e) =>
                           updateTeam(index, "leaderTitle", e.target.value)
                         }
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm"
+                        className="w-full rounded-lg border border-slate-200 bg-white dark:bg-zinc-900 px-3 py-2 shadow-sm"
                         placeholder="e.g. Lead Designer"
                       />
                     </div>
@@ -433,7 +433,7 @@ function EditDepartmentForm({ department, departmentEmployees }) {
                           updateTeam(index, "leaderResponsibility", e.target.value)
                         }
                         rows={4}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
+                        className="w-full rounded-lg border border-slate-200 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm"
                         placeholder="Describe the leader's specific duties..."
                       />
                     </div>

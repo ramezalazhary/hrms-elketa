@@ -36,7 +36,7 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-      <div className="relative w-full max-w-lg overflow-hidden rounded-[20px] border border-zinc-200/90 bg-white shadow-2xl ring-1 ring-zinc-950/[0.06] animate-in zoom-in-95 duration-300">
+      <div className="relative w-full max-w-lg overflow-hidden rounded-[20px] border border-zinc-200/90 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 shadow-2xl ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 animate-in zoom-in-95 duration-300">
         <div className="pointer-events-none absolute right-0 top-0 -mr-16 -mt-16 h-48 w-48 rounded-full bg-rose-500/[0.07] blur-3xl" />
         <div className="pointer-events-none absolute left-0 bottom-0 -ml-16 -mb-16 h-32 w-32 rounded-full bg-zinc-400/[0.06] blur-2xl" />
         
@@ -53,18 +53,18 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
                 </div>
               </div>
               <div>
-                <h2 className="text-xl font-black text-zinc-900 tracking-tight leading-tight">Terminate Employment</h2>
+                <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight leading-tight">Terminate Employment</h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-sm font-semibold text-zinc-500 truncate">{employee.fullName}</span>
+                  <span className="text-sm font-semibold text-zinc-500 dark:text-zinc-400 truncate">{employee.fullName}</span>
                   <span className="h-1 w-1 rounded-full bg-zinc-300" />
-                  <span className="font-mono text-[11px] font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded uppercase tracking-wider">{employee.employeeCode || "EMP-000"}</span>
+                  <span className="font-mono text-[11px] font-bold text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded uppercase tracking-wider">{employee.employeeCode || "EMP-000"}</span>
                 </div>
               </div>
             </div>
             <button 
               type="button" 
               onClick={onClose}
-              className="flex items-center justify-center h-10 w-10 rounded-2xl text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition-all duration-200 active:scale-90"
+              className="flex items-center justify-center h-10 w-10 rounded-2xl text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-600 dark:hover:text-zinc-400 transition-all duration-200 active:scale-90"
             >
               <X className="h-5 w-5" />
             </button>
@@ -73,7 +73,7 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
           <form onSubmit={handleSubmit} className="relative flex flex-col gap-6">
             {/* Warning Box */}
             <div className="flex items-start gap-4 p-4 rounded-2xl bg-rose-50 border border-rose-100 shadow-sm ring-1 ring-rose-200/50">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-rose-500 shadow-sm border border-rose-100">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white dark:bg-zinc-900 text-rose-500 shadow-sm border border-rose-100">
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div className="flex-1">
@@ -87,17 +87,17 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {/* Exit Type Selection */}
               <div className="space-y-2">
-                <label className="block text-[11px] font-black text-zinc-500 uppercase tracking-widest ml-1">
+                <label className="block text-[11px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest ml-1">
                   Exit Classification
                 </label>
-                <div className="flex p-1 bg-zinc-100 rounded-2xl border border-zinc-200/60 shadow-inner">
+                <div className="flex p-1 bg-zinc-100 dark:bg-zinc-800 rounded-2xl border border-zinc-200/60 dark:border-zinc-800/80 shadow-inner">
                   <button
                     type="button"
                     onClick={() => setStatus("TERMINATED")}
                     className={`flex-1 flex items-center justify-center py-2.5 text-xs font-bold rounded-xl transition-all duration-200 ${
                       status === "TERMINATED" 
-                        ? "bg-white text-rose-600 shadow-md ring-1 ring-rose-200/50" 
-                        : "text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50 uppercase tracking-wider"
+                        ? "bg-white dark:bg-zinc-900 text-rose-600 shadow-md ring-1 ring-rose-200/50" 
+                        : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-200/50 uppercase tracking-wider"
                     }`}
                   >
                     Termination
@@ -107,8 +107,8 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
                     onClick={() => setStatus("RESIGNED")}
                     className={`flex-1 flex items-center justify-center py-2.5 text-xs font-bold rounded-xl transition-all duration-200 ${
                       status === "RESIGNED" 
-                        ? "bg-white text-zinc-900 shadow-md ring-1 ring-zinc-200/70" 
-                        : "text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50 uppercase tracking-wider"
+                        ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-md ring-1 ring-zinc-200/70" 
+                        : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-200/50 uppercase tracking-wider"
                     }`}
                   >
                     Resignation
@@ -118,7 +118,7 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
 
               {/* Exit Date */}
               <div className="space-y-2">
-                <label className="block text-[11px] font-black text-zinc-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                <label className="block text-[11px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                   <CalendarX2 className="h-3 w-3" /> Effective Date
                 </label>
                 <input
@@ -126,14 +126,14 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
                   required
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-bold text-zinc-800 shadow-sm transition-all focus:border-rose-400 focus:outline-none focus:ring-4 focus:ring-rose-500/10 placeholder:text-zinc-300"
+                  className="w-full rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm font-bold text-zinc-800 dark:text-zinc-200 shadow-sm transition-all focus:border-rose-400 focus:outline-none focus:ring-4 focus:ring-rose-500/10 placeholder:text-zinc-300"
                 />
               </div>
             </div>
 
             {/* Reason Textarea */}
             <div className="space-y-2">
-              <label className="block text-[11px] font-black text-zinc-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+              <label className="block text-[11px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                 <FileText className="h-3 w-3" /> Reason for Departure
               </label>
               <textarea
@@ -142,16 +142,16 @@ export function TerminateEmployeeModal({ employee, onClose, onSubmit }) {
                 placeholder="Briefly describe the reason for termination or resignation..."
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-800 shadow-sm transition-all focus:border-rose-400 focus:outline-none focus:ring-4 focus:ring-rose-500/10 resize-none placeholder:text-zinc-400"
+                className="w-full rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-800 dark:text-zinc-200 shadow-sm transition-all focus:border-rose-400 focus:outline-none focus:ring-4 focus:ring-rose-500/10 resize-none placeholder:text-zinc-400"
               />
             </div>
 
             {/* Footer Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 mt-2">
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800/50 mt-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-2xl px-6 py-3 text-sm font-bold text-zinc-500 hover:bg-zinc-100 transition-all duration-200 active:scale-95"
+                className="rounded-2xl px-6 py-3 text-sm font-bold text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-200 active:scale-95"
               >
                 Go Back
               </button>

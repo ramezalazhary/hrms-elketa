@@ -99,9 +99,6 @@ router.get("/", requireAuth, requireLeaveListAccess, async (req, res) => {
 router.get(
   "/balance",
   requireAuth,
-  enforcePolicy("read", "leaves", (r) => ({
-    selfOnly: !r.query?.employeeId || String(r.query.employeeId) === String(r.user?.id),
-  })),
   async (req, res) => {
   try {
     const employeeId = req.query.employeeId || req.user.id;
@@ -117,7 +114,6 @@ router.get(
 router.get(
   "/mine",
   requireAuth,
-  enforcePolicy("read", "leaves", () => ({ selfOnly: true })),
   async (req, res) => {
   try {
     const lastMonthCutoff = new Date();

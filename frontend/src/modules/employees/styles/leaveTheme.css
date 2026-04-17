@@ -13,6 +13,20 @@
   --leave-shadow-md: 0 8px 24px rgba(17, 24, 39, 0.08);
 }
 
+.dark .leave-ui, .leave-ui.dark {
+  --leave-surface-base: #0f172a; /* Slate 900 */
+  --leave-surface-soft: #1e293b; /* Slate 800 */
+  --leave-surface-elevated: #1e293b;
+  --leave-border-soft: #334155; /* Slate 700 */
+  --leave-border-strong: #475569; /* Slate 600 */
+  --leave-text-title: #f8fafc; /* Slate 50 */
+  --leave-text-body: #e2e8f0; /* Slate 200 */
+  --leave-text-meta: #94a3b8; /* Slate 400 */
+  --leave-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --leave-shadow-md: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+
 .leave-ui .leave-surface {
   background: var(--leave-surface-base);
   border: 1px solid var(--leave-border-soft);

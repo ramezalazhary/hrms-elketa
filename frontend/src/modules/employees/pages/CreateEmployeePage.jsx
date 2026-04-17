@@ -226,27 +226,27 @@ export function CreateEmployeePage() {
         title="Employee created"
         description="A login was created with a temporary password."
       >
-        <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-card space-y-5 max-w-xl">
+        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-card space-y-5 max-w-xl">
           <div>
-            <p className="text-sm text-zinc-700">
-              Sign-in was enabled for <span className="font-medium text-zinc-900">{provisionedData.email}</span>.
+            <p className="text-sm text-zinc-700 dark:text-zinc-300">
+              Sign-in was enabled for <span className="font-medium text-zinc-900 dark:text-zinc-100">{provisionedData.email}</span>.
               Share the temporary password through a secure channel (not email, if possible).
             </p>
           </div>
-          <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Temporary password</p>
-              <p className="font-mono text-lg font-medium text-zinc-900 mt-1">{provisionedData.defaultPassword}</p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Temporary password</p>
+              <p className="font-mono text-lg font-medium text-zinc-900 dark:text-zinc-100 mt-1">{provisionedData.defaultPassword}</p>
             </div>
             <button
               type="button"
               onClick={() => { void navigator.clipboard.writeText(provisionedData.defaultPassword); }}
-              className="px-3 py-2 rounded-md border border-zinc-200 bg-white text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+              className="px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm font-medium text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
             >
               Copy
             </button>
           </div>
-          <ol className="text-sm text-zinc-600 space-y-2 list-decimal list-inside border-t border-zinc-100 pt-4">
+          <ol className="text-sm text-zinc-600 dark:text-zinc-400 space-y-2 list-decimal list-inside border-t border-zinc-100 dark:border-zinc-800/50 pt-4">
             <li>They open <strong>Sign in</strong> and use this email and temporary password.</li>
             <li>They are taken to <strong>Change password</strong> and must pick a new password before using the app.</li>
             <li>If they forget before changing it, they can use <strong>Forgot password</strong> so an admin can set another temporary password.</li>

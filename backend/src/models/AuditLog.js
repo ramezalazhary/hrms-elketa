@@ -30,5 +30,7 @@ const AuditLogSchema = new Schema(
 // Indexes for efficient querying
 AuditLogSchema.index({ entityType: 1, entityId: 1, performedAt: -1 });
 AuditLogSchema.index({ performedBy: 1, performedAt: -1 });
+// TTL: auto-delete audit entries older than 365 days (industry standard retention policy)
+AuditLogSchema.index({ performedAt: 1 }, { expireAfterSeconds: 31_536_000 });
 
 export const AuditLog = model("AuditLog", AuditLogSchema);

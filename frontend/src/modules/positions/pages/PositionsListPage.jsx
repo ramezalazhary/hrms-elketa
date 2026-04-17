@@ -80,7 +80,7 @@ export function PositionsListPage() {
           No positions found.{" "}
           <Link
             to="/positions/create"
-            className="text-zinc-700 hover:underline"
+            className="text-zinc-700 dark:text-zinc-300 hover:underline"
           >
             Create one
           </Link>
@@ -103,7 +103,7 @@ export function PositionsListPage() {
                 key: "responsibility",
                 header: "Responsibility",
                 render: (row) => (
-                  <div className="max-w-[180px] truncate text-xs text-zinc-500 italic" title={row.responsibility}>
+                  <div className="max-w-[180px] truncate text-xs text-zinc-500 dark:text-zinc-400 italic" title={row.responsibility}>
                     {row.responsibility || "—"}
                   </div>
                 ),
@@ -129,7 +129,7 @@ export function PositionsListPage() {
                 render: (row) => (
                   <Link
                     to={`/positions/${row.id}/edit`}
-                    className="text-zinc-700 hover:underline"
+                    className="text-zinc-700 dark:text-zinc-300 hover:underline"
                   >
                     Edit
                   </Link>

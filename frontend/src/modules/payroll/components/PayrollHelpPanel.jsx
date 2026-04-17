@@ -151,8 +151,8 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
             <BookOpen size={18} />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-zinc-900">How payroll is calculated</p>
-            <p className="text-xs text-zinc-500 truncate">
+            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">How payroll is calculated</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
               {verification
                 ? verification.allPassed
                   ? "Guide + verification tests — all checks passed"
@@ -169,13 +169,13 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
 
       {open && (
         <div className="border-t border-indigo-100 px-4 pb-4 pt-1 sm:px-5">
-          <div className="space-y-4 text-sm text-zinc-700">
+          <div className="space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
             {PAYROLL_GUIDE_SECTIONS.map((section) => (
               <div key={section.title}>
                 <p className="text-xs font-bold uppercase tracking-wide text-indigo-600/90">
                   {section.title}
                 </p>
-                <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs leading-relaxed text-zinc-600">
+                <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
                   {section.bullets.map((b) => (
                     <li key={b}>{b}</li>
                   ))}
@@ -185,14 +185,14 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
           </div>
 
           {verification && (
-            <div className="mt-5 rounded-lg border border-zinc-200 bg-white p-4">
+            <div className="mt-5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
               <div className="mb-3 flex items-center gap-2">
                 <FlaskConical size={16} className="text-amber-600" />
-                <span className="text-xs font-bold uppercase tracking-wide text-zinc-700">
+                <span className="text-xs font-bold uppercase tracking-wide text-zinc-700 dark:text-zinc-300">
                   Verification tests (this browser)
                 </span>
               </div>
-              <p className="mb-3 text-xs text-zinc-500">
+              <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
                 Recomputes sums and per-row relationships from the loaded table. Uses organization payroll rounding (
                 {effectiveDecimalPlaces} decimal{effectiveDecimalPlaces === 1 ? "" : "s"}); tolerance ±
                 {matchToleranceForPayroll(effectiveDecimalPlaces)} EGP.
@@ -220,16 +220,16 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
             </div>
           )}
 
-          <div className="mt-5 rounded-lg border border-zinc-200 bg-white p-4">
+          <div className="mt-5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
             <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
               <div>
                 <div className="mb-1 flex items-center gap-2">
                   <FlaskConical size={16} className="text-indigo-600" />
-                  <span className="text-xs font-bold uppercase tracking-wide text-zinc-700">
+                  <span className="text-xs font-bold uppercase tracking-wide text-zinc-700 dark:text-zinc-300">
                     Module-matched checker
                   </span>
                 </div>
-                <p className="max-w-prose text-xs text-zinc-500">
+                <p className="max-w-prose text-xs text-zinc-500 dark:text-zinc-400">
                   Same steps as the server payroll compute path: gross from profile, rates from payroll config (defaults 22 days, 8 h, OT 1.5),
                   EGP rounding from organization policy ({effectiveDecimalPlaces} decimal
                   {effectiveDecimalPlaces === 1 ? "" : "s"}), additions from approved weekly rest days / bonuses / assessment
@@ -240,7 +240,7 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
               <button
                 type="button"
                 onClick={() => setForm(emptyModuleForm())}
-                className="shrink-0 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+                className="shrink-0 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2.5 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
               >
                 Reset
               </button>
@@ -248,7 +248,7 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
 
             <div className="mt-4 space-y-4">
               <fieldset className="space-y-2">
-                <legend className="text-[11px] font-bold uppercase text-zinc-500">Employee profile (financial)</legend>
+                <legend className="text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400">Employee profile (financial)</legend>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   <NumberField label="Base salary" value={form.baseSalary} onChange={(v) => setField("baseSalary", v)} />
                   <NumberField label="Allowances" value={form.allowances} onChange={(v) => setField("allowances", v)} />
@@ -258,7 +258,7 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
               </fieldset>
 
               <fieldset className="space-y-2">
-                <legend className="text-[11px] font-bold uppercase text-zinc-500">
+                <legend className="text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400">
                   External / manual (attendance & advances)
                 </legend>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -280,14 +280,14 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
                   />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[11px] text-zinc-500">
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                     Overtime in payroll compute is assessment-only. Attendance checkout overtime does not add payroll money here.
                   </p>
-                  <p className="text-[11px] text-zinc-500">
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                     For extra rest-day days, enter only the count coming from HR-approved attendance on configured weekly rest days.
                   </p>
                 </div>
-                <p className="text-[11px] text-zinc-500">
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                   Non-absence attendance deductions: enter one amount below, or fill analysis totals so we apply{" "}
                   <span className="font-mono">totalAmount − absenceAmount</span> like the server.
                 </p>
@@ -316,8 +316,8 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
               </fieldset>
 
               <fieldset className="space-y-2">
-                <legend className="text-[11px] font-bold uppercase text-zinc-500">Insurance & tax</legend>
-                <label className="inline-flex items-center gap-2 text-xs font-medium text-zinc-700">
+                <legend className="text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400">Insurance & tax</legend>
+                <label className="inline-flex items-center gap-2 text-xs font-medium text-zinc-700 dark:text-zinc-300">
                   <input
                     type="checkbox"
                     checked={form.isInsured}
@@ -336,7 +336,7 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
               </fieldset>
 
               <fieldset className="space-y-2">
-                <legend className="text-[11px] font-bold uppercase text-zinc-500">
+                <legend className="text-[11px] font-bold uppercase text-zinc-500 dark:text-zinc-400">
                   Payroll config overrides (optional, else server defaults)
                 </legend>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -369,9 +369,9 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
                 onChange={(v) => setField("actualNetSalary", v)}
               />
 
-              <div className="overflow-x-auto rounded-lg border border-zinc-100 bg-zinc-50/80">
+              <div className="overflow-x-auto rounded-lg border border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/80 dark:bg-zinc-800/50">
                 <table className="min-w-full text-xs">
-                  <tbody className="divide-y divide-zinc-100">
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                     <ResultRow label="Gross salary" value={moduleResult.grossSalary} fractionDigits={effectiveDecimalPlaces} />
                     <ResultRow label="Salary / day" value={moduleResult.salaryPerDay} fractionDigits={effectiveDecimalPlaces} />
                     <ResultRow label="Salary / hour" value={moduleResult.salaryPerHour} fractionDigits={effectiveDecimalPlaces} />
@@ -460,9 +460,9 @@ function ResultRow({ label, value, emphasize, bold, highlight, raw, fractionDigi
   }
   return (
     <tr className={highlight ? "bg-indigo-50/60" : ""}>
-      <td className="px-3 py-1.5 text-zinc-600">{label}</td>
+      <td className="px-3 py-1.5 text-zinc-600 dark:text-zinc-400">{label}</td>
       <td
-        className={`px-3 py-1.5 text-right font-mono ${bold || highlight ? "font-bold text-zinc-900" : emphasize ? "font-semibold text-zinc-800" : "text-zinc-800"}`}
+        className={`px-3 py-1.5 text-right font-mono ${bold || highlight ? "font-bold text-zinc-900 dark:text-zinc-100" : emphasize ? "font-semibold text-zinc-800 dark:text-zinc-200" : "text-zinc-800 dark:text-zinc-200"}`}
       >
         {display}
       </td>
@@ -473,13 +473,13 @@ function ResultRow({ label, value, emphasize, bold, highlight, raw, fractionDigi
 function NumberField({ label, value, onChange, placeholder }) {
   return (
     <label className="text-xs">
-      <span className="mb-1 block font-medium text-zinc-600">{label}</span>
+      <span className="mb-1 block font-medium text-zinc-600 dark:text-zinc-400">{label}</span>
       <input
         type="number"
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+        className="w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2.5 py-1.5 text-sm text-zinc-800 dark:text-zinc-200 outline-none transition placeholder:text-zinc-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
       />
     </label>
   );

@@ -40,3 +40,7 @@ const ManagementRequestSchema = new Schema(
 );
 
 export const ManagementRequest = model("ManagementRequest", ManagementRequestSchema);
+
+// Compound indexes for common filter patterns
+ManagementRequestSchema.index({ status: 1, departmentId: 1 });
+ManagementRequestSchema.index({ senderEmail: 1, status: 1 });

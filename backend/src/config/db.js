@@ -18,7 +18,7 @@ const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017/hrms";
 export const connectDb = async () => {
   try {
     await mongoose.connect(mongoUri, {
-      autoIndex: true,
+      autoIndex: process.env.NODE_ENV !== "production",
     });
     console.log("MongoDB connected", mongoUri);
   } catch (error) {

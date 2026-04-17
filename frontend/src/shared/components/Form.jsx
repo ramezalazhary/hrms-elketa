@@ -15,7 +15,7 @@ export function FormField({
   return (
     <div className={cn("space-y-2", className)}>
       {label && (
-        <label className="text-sm font-medium text-zinc-700 flex items-center gap-1">
+        <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
           {label}
           {required && <span className="text-red-500">*</span>}
         </label>
@@ -31,7 +31,7 @@ export function FormField({
       )}
 
       {helper && !error && (
-        <div className="text-sm text-zinc-500">{helper}</div>
+        <div className="text-sm text-zinc-500 dark:text-zinc-400">{helper}</div>
       )}
     </div>
   );
@@ -44,7 +44,7 @@ export function Input({ className, error, ...props }) {
   return (
     <input
       className={cn(
-        "flex h-10 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-10 w-full rounded-md border border-zinc-300 bg-white dark:bg-zinc-900 px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-zinc-500 dark:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
         error && "border-red-300 focus-visible:ring-red-500",
         className,
       )}
@@ -60,7 +60,7 @@ export function Textarea({ className, error, ...props }) {
   return (
     <textarea
       className={cn(
-        "flex min-h-[80px] w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex min-h-[80px] w-full rounded-md border border-zinc-300 bg-white dark:bg-zinc-900 px-3 py-2 text-sm ring-offset-white placeholder:text-zinc-500 dark:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
         error && "border-red-300 focus-visible:ring-red-500",
         className,
       )}
@@ -76,7 +76,7 @@ export function Select({ children, className, error, ...props }) {
   return (
     <select
       className={cn(
-        "flex h-10 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-10 w-full rounded-md border border-zinc-300 bg-white dark:bg-zinc-900 px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
         error && "border-red-300 focus-visible:ring-red-500",
         className,
       )}
@@ -102,7 +102,7 @@ export function Checkbox({ label, error, className, ...props }) {
         {...props}
       />
       {label && (
-        <label className="text-sm font-medium text-zinc-700">{label}</label>
+        <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
       )}
     </div>
   );
@@ -130,7 +130,7 @@ export function RadioGroup({ options, value, onChange, error, className }) {
           />
           <label
             htmlFor={option.value}
-            className="text-sm font-medium text-zinc-700"
+            className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
           >
             {option.label}
           </label>
@@ -235,7 +235,7 @@ export function ValidationSummary({ errors, className }) {
 export function FormLoading({ message = "Saving..." }) {
   return (
     <div className="flex items-center justify-center py-8">
-      <div className="flex items-center gap-3 text-zinc-600">
+      <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-400">
         <div className="w-5 h-5 border-2 border-zinc-300 border-t-indigo-600 rounded-full animate-spin" />
         <span className="text-sm">{message}</span>
       </div>

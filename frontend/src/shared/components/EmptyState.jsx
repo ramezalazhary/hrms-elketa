@@ -26,22 +26,22 @@ export function EmptyState({
 
   const variants = {
     default: {
-      container: "bg-white border border-zinc-200 rounded-lg p-8 text-center",
+      container: "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-8 text-center",
       icon: "w-12 h-12 text-zinc-400 mx-auto mb-4",
-      title: "text-lg font-medium text-zinc-900 mb-2",
-      description: "text-sm text-zinc-500 mb-6 max-w-sm mx-auto"
+      title: "text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-2",
+      description: "text-sm text-zinc-500 dark:text-zinc-400 mb-6 max-w-sm mx-auto"
     },
     minimal: {
       container: "text-center py-12",
       icon: "w-8 h-8 text-zinc-300 mx-auto mb-3",
-      title: "text-base font-medium text-zinc-700 mb-1",
+      title: "text-base font-medium text-zinc-700 dark:text-zinc-300 mb-1",
       description: "text-sm text-zinc-400"
     },
     card: {
-      container: "bg-zinc-50 border border-zinc-100 rounded-lg p-6 text-center",
+      container: "bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800/50 rounded-lg p-6 text-center",
       icon: "w-10 h-10 text-zinc-300 mx-auto mb-3",
-      title: "text-base font-medium text-zinc-800 mb-2",
-      description: "text-sm text-zinc-500 mb-4"
+      title: "text-base font-medium text-zinc-800 dark:text-zinc-200 mb-2",
+      description: "text-sm text-zinc-500 dark:text-zinc-400 mb-4"
     }
   };
 
@@ -156,7 +156,7 @@ export function NoSearchResults({ searchQuery, onClear }) {
         onClear && (
           <button
             onClick={onClear}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-zinc-600 hover:text-zinc-800 transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors"
           >
             Clear search
             <ArrowRight className="w-3 h-3" />

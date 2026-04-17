@@ -122,5 +122,6 @@ const LeaveRequestSchema = new Schema(
 );
 
 LeaveRequestSchema.index({ employeeId: 1, status: 1, submittedAt: -1 });
+LeaveRequestSchema.index({ status: 1, submittedAt: -1 }); // HR dashboard: pending requests list
 
 export const LeaveRequest = model("LeaveRequest", LeaveRequestSchema);

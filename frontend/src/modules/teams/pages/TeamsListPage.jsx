@@ -62,14 +62,14 @@ export function TeamsListPage() {
             key: "managerEmail",
             header: "Team Head",
             render: (row) => (
-              <span className="text-zinc-600 font-medium">{row.managerEmail || "—"}</span>
+              <span className="text-zinc-600 dark:text-zinc-400 font-medium">{row.managerEmail || "—"}</span>
             ),
           },
           {
             key: "members",
             header: "Members",
             render: (row) => (
-              <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-semibold text-zinc-600">
+              <span className="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
                 {(row.members || []).length} Members
               </span>
             ),
@@ -85,7 +85,7 @@ export function TeamsListPage() {
             render: (row) => (
               <button
                 onClick={() => navigate(`/teams/${row.id}/edit`)}
-                className="text-zinc-800 hover:underline"
+                className="text-zinc-800 dark:text-zinc-200 hover:underline"
               >
                 Edit
               </button>

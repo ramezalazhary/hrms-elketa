@@ -146,14 +146,14 @@ export function LeaveOperationsPage() {
     >
       <div className="space-y-6 max-w-5xl">
         {canViewCreditsTab && canViewHolidaysTab && (
-          <div className="inline-flex w-full max-w-md gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 sm:w-auto">
+          <div className="inline-flex w-full max-w-md gap-0.5 rounded-2xl bg-zinc-100/90 dark:bg-zinc-800/80 p-1 ring-1 ring-zinc-200/80 dark:ring-zinc-700 sm:w-auto">
             <button
               type="button"
               onClick={() => setActiveTab("credits")}
               className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${
                 activeTab === "credits"
-                  ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60"
-                  : "text-zinc-600 hover:text-zinc-900"
+                  ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm ring-1 ring-zinc-200/60"
+                  : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
               }`}
             >
               Leave balance credits
@@ -163,8 +163,8 @@ export function LeaveOperationsPage() {
               onClick={() => setActiveTab("holidays")}
               className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${
                 activeTab === "holidays"
-                  ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60"
-                  : "text-zinc-600 hover:text-zinc-900"
+                  ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm ring-1 ring-zinc-200/60"
+                  : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
               }`}
             >
               Company holidays
@@ -173,21 +173,21 @@ export function LeaveOperationsPage() {
         )}
 
         {canViewCreditsTab && activeTab === "credits" && (
-          <article className="rounded-[24px] bg-white p-6 shadow-sm ring-1 ring-zinc-950/[0.06]">
+          <article className="rounded-[24px] bg-white dark:bg-zinc-900 p-6 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
             <div className="mb-4 flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/80">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
                 <Gift className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-zinc-900">Leave balance credits</h2>
-                <p className="text-xs text-zinc-500">
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Leave balance credits</h2>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
                   Add extra leave balance by person, department, or company (company scope is Admin only).
                 </p>
               </div>
             </div>
 
             {!canManageCredits ? (
-              <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+              <p className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-4 py-3 text-sm text-zinc-600 dark:text-zinc-400">
                 You can view this page, but you do not have permission to apply leave balance credits.
               </p>
             ) : (
@@ -207,7 +207,7 @@ export function LeaveOperationsPage() {
                         className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${
                           active
                             ? "border-zinc-900 bg-zinc-900 text-white"
-                            : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                            : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                         }`}
                       >
                         <Icon className="h-3.5 w-3.5" />
@@ -219,18 +219,18 @@ export function LeaveOperationsPage() {
 
                 {mode === "person" && (
                   <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                       Employee
                     </label>
                     {loadingRefs ? (
-                      <p className="text-sm text-zinc-500 flex items-center gap-2">
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" /> Loading employees...
                       </p>
                     ) : (
                       <select
                         value={employeeId}
                         onChange={(e) => setEmployeeId(e.target.value)}
-                        className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                        className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm"
                       >
                         <option value="">Select employee...</option>
                         {employees.map((emp) => (
@@ -245,18 +245,18 @@ export function LeaveOperationsPage() {
 
                 {mode === "department" && (
                   <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                       Department
                     </label>
                     {loadingRefs ? (
-                      <p className="text-sm text-zinc-500 flex items-center gap-2">
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" /> Loading departments...
                       </p>
                     ) : (
                       <select
                         value={departmentId}
                         onChange={(e) => setDepartmentId(e.target.value)}
-                        className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                        className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm"
                       >
                         <option value="">Select department...</option>
                         {departments.map((d) => (
@@ -270,12 +270,12 @@ export function LeaveOperationsPage() {
                 )}
 
                 {mode === "all" && (
-                  <label className="flex items-start gap-2 text-sm text-zinc-800 cursor-pointer">
+                  <label className="flex items-start gap-2 text-sm text-zinc-800 dark:text-zinc-200 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={confirmAll}
                       onChange={(e) => setConfirmAll(e.target.checked)}
-                      className="mt-0.5 text-zinc-600"
+                      className="mt-0.5 text-zinc-600 dark:text-zinc-400"
                     />
                     <span>
                       I confirm applying this credit to every active or on-leave employee.
@@ -284,7 +284,7 @@ export function LeaveOperationsPage() {
                 )}
 
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     Days to add
                   </label>
                   <input
@@ -293,12 +293,12 @@ export function LeaveOperationsPage() {
                     max={365}
                     value={days}
                     onChange={(e) => setDays(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     Reason (audit trail)
                   </label>
                   <textarea
@@ -306,7 +306,7 @@ export function LeaveOperationsPage() {
                     onChange={(e) => setReason(e.target.value)}
                     rows={3}
                     maxLength={500}
-                    className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm"
                   />
                 </div>
 
@@ -320,8 +320,8 @@ export function LeaveOperationsPage() {
                 </button>
 
                 {lastResult && (
-                  <div className="rounded-[16px] bg-zinc-50/90 px-4 py-3 text-sm text-zinc-700 ring-1 ring-zinc-200/80">
-                    <p className="font-semibold text-zinc-900">Last result</p>
+                  <div className="rounded-[16px] bg-zinc-50/90 dark:bg-zinc-800/50 px-4 py-3 text-sm text-zinc-700 dark:text-zinc-300 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
+                    <p className="font-semibold text-zinc-900 dark:text-zinc-100">Last result</p>
                     <pre className="mt-2 text-xs overflow-x-auto whitespace-pre-wrap">
                       {JSON.stringify(lastResult, null, 2)}
                     </pre>
@@ -333,9 +333,9 @@ export function LeaveOperationsPage() {
         )}
 
         {canViewHolidaysTab && activeTab === "holidays" && (
-          <article className="rounded-[24px] bg-white p-6 shadow-sm ring-1 ring-zinc-950/[0.06]">
+          <article className="rounded-[24px] bg-white dark:bg-zinc-900 p-6 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
             {!canManageHolidayRecords && (
-              <p className="mb-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+              <p className="mb-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-4 py-3 text-sm text-zinc-600 dark:text-zinc-400">
                 You have read-only access for company holidays in this section.
               </p>
             )}

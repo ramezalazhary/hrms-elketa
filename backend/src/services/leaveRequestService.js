@@ -1645,6 +1645,7 @@ export async function listLeaveRequests(user, query) {
 
     const list = await LeaveRequest.find({
       _id: { $in: actionable },
+      status: { $in: ["PENDING", "ESCALATED"] },
     })
       .sort({ submittedAt: 1 })
       .skip(skip)
@@ -2195,6 +2196,17 @@ export async function cancelLeaveRequest(requestId, user, reason) {
 
   const previousStatus = doc.status;
   const wasApprovedVacation = previousStatus === "APPROVED" && doc.kind === "VACATION";
+  const cancelActor = user?.email || "system";
+  const cancellationNote = `[Request cancelled by ${cancelActor}]`;
+  if (previousStatus === "PENDING" && Array.isArray(doc.approvals)) {
+    for (const step of doc.approvals) {
+      if (step?.status !== "PENDING") continue;
+      step.status = "REJECTED";
+      step.processedBy = cancelActor;
+      step.processedAt = new Date();
+      step.comment = step.comment || cancellationNote;
+    }
+  }
   doc.status = "CANCELLED";
   doc.cancelledBy = user.email;
   doc.cancelledAt = new Date();

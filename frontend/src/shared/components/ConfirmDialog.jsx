@@ -67,11 +67,11 @@ export function ConfirmDialog({
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
 
       {/* Dialog */}
-      <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 transform transition-all">
+      <div className="relative bg-white dark:bg-zinc-900 rounded-lg shadow-xl max-w-md w-full p-6 transform transition-all">
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1 text-zinc-400 hover:text-zinc-600 transition-colors"
+          className="absolute top-4 right-4 p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400 transition-colors"
           disabled={isLoading}
         >
           <X className="w-5 h-5" />
@@ -89,8 +89,8 @@ export function ConfirmDialog({
 
         {/* Content */}
         <div className="text-center mb-6">
-          <h3 className="text-lg font-semibold text-zinc-900 mb-2">{title}</h3>
-          <p className="text-sm text-zinc-600">{description}</p>
+          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">{title}</h3>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">{description}</p>
           {children && <div className="mt-4">{children}</div>}
         </div>
 
@@ -99,7 +99,7 @@ export function ConfirmDialog({
           <button
             onClick={onClose}
             disabled={isLoading}
-            className="flex-1 px-4 py-2 text-sm font-medium text-zinc-700 bg-white border border-zinc-300 rounded-md hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 border border-zinc-300 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {cancelText}
           </button>

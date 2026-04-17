@@ -83,7 +83,15 @@ export function canManageEmployees(user) {
 }
 
 export function getEmployeesAccessLevel(user) {
-  return getPageLevelFromOverrides(user, "employees");
+  const override = getPageLevelFromOverrides(user, "employees");
+  if (override !== ACCESS_LEVEL.NONE) return override;
+  const role = normaliseRoleKey(user?.role);
+  // Managers and team leaders need baseline read access to open
+  // employee profiles for their scoped team/department members.
+  if (role === "MANAGER" || role === "TEAM_LEADER") {
+    return ACCESS_LEVEL.VIEW;
+  }
+  return ACCESS_LEVEL.NONE;
 }
 
 export function getEmployeeDirectoryAccessLevel(user) {

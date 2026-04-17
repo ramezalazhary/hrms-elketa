@@ -119,7 +119,7 @@ export function AssignEmploymentPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg border border-zinc-200 shadow-card p-6">
+      <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-card p-6">
         <div className="mb-6">
           <div className="flex justify-between items-center">
             {[1, 2, 3, 4, 5, 6].map(s => (
@@ -128,7 +128,7 @@ export function AssignEmploymentPage() {
                 className={`flex items-center justify-center w-10 h-10 rounded-full text-sm font-medium ${
                   s <= step
                     ? 'bg-zinc-900 text-white'
-                    : 'bg-zinc-100 text-zinc-500'
+                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
                 }`}
               >
                 {s}
@@ -147,7 +147,7 @@ export function AssignEmploymentPage() {
                 placeholder="Search employee by name or email..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 border border-zinc-200 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                className="w-full px-4 py-2 border border-zinc-200 dark:border-zinc-800 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-400"
               />
             </div>
             <div className="max-h-96 overflow-y-auto border border-gray-300 rounded-lg">
@@ -156,7 +156,7 @@ export function AssignEmploymentPage() {
                   <div
                     key={emp.id}
                     onClick={() => handleEmployeeSelect(emp.id)}
-                    className="p-4 border-b border-zinc-100 hover:bg-zinc-50 cursor-pointer"
+                    className="p-4 border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
                   >
                     <div className="font-semibold">{emp.name}</div>
                     <div className="text-sm text-gray-600">{emp.email}</div>
@@ -180,7 +180,7 @@ export function AssignEmploymentPage() {
                 <button
                   key={dept.id}
                   onClick={() => handleDepartmentSelect(dept.id)}
-                  className="p-4 text-left border border-zinc-200 rounded-lg hover:bg-zinc-50 hover:border-zinc-300 transition"
+                  className="p-4 text-left border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:border-zinc-300 transition"
                 >
                   <div className="font-semibold">{dept.name}</div>
                   <div className="text-sm text-gray-600">{dept.description || 'No description'}</div>
@@ -205,7 +205,7 @@ export function AssignEmploymentPage() {
             <div className="grid grid-cols-1 gap-3 mb-4">
               <button
                 onClick={() => handleTeamSelect('')}
-                className="p-4 text-left border border-zinc-200 rounded-lg hover:bg-zinc-50 hover:border-zinc-300 transition"
+                className="p-4 text-left border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:border-zinc-300 transition"
               >
                 <div className="font-semibold">Skip - No Team</div>
                 <div className="text-sm text-gray-600">Assign directly to department</div>
@@ -214,7 +214,7 @@ export function AssignEmploymentPage() {
                 <button
                   key={team.id}
                   onClick={() => handleTeamSelect(team.id)}
-                  className="p-4 text-left border border-zinc-200 rounded-lg hover:bg-zinc-50 hover:border-zinc-300 transition"
+                  className="p-4 text-left border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:border-zinc-300 transition"
                 >
                   <div className="font-semibold">{team.name}</div>
                   <div className="text-sm text-gray-600">Manager: {team.managerEmail || 'Unassigned'}</div>
@@ -239,7 +239,7 @@ export function AssignEmploymentPage() {
             <div className="grid grid-cols-1 gap-3 mb-4">
               <button
                 onClick={() => handlePositionSelect('')}
-                className="p-4 text-left border border-zinc-200 rounded-lg hover:bg-zinc-50 hover:border-zinc-300 transition"
+                className="p-4 text-left border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:border-zinc-300 transition"
               >
                 <div className="font-semibold">Skip - No Position</div>
                 <div className="text-sm text-gray-600">Assign without specific position</div>
@@ -248,7 +248,7 @@ export function AssignEmploymentPage() {
                 <button
                   key={pos.id}
                   onClick={() => handlePositionSelect(pos.id)}
-                  className="p-4 text-left border border-zinc-200 rounded-lg hover:bg-zinc-50 hover:border-zinc-300 transition"
+                  className="p-4 text-left border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:border-zinc-300 transition"
                 >
                   <div className="font-semibold">{pos.title}</div>
                   <div className="text-sm text-gray-600">Level: {pos.level}</div>
@@ -271,9 +271,9 @@ export function AssignEmploymentPage() {
               Step 5: Assignment Type
             </h2>
             {currentAssignments.length > 0 && (
-              <div className="mb-4 p-4 bg-zinc-50 border border-zinc-200 rounded-lg">
-                <div className="font-medium text-zinc-900 mb-2">Current assignments</div>
-                <div className="text-sm text-zinc-700">
+              <div className="mb-4 p-4 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+                <div className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">Current assignments</div>
+                <div className="text-sm text-zinc-700 dark:text-zinc-300">
                   {currentAssignments.map((assign, idx) => (
                     <div key={idx}>
                       {assign.departmentId.name}
@@ -286,14 +286,14 @@ export function AssignEmploymentPage() {
             <div className="grid grid-cols-1 gap-3 mb-4">
               <button
                 onClick={() => handleAssignmentTypeSelect(true)}
-                className="p-4 text-left border border-zinc-200 rounded-lg hover:bg-zinc-50 hover:border-zinc-300 transition"
+                className="p-4 text-left border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:border-zinc-300 transition"
               >
                 <div className="font-semibold">Primary Assignment</div>
                 <div className="text-sm text-gray-600">Main reporting line and department</div>
               </button>
               <button
                 onClick={() => handleAssignmentTypeSelect(false)}
-                className="p-4 text-left border border-zinc-200 rounded-lg hover:bg-zinc-50 hover:border-zinc-300 transition"
+                className="p-4 text-left border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:border-zinc-300 transition"
               >
                 <div className="font-semibold">Additional Assignment</div>
                 <div className="text-sm text-gray-600">Cross-functional or matrix assignment</div>

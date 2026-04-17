@@ -55,6 +55,7 @@ import {
   Shield,
   ArrowRightLeft,
 } from "lucide-react";
+import { ThemeToggle } from "@/shared/components/ThemeToggle";
 
 /**
  * Enhanced dashboard layout with improved UI/UX
@@ -329,8 +330,17 @@ export function DashboardLayout() {
 
   const roleLabel = (currentRole || "EMPLOYEE").replaceAll("_", " ");
 
+  const handleModeSwitch = (mode) => {
+    dispatch(setViewMode(mode));
+    if (mode === "personal") {
+      navigate("/");
+    } else {
+      navigate("/dashboard");
+    }
+  };
+
   return (
-    <div className="min-h-screen flex overflow-hidden bg-[#f5f5f7] text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
+    <div className="min-h-screen flex overflow-hidden bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 transition-colors duration-300 selection:bg-indigo-100 selection:text-indigo-900">
       {sidebarOpen && (
         <button
           type="button"
@@ -342,7 +352,7 @@ export function DashboardLayout() {
 
       {/* Enhanced Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[70] border-r border-white/70 bg-white/78 backdrop-blur-xl transition-[width] duration-200 ease-out md:translate-x-0 md:static md:inset-0
+        className={`fixed inset-y-0 left-0 z-[70] border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 dark:bg-zinc-900/80 backdrop-blur-xl transition-[width] duration-200 ease-out md:translate-x-0 md:static md:inset-0
           ${
             isCollapsed
               ? "w-[4.5rem]"
@@ -354,7 +364,7 @@ export function DashboardLayout() {
           <button
             type="button"
             onClick={toggleSidebarSize}
-            className="absolute -right-2.5 top-16 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-zinc-200/80 bg-white/95 text-zinc-400 shadow-sm hover:text-zinc-700 md:flex"
+            className="absolute -right-2.5 top-16 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/95 text-zinc-400 shadow-sm hover:text-zinc-700 dark:hover:text-zinc-300 md:flex"
           >
             {isCollapsed ? (
               <ChevronRight size={12} />
@@ -363,29 +373,29 @@ export function DashboardLayout() {
             )}
           </button>
 
-          <div className="mb-5 rounded-[24px] border border-zinc-200/70 bg-white/90 px-3 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+          <div className="mb-5 rounded-[24px] border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 dark:bg-zinc-900/90 px-3 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:shadow-none">
             <div className="flex h-9 items-center justify-between">
               {!isCollapsed ? (
                 <div className="flex items-center gap-2">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-950 text-white shadow-sm">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-950 dark:bg-indigo-600 text-white shadow-sm">
                     <span className="text-white font-bold text-sm">H</span>
                   </div>
                   <div>
-                    <span className="block text-[15px] font-semibold tracking-tight text-zinc-950">
+                    <span className="block text-[15px] font-semibold tracking-tight text-zinc-950 dark:text-white">
                       HRMS
                     </span>
-                    <span className="block text-[11px] text-zinc-400">Focused workspace</span>
+                    <span className="block text-[11px] text-zinc-400 dark:text-zinc-500 dark:text-zinc-400">Focused workspace</span>
                   </div>
                 </div>
               ) : (
-                <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-950 text-white shadow-sm">
+                <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-950 dark:bg-indigo-600 text-white shadow-sm">
                   <span className="text-white font-bold text-sm">H</span>
                 </div>
               )}
               <button
                 type="button"
                 onClick={() => setSidebarOpen(false)}
-                className="md:hidden text-zinc-400 hover:text-zinc-600"
+                className="md:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400 dark:hover:text-zinc-300"
               >
                 <X size={18} />
               </button>
@@ -402,16 +412,16 @@ export function DashboardLayout() {
                       <button
                         type="button"
                         onClick={() => toggleGroup(item.label)}
-                        className="mt-3 flex w-full items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400 hover:text-zinc-600"
+                        className="mt-3 flex w-full items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400"
                       >
                         {item.label}
                         <ChevronRight
-                          className={`transition-transform duration-200 ${expandedGroups[item.label] ? "rotate-90 text-zinc-600" : ""}`}
+                          className={`transition-transform duration-200 ${expandedGroups[item.label] ? "rotate-90 text-zinc-600 dark:text-zinc-400" : ""}`}
                           size={12}
                         />
                       </button>
                     ) : (
-                      <div className="h-px bg-zinc-100 my-3 mx-2" />
+                      <div className="h-px bg-zinc-100 dark:bg-zinc-800 my-3 mx-2" />
                     )}
                     {(expandedGroups[item.label] || isCollapsed) && (
                       <div className="mt-1 space-y-1">
@@ -441,7 +451,7 @@ export function DashboardLayout() {
             ))}
 
             {filteredNavStructure.length === 0 && !isCollapsed && (
-              <div className="rounded-xl border border-dashed border-zinc-200 bg-white/80 px-3 py-4 text-center text-xs text-zinc-500">
+              <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 px-3 py-4 text-center text-xs text-zinc-500 dark:text-zinc-400">
                 No matching pages.
               </div>
             )}
@@ -473,19 +483,19 @@ export function DashboardLayout() {
             )}
           </nav>
 
-          <div className={`mt-auto border-t border-zinc-200/80 pt-4 ${isCollapsed ? "items-center" : ""}`}>
+          <div className={`mt-auto border-t border-zinc-200/80 dark:border-zinc-800/80 pt-4 ${isCollapsed ? "items-center" : ""}`}>
             <div
-              className={`mb-3 flex rounded-[24px] border border-zinc-200/70 bg-white/90 py-3 ${isCollapsed ? "justify-center px-2" : "items-center gap-3 px-3"} shadow-[0_10px_24px_rgba(15,23,42,0.04)]`}
+              className={`mb-3 flex rounded-[24px] border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 dark:bg-zinc-800/50 py-3 ${isCollapsed ? "justify-center px-2" : "items-center gap-3 px-3"} shadow-[0_10px_24px_rgba(15,23,42,0.04)] dark:shadow-none`}
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-white font-medium shadow-sm">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 dark:bg-indigo-600 text-white font-medium shadow-sm">
                 {currentUser?.email?.[0].toUpperCase()}
               </div>
               {!isCollapsed && (
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-zinc-900 truncate">
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
                     {currentUser?.email?.split("@")[0]}
                   </p>
-                  <p className="text-xs text-zinc-500 font-normal capitalize">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 font-normal capitalize">
                     {currentRole?.replace("_", " ")}
                   </p>
                 </div>
@@ -511,34 +521,34 @@ export function DashboardLayout() {
       </aside>
 
       {/* Enhanced Main Content */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-50">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-950 transition-colors duration-300">
         {/* Enhanced Header */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 bg-white/95 backdrop-blur-md px-4 md:hidden">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 dark:bg-zinc-900/95 backdrop-blur-md px-4 md:hidden">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="p-2 text-zinc-600 hover:bg-zinc-100 rounded-lg"
+            className="p-2 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg"
           >
             <Menu size={20} />
           </button>
           <div className="flex flex-col items-center gap-1">
-            <span className="text-lg font-semibold text-zinc-900">HRMS</span>
+            <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">HRMS</span>
             {hasManagementCapabilities && (
-              <div className="flex items-center gap-1 rounded-full bg-zinc-100/90 px-1.5 py-0.5">
+              <div className="flex items-center gap-1 rounded-full bg-zinc-100/90 dark:bg-zinc-800/80 px-1.5 py-0.5">
                 <button
                   type="button"
-                  onClick={() => dispatch(setViewMode("personal"))}
+                  onClick={() => handleModeSwitch("personal")}
                   className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                    !isManagementMode ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+                    !isManagementMode ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm" : "text-zinc-500 dark:text-zinc-400"
                   }`}
                 >
                   شخصي
                 </button>
                 <button
                   type="button"
-                  onClick={() => dispatch(setViewMode("management"))}
+                  onClick={() => handleModeSwitch("management")}
                   className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                    isManagementMode ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+                    isManagementMode ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm" : "text-zinc-500 dark:text-zinc-400"
                   }`}
                 >
                   إدارة
@@ -549,7 +559,7 @@ export function DashboardLayout() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 text-zinc-600 hover:bg-zinc-100 rounded-lg"
+              className="relative p-2 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg"
             >
               <Bell size={18} />
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
@@ -561,40 +571,43 @@ export function DashboardLayout() {
         </header>
 
         {/* Desktop Header with Breadcrumb + Workspace mode */}
-        <header className="hidden md:block shrink-0 bg-white/95 backdrop-blur-md border-b border-zinc-200">
+        <header className="hidden md:block shrink-0 bg-white dark:bg-zinc-900/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800">
           <div className="flex items-center justify-between px-4 py-3 lg:px-8 lg:py-4 gap-4">
             <Breadcrumb />
-            {hasManagementCapabilities && (
-              <div className="rounded-2xl border border-zinc-200/70 bg-zinc-50/90 px-2.5 py-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                    Workspace
-                  </span>
-                  <div className="flex items-center gap-1 rounded-2xl bg-zinc-100/80 p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => dispatch(setViewMode("personal"))}
-                      className={`rounded-2xl px-2.5 py-1 text-[11px] font-semibold ${
-                        !isManagementMode ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500"
-                      }`}
-                      title="Switch to Personal Mode"
-                    >
-                      Personal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => dispatch(setViewMode("management"))}
-                      className={`rounded-2xl px-2.5 py-1 text-[11px] font-semibold ${
-                        isManagementMode ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500"
-                      }`}
-                      title="Switch to Management Mode"
-                    >
-                      Management
-                    </button>
+            <div className="flex items-center gap-4">
+              <ThemeToggle />
+              {hasManagementCapabilities && (
+                <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-zinc-50/90 dark:bg-zinc-800/50 px-2.5 py-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+                      Workspace
+                    </span>
+                    <div className="flex items-center gap-1 rounded-2xl bg-zinc-100/80 dark:bg-zinc-900/50 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleModeSwitch("personal")}
+                        className={`rounded-2xl px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                          !isManagementMode ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-white shadow-sm" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        }`}
+                        title="Switch to Personal Mode"
+                      >
+                        Personal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleModeSwitch("management")}
+                        className={`rounded-2xl px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                          isManagementMode ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-white shadow-sm" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        }`}
+                        title="Switch to Management Mode"
+                      >
+                        Management
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </header>
 
@@ -622,8 +635,8 @@ const SidebarLink = memo(function SidebarLink({ to, label, icon: Icon, isCollaps
         } rounded-2xl border border-transparent px-3 py-2.5 text-sm font-semibold transition-all duration-200
         ${
           isActive
-            ? "border-zinc-900/90 bg-zinc-900 text-white shadow-[0_10px_24px_rgba(15,23,42,0.16)]"
-            : "text-slate-600 hover:border-zinc-200/80 hover:bg-white/95 hover:text-zinc-900 hover:shadow-sm"
+            ? "border-zinc-900/90 dark:border-indigo-500/50 bg-zinc-900 dark:bg-indigo-500/10 text-white dark:text-indigo-400 shadow-[0_10px_24px_rgba(15,23,42,0.16)] dark:shadow-none"
+            : "text-slate-600 dark:text-slate-400 hover:border-zinc-200/80 dark:hover:border-zinc-800/80 dark:hover:border-zinc-700/80 hover:bg-white dark:hover:bg-zinc-900/95 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-100 dark:hover:text-zinc-200 hover:shadow-sm dark:hover:shadow-none"
         }`
       }
     >
@@ -632,7 +645,7 @@ const SidebarLink = memo(function SidebarLink({ to, label, icon: Icon, isCollaps
           <Icon
             size={18}
             className={`shrink-0 transition-colors ${isCollapsed ? "mx-auto" : ""} ${
-              isActive ? "text-white" : "text-slate-400 group-hover:text-zinc-700"
+              isActive ? "text-white" : "text-slate-400 group-hover:text-zinc-700 dark:hover:text-zinc-300"
             }`}
           />
           {!isCollapsed && <span className="truncate">{label}</span>}

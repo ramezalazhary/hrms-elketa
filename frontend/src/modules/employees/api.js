@@ -282,3 +282,18 @@ export const rejectBonusApi = async (employeeId, assessmentId, reason) => {
   return handleApiResponse(response);
 };
 
+export const updateAssessmentApi = async (assessmentId, data) => {
+  const response = await fetchWithAuth(`${API_URL}/assessments/${assessmentId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleApiResponse(response);
+};
+
+export const deleteAssessmentApi = async (assessmentId) => {
+  const response = await fetchWithAuth(`${API_URL}/assessments/${assessmentId}`, {
+    method: "DELETE",
+  });
+  return handleApiResponse(response);
+};

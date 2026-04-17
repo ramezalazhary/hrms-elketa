@@ -11,6 +11,7 @@ import bcrypt from "bcryptjs";
 import { CANONICAL_ROLES, isAdminRole, parseRoleInput } from "../utils/roles.js";
 import { bumpAuthzVersion } from "../services/authzVersionService.js";
 import { isHrDepartmentMember } from "../services/authorizationPolicyService.js";
+import { deprovisionEmployeeAccess, isHrDepartmentName } from "../services/employeeLifecycleService.js";
 
 const router = Router();
 
@@ -67,6 +68,17 @@ router.put("/:id/role", requireAuth, enforcePolicy("manage", "users"), async (re
   const employee = await Employee.findById(req.params.id);
   if (!employee) return res.status(404).json({ error: "User not found" });
 
+  const isTargetHrRole =
+    role === "HR" || role === "HR_STAFF" || role === "HR_MANAGER";
+  if (isTargetHrRole && !isHrDepartmentName(employee.department)) {
+    return res.status(400).json({
+      error: "Cannot assign HR role to an employee outside HR department",
+    });
+  }
+
+  if (!isTargetHrRole && employee.role !== role) {
+    await deprovisionEmployeeAccess(employee, { forceEmployeeRole: false });
+  }
   employee.role = role;
   await employee.save();
   await bumpAuthzVersion(employee._id);

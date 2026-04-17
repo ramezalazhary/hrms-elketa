@@ -76,7 +76,7 @@ export function DepartmentsListPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm">
+      <div className="rounded-xl border border-slate-200/80 bg-white dark:bg-zinc-900/90 p-4 shadow-sm backdrop-blur-sm">
         <Filters
           placeholder="Search departments by name…"
           search={search}
@@ -143,9 +143,9 @@ export function DepartmentsListPage() {
             render: (row) => (
               <div className="flex flex-col gap-1">
                 {(row.positions || []).slice(0, 2).map((pos, idx) => (
-                  <div key={idx} className="text-[10px] flex items-center gap-1.5 font-medium text-zinc-500">
-                    <span className="text-zinc-900 font-bold">{pos.title}</span>
-                    <span className="text-[9px] bg-zinc-100 px-1 rounded">{(pos.members || []).length} staff</span>
+                  <div key={idx} className="text-[10px] flex items-center gap-1.5 font-medium text-zinc-500 dark:text-zinc-400">
+                    <span className="text-zinc-900 dark:text-zinc-100 font-bold">{pos.title}</span>
+                    <span className="text-[9px] bg-zinc-100 dark:bg-zinc-800 px-1 rounded">{(pos.members || []).length} staff</span>
                   </div>
                 ))}
                 {(row.positions || []).length > 2 && <span className="text-[9px] text-zinc-400 font-bold uppercase">+{row.positions.length - 2} more roles</span>}

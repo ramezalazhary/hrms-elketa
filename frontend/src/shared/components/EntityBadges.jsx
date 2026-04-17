@@ -137,8 +137,8 @@ export function StatusBadge({ status, className = "" }) {
       ? {
           label: status || "—",
           Icon: MinusCircle,
-          className: "bg-zinc-100 text-zinc-700 border-zinc-200",
-          iconClass: "text-zinc-500",
+          className: "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800",
+          iconClass: "text-zinc-500 dark:text-zinc-400",
         }
       : STATUS_CONFIG[status];
 
@@ -211,12 +211,12 @@ const ROLE_CONFIG = {
   EMPLOYEE: {
     label: "Employee",
     Icon: UserRound,
-    className: "bg-zinc-100 text-zinc-800 border-zinc-200",
-    iconClass: "text-zinc-500",
-    statInactive: "border-zinc-200 bg-zinc-50 hover:bg-zinc-100 hover:border-zinc-300",
+    className: "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border-zinc-200 dark:border-zinc-800",
+    iconClass: "text-zinc-500 dark:text-zinc-400",
+    statInactive: "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:border-zinc-300",
     statActive: "border-zinc-800 bg-zinc-800 shadow-md",
-    statCountInactive: "text-zinc-900",
-    statLabelInactive: "text-zinc-600",
+    statCountInactive: "text-zinc-900 dark:text-zinc-100",
+    statLabelInactive: "text-zinc-600 dark:text-zinc-400",
   },
 };
 

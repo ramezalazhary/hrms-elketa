@@ -69,7 +69,7 @@ export const SearchableSelect = ({
     <div className="relative w-full" ref={containerRef}>
       <div 
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`flex min-h-[42px] w-full cursor-pointer items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2 transition shadow-sm focus-within:ring-2 focus-within:ring-indigo-500/20 ${disabled ? 'bg-zinc-50 cursor-not-allowed opacity-60' : 'border-zinc-200 hover:border-zinc-300'}`}
+        className={`flex min-h-[42px] w-full cursor-pointer items-center justify-between gap-2 rounded-lg border bg-white dark:bg-zinc-900 px-3 py-2 transition shadow-sm focus-within:ring-2 focus-within:ring-indigo-500/20 ${disabled ? 'bg-zinc-50 dark:bg-zinc-800/50 cursor-not-allowed opacity-60' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300'}`}
       >
         <div className="flex flex-wrap gap-1 items-center flex-1">
           {multiple ? (
@@ -87,7 +87,7 @@ export const SearchableSelect = ({
             )
           ) : (
             selectedOptions ? (
-              <span className="text-sm text-zinc-900 font-medium">{selectedOptions.label}</span>
+              <span className="text-sm text-zinc-900 dark:text-zinc-100 font-medium">{selectedOptions.label}</span>
             ) : (
               <span className="text-sm text-zinc-400">{placeholder}</span>
             )
@@ -97,13 +97,13 @@ export const SearchableSelect = ({
       </div>
 
       {isOpen && (
-        <div className="absolute z-[100] mt-1 w-full rounded-xl border border-zinc-200 bg-white p-1 shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute z-[100] mt-1 w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-1 shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="relative mb-1 p-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={14} />
             <input
               type="text"
               autoFocus
-              className="w-full rounded-lg bg-zinc-50 py-2 pl-8 pr-3 text-sm outline-none placeholder:text-zinc-400 focus:bg-white focus:ring-1 focus:ring-zinc-200 transition"
+              className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-800/50 py-2 pl-8 pr-3 text-sm outline-none placeholder:text-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-1 focus:ring-zinc-200 transition"
               placeholder="Search..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -122,7 +122,7 @@ export const SearchableSelect = ({
                   <div
                     key={opt.id}
                     onClick={() => handleSelect(opt.id)}
-                    className={`flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-sm transition ${isSelected ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-zinc-700 hover:bg-zinc-50'}`}
+                    className={`flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-sm transition ${isSelected ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}`}
                   >
                     <div>
                       <p>{opt.label}</p>

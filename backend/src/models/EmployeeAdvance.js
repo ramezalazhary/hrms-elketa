@@ -35,6 +35,12 @@ const EmployeeAdvanceSchema = new Schema(
     // Legacy fallback support for older runs
     deductedInRunId: { type: Schema.Types.ObjectId, ref: "PayrollRun" },
 
+    // Idempotency standard: Prevent double deduction for the same payroll period
+    lastDeductedPeriod: {
+      year: { type: Number },
+      month: { type: Number },
+    },
+
     recordedBy: { type: String, required: true },
     recordedAt: { type: Date, default: Date.now },
     approvedBy: { type: String },

@@ -59,28 +59,15 @@ export async function syncEmployeeLeadershipAfterSave(employee) {
       await teamDoc.save();
     }
 
-    // Also update embedded team in Department.teams[] (legacy)
-    if (employee.team) {
-      await Department.updateOne(
-        { _id: deptId, "teams.name": employee.team },
-        { $set: { "teams.$.leaderEmail": email } },
-      );
-    }
+    // FROZEN: legacy write to Department.teams[] removed.
+    // Team collection (standalone) is the single source of truth.
   } else if (employee.role !== "TEAM_LEADER") {
     await Team.updateMany(
       { departmentId: deptId, leaderEmail: email },
       { $set: { leaderEmail: null, leaderId: null } },
     );
-    await Department.updateMany(
-      { _id: deptId, "teams.leaderEmail": email },
-      {
-        $set: {
-          "teams.$[t].leaderEmail": "",
-          "teams.$[t].leaderTitle": "Vacant",
-        },
-      },
-      { arrayFilters: [{ "t.leaderEmail": email }] },
-    );
+    // FROZEN: legacy cleanup of Department.teams[] removed.
+    // Team collection (standalone) is the single source of truth.
   }
 }
 

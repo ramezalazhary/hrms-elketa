@@ -19,6 +19,7 @@ import {
   CircleHelp,
   CheckCircle2,
   Gift,
+  Star,
 } from "lucide-react";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
@@ -66,23 +67,23 @@ function SkeletonBlock() {
   return (
     <div className="animate-pulse space-y-4 p-6">
       <div className="h-5 w-40 rounded-md bg-zinc-200" />
-      <div className="h-24 rounded-xl bg-zinc-100" />
-      <div className="h-24 rounded-xl bg-zinc-100" />
+      <div className="h-24 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+      <div className="h-24 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
     </div>
   );
 }
 
-function SectionShell({ icon: Icon, title, description, iconColor = "text-zinc-600", actions, children }) {
+function SectionShell({ icon: Icon, title, description, iconColor = "text-zinc-600 dark:text-zinc-400", actions, children }) {
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex gap-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 ring-1 ring-zinc-200/80">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
             <Icon className={`h-5 w-5 ${iconColor}`} aria-hidden />
           </div>
           <div className="min-w-0 pt-0.5">
-            <h2 className="text-[17px] font-semibold tracking-tight text-zinc-900">{title}</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-500">{description}</p>
+            <h2 className="text-[17px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{title}</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</p>
           </div>
         </div>
         {actions ? <div className="shrink-0 sm:pt-0.5">{actions}</div> : null}
@@ -106,15 +107,15 @@ function ExpandableRulesHint({ accent = "sky", title, subtitle, subtitleDir = "l
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={panelId}
-        className="group flex w-full items-center gap-3 rounded-2xl bg-zinc-100/70 px-4 py-3.5 text-left transition hover:bg-zinc-100 active:scale-[0.998] motion-reduce:active:scale-100"
+        className="group flex w-full items-center gap-3 rounded-2xl bg-zinc-100/70 dark:bg-zinc-800/80 px-4 py-3.5 text-left transition hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-[0.998] motion-reduce:active:scale-100"
       >
-        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-zinc-200/80 ${iconTint}`} aria-hidden>
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-200/80 dark:ring-zinc-700 ${iconTint}`} aria-hidden>
           <CircleHelp className="h-[18px] w-[18px]" strokeWidth={1.75} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-semibold leading-snug tracking-tight text-zinc-900">{title}</span>
+          <span className="block text-[13px] font-semibold leading-snug tracking-tight text-zinc-900 dark:text-zinc-100">{title}</span>
           {subtitle ? (
-            <span className="mt-0.5 block text-xs leading-snug text-zinc-500" dir={subtitleDir}>
+            <span className="mt-0.5 block text-xs leading-snug text-zinc-500 dark:text-zinc-400" dir={subtitleDir}>
               {subtitle}
             </span>
           ) : null}
@@ -130,7 +131,7 @@ function ExpandableRulesHint({ accent = "sky", title, subtitle, subtitleDir = "l
           id={panelId}
           role="region"
           aria-label={title}
-          className={`mt-2 space-y-4 rounded-2xl border border-zinc-200/80 bg-zinc-50/40 p-4 sm:p-5 text-[13px] leading-relaxed text-zinc-700 shadow-sm shadow-zinc-950/5 border-l-[3px] ${accentBar}`}
+          className={`mt-2 space-y-4 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/40 dark:bg-zinc-800/50 p-4 sm:p-5 text-[13px] leading-relaxed text-zinc-700 dark:text-zinc-300 shadow-sm shadow-zinc-950/5 border-l-[3px] ${accentBar}`}
         >
           {children}
         </div>
@@ -208,13 +209,13 @@ function MonthlyGraceDeductionPreview({ rules }) {
 
   if (preview.empty) {
     return (
-      <div className="rounded-2xl bg-white px-4 py-4 ring-1 ring-zinc-200/80">
-        <p className="text-[13px] font-semibold tracking-tight text-zinc-900">Deduction preview</p>
-        <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">
+      <div className="rounded-2xl bg-white dark:bg-zinc-900 px-4 py-4 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
+        <p className="text-[13px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Deduction preview</p>
+        <p className="mt-1.5 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
           Add at least one late tier in the table below. Sample rows will then show day(s) deducted before vs after the monthly grace
           quota runs out — same logic as payroll and attendance finalize.
         </p>
-        <p className="mt-2 text-xs leading-relaxed text-zinc-500" dir="rtl">
+        <p className="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400" dir="rtl">
           أضف شريحة تأخير واحدة على الأقل في الجدول أدناه ليظهر معاين الخصم هنا.
         </p>
       </div>
@@ -228,34 +229,34 @@ function MonthlyGraceDeductionPreview({ rules }) {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">From your rules</p>
-          <p className="mt-0.5 text-[13px] font-semibold tracking-tight text-zinc-900">Deduction preview</p>
+          <p className="mt-0.5 text-[13px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Deduction preview</p>
         </div>
-        <span className="rounded-lg bg-zinc-100 px-2.5 py-1 font-mono text-xs text-zinc-700 ring-1 ring-zinc-200/80">
+        <span className="rounded-lg bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 font-mono text-xs text-zinc-700 dark:text-zinc-300 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
           {shift}
         </span>
       </div>
 
-      <ul className="space-y-2 rounded-2xl bg-white px-4 py-3 ring-1 ring-zinc-200/80">
-        <li className="flex gap-3 text-xs leading-relaxed text-zinc-600">
+      <ul className="space-y-2 rounded-2xl bg-white dark:bg-zinc-900 px-4 py-3 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
+        <li className="flex gap-3 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
           <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500/80" aria-hidden />
           <span>
-            <span className="font-medium text-zinc-800">Grace quota available</span>
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">Grace quota available</span>
             {" — "}
-            Late threshold is shift + <strong className="text-zinc-900">{graceOk ? `${baseGrace} min` : "0"}</strong>. Inside that
+            Late threshold is shift + <strong className="text-zinc-900 dark:text-zinc-100">{graceOk ? `${baseGrace} min` : "0"}</strong>. Inside that
             window you are <strong className="text-emerald-700">PRESENT</strong> (0 tier deduction). After that,{" "}
             <strong className="text-red-700/90">LATE</strong> uses your tier table on seconds after shift start.
           </span>
         </li>
-        <li className="flex gap-3 text-xs leading-relaxed text-zinc-600">
+        <li className="flex gap-3 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
           <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500/80" aria-hidden />
           <span>
-            <span className="font-medium text-zinc-800">Grace quota exhausted</span>
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">Grace quota exhausted</span>
             {" — "}
             Lateness is measured from shift start. Inside the old grace window (or before the first tier&apos;s first second), the
-            deduction is your <strong className="text-zinc-900">first tier</strong>
+            deduction is your <strong className="text-zinc-900 dark:text-zinc-100">first tier</strong>
             {Number.isFinite(firstDed) ? (
               <>
-                : <strong className="tabular-nums text-zinc-900">{formatDeductionDaysLabel(firstDed)}</strong> day(s)
+                : <strong className="tabular-nums text-zinc-900 dark:text-zinc-100">{formatDeductionDaysLabel(firstDed)}</strong> day(s)
               </>
             ) : null}
             . Otherwise the matching tier applies (or the last tier if above the top band).
@@ -263,33 +264,33 @@ function MonthlyGraceDeductionPreview({ rules }) {
         </li>
       </ul>
 
-      <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-200/80">
+      <div className="overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
         <table className="min-w-full text-left text-xs">
           <thead>
-            <tr className="border-b border-zinc-100 bg-zinc-50/80">
-              <th className="px-3 py-2.5 font-medium text-zinc-500">Sample</th>
-              <th className="px-3 py-2.5 font-medium text-zinc-500">Check-in</th>
-              <th className="px-3 py-2.5 font-medium text-zinc-500">Has quota</th>
-              <th className="px-3 py-2.5 font-medium text-zinc-500">Quota out</th>
+            <tr className="border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/80 dark:bg-zinc-800/50">
+              <th className="px-3 py-2.5 font-medium text-zinc-500 dark:text-zinc-400">Sample</th>
+              <th className="px-3 py-2.5 font-medium text-zinc-500 dark:text-zinc-400">Check-in</th>
+              <th className="px-3 py-2.5 font-medium text-zinc-500 dark:text-zinc-400">Has quota</th>
+              <th className="px-3 py-2.5 font-medium text-zinc-500 dark:text-zinc-400">Quota out</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {rows.map((r) => (
-              <tr key={r.id} className="text-zinc-700">
+              <tr key={r.id} className="text-zinc-700 dark:text-zinc-300">
                 <td className="px-3 py-3 align-top">
-                  <span className="font-medium text-zinc-900">{r.offsetLabel}</span>
+                  <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.offsetLabel}</span>
                 </td>
-                <td className="px-3 py-3 align-top font-mono text-[11px] text-zinc-800">{r.checkIn}</td>
+                <td className="px-3 py-3 align-top font-mono text-[11px] text-zinc-800 dark:text-zinc-200">{r.checkIn}</td>
                 <td className="px-3 py-3 align-top">
-                  <span className="font-medium text-zinc-900">{r.beforeStatus}</span>
+                  <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.beforeStatus}</span>
                   <span className="text-zinc-400"> · </span>
-                  <span className="tabular-nums font-semibold text-zinc-900">{formatDeductionDaysLabel(r.beforeDed)}</span>
+                  <span className="tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">{formatDeductionDaysLabel(r.beforeDed)}</span>
                   <span className="text-zinc-400"> d</span>
                 </td>
                 <td className="px-3 py-3 align-top">
-                  <span className="font-medium text-zinc-900">{r.afterStatus}</span>
+                  <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.afterStatus}</span>
                   <span className="text-zinc-400"> · </span>
-                  <span className="tabular-nums font-semibold text-zinc-900">{formatDeductionDaysLabel(r.afterDed)}</span>
+                  <span className="tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">{formatDeductionDaysLabel(r.afterDed)}</span>
                   <span className="text-zinc-400"> d</span>
                 </td>
               </tr>
@@ -301,11 +302,11 @@ function MonthlyGraceDeductionPreview({ rules }) {
       {intervals.length > 0 ? (
         <p className="px-0.5 text-[11px] leading-relaxed text-zinc-400">
           First tier (server seconds): {intervals[0].lo}–{intervals[0].hi}s after shift →{" "}
-          <span className="font-medium text-zinc-600">{formatDeductionDaysLabel(intervals[0].deductionDays)}</span> day(s).
+          <span className="font-medium text-zinc-600 dark:text-zinc-400">{formatDeductionDaysLabel(intervals[0].deductionDays)}</span> day(s).
         </p>
       ) : null}
 
-      <p className="rounded-xl bg-zinc-100/60 px-3 py-2.5 text-xs leading-relaxed text-zinc-600" dir="rtl">
+      <p className="rounded-xl bg-zinc-100/60 dark:bg-zinc-800/80 px-3 py-2.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400" dir="rtl">
         «Has quota» = عتبة شيفت + السماح. «Quota out» = بعد نفاد الرصيد؛ التأخير من أول الشيفت مع قاعدة الشريحة الأولى عند
         الحاجة.
       </p>
@@ -316,7 +317,7 @@ function MonthlyGraceDeductionPreview({ rules }) {
 function FieldGroup({ label, hint, children, className = "" }) {
   return (
     <div className={className}>
-      <label className="mb-1.5 block text-xs font-medium text-zinc-500">{label}</label>
+      <label className="mb-1.5 block text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</label>
       {hint && <p className="mb-2 text-[11px] leading-snug text-zinc-400">{hint}</p>}
       {children}
     </div>
@@ -324,12 +325,12 @@ function FieldGroup({ label, hint, children, className = "" }) {
 }
 
 const INPUT_CLS =
-  "w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80";
-const SELECT_CLS = `${INPUT_CLS} disabled:bg-zinc-100/80 disabled:text-zinc-400`;
+  "w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700";
+const SELECT_CLS = `${INPUT_CLS} disabled:bg-zinc-100/80 dark:disabled:bg-zinc-800/80 disabled:text-zinc-400`;
 const NUM_CLS = `${INPUT_CLS} tabular-nums`;
 
 const SECONDARY_BTN =
-  "inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-white px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:scale-[0.99] motion-reduce:active:scale-100";
+  "inline-flex items-center gap-2 rounded-full border border-zinc-200/90 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 shadow-sm transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:scale-[0.99] motion-reduce:active:scale-100";
 
 function LateTierMmSsInput({ valueMinutes, onCommit, className }) {
   const [focused, setFocused] = useState(false);
@@ -364,13 +365,13 @@ function LateTierMmSsInput({ valueMinutes, onCommit, className }) {
 
 function ruleBadge(type) {
   const styles = {
-    DEFAULT: "bg-zinc-100 text-zinc-800 ring-zinc-200/80",
-    DEPARTMENT: "bg-zinc-100 text-zinc-800 ring-zinc-200/80",
-    EMPLOYEE: "bg-zinc-100 text-zinc-800 ring-zinc-200/80",
+    DEFAULT: "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 ring-zinc-200/80 dark:ring-zinc-700",
+    DEPARTMENT: "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 ring-zinc-200/80 dark:ring-zinc-700",
+    EMPLOYEE: "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 ring-zinc-200/80 dark:ring-zinc-700",
   };
   const labels = { DEFAULT: "Global default", DEPARTMENT: "Department", EMPLOYEE: "Employee" };
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${styles[type] || "bg-zinc-100 text-zinc-700 ring-zinc-200"}`}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${styles[type] || "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 ring-zinc-200"}`}>
       {labels[type] || type}
     </span>
   );
@@ -777,7 +778,7 @@ export function OrganizationRulesPage() {
         {/* Tab navigation — segmented control */}
         <div className="mb-8 -mx-1 overflow-x-auto pb-0.5">
           <div
-            className="inline-flex min-w-max gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80"
+            className="inline-flex min-w-max gap-0.5 rounded-2xl bg-zinc-100/90 dark:bg-zinc-800/80 p-1 ring-1 ring-zinc-200/80 dark:ring-zinc-700"
             role="tablist"
             aria-label="Organization settings sections"
           >
@@ -793,16 +794,16 @@ export function OrganizationRulesPage() {
                   onClick={() => setActiveTab(key)}
                   className={`flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium whitespace-nowrap transition ${
                     isActive
-                      ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60"
-                      : "text-zinc-600 hover:text-zinc-900"
+                      ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm ring-1 ring-zinc-200/60"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
                   }`}
                 >
-                  <TabIcon className={`h-4 w-4 shrink-0 ${isActive ? "text-zinc-800" : "text-zinc-400"}`} />
+                  <TabIcon className={`h-4 w-4 shrink-0 ${isActive ? "text-zinc-800 dark:text-zinc-200" : "text-zinc-400"}`} />
                   {label}
                   {badge != null && (
                     <span
                       className={`ml-0.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${
-                        isActive ? "bg-zinc-900 text-white" : "bg-zinc-200/80 text-zinc-600"
+                        isActive ? "bg-zinc-900 text-white" : "bg-zinc-200/80 text-zinc-600 dark:text-zinc-400"
                       }`}
                     >
                       {badge}
@@ -815,26 +816,26 @@ export function OrganizationRulesPage() {
         </div>
 
         {loading ? (
-          <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+          <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
             <SkeletonBlock />
           </div>
         ) : (
-          <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+          <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
             <div className="p-6 sm:p-8 lg:p-10">
               {/* ===== GENERAL ===== */}
               {activeTab === "general" && (
                 <SectionShell
                   icon={Network}
-                  iconColor="text-zinc-700"
+                  iconColor="text-zinc-700 dark:text-zinc-300"
                   title="Company month & organizational hierarchy"
                   description="Set the first day of your monthly cycle, timezone, and identify the chief executive. Department managers are listed from the Departments module."
                 >
                   <section className="space-y-3">
                     <header className="px-0.5">
-                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Fiscal month & leadership</h3>
-                      <p className="mt-1 text-sm leading-relaxed text-zinc-500">Used across payroll, attendance periods, and reporting.</p>
+                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Fiscal month & leadership</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">Used across payroll, attendance periods, and reporting.</p>
                     </header>
-                    <div className="overflow-hidden rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-6">
+                    <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 sm:p-6">
                       <div className="grid gap-6 sm:grid-cols-2">
                         <FieldGroup
                           label="Month starts on calendar day (1–31)"
@@ -890,24 +891,24 @@ export function OrganizationRulesPage() {
 
                   <section className="space-y-3">
                     <header className="px-0.5">
-                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Partners governance</h3>
-                      <p className="mt-1 text-sm leading-relaxed text-zinc-500">
+                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Partners governance</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
                         Partner records can be created or edited only by the active Chief Executive or Admin.
                       </p>
                     </header>
-                    <div className="overflow-hidden rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-6">
+                    <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 sm:p-6">
                       {partners.length === 0 ? (
-                        <p className="text-sm text-zinc-500">No partners configured.</p>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400">No partners configured.</p>
                       ) : (
                         <div className="space-y-3">
                           {partners.map((p) => {
                             const pid = p._id || p.id;
                             return (
-                              <div key={pid} className="grid gap-3 rounded-xl border border-zinc-200 p-3 sm:grid-cols-5">
+                              <div key={pid} className="grid gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 sm:grid-cols-5">
                                 <input className={INPUT_CLS} value={p.name || ""} disabled={!canEditPartners || savingPartner} onChange={(e) => setPartners((prev) => prev.map((row) => (String(row._id || row.id) === String(pid) ? { ...row, name: e.target.value } : row)))} />
                                 <input className={INPUT_CLS} value={p.title || ""} disabled={!canEditPartners || savingPartner} onChange={(e) => setPartners((prev) => prev.map((row) => (String(row._id || row.id) === String(pid) ? { ...row, title: e.target.value } : row)))} />
                                 <input className={NUM_CLS} type="number" min={0} max={100} value={p.ownershipPercent ?? ""} disabled={!canEditPartners || savingPartner} onChange={(e) => setPartners((prev) => prev.map((row) => (String(row._id || row.id) === String(pid) ? { ...row, ownershipPercent: e.target.value } : row)))} />
-                                <button type="button" className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-60" disabled={!canEditPartners || savingPartner} onClick={() => handleUpdatePartner(p)}>Update</button>
+                                <button type="button" className="rounded-xl border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 disabled:opacity-60" disabled={!canEditPartners || savingPartner} onClick={() => handleUpdatePartner(p)}>Update</button>
                                 <button type="button" className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60" disabled={!canEditPartners || savingPartner} onClick={() => handleDeletePartner(pid)}>Remove</button>
                               </div>
                             );
@@ -930,7 +931,7 @@ export function OrganizationRulesPage() {
                           <button type="button" className="rounded-xl bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60" disabled={savingPartner} onClick={handleCreatePartner}>Add partner</button>
                         </div>
                       ) : (
-                        <p className="mt-4 rounded-xl bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200">
+                        <p className="mt-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 ring-1 ring-zinc-200">
                           Read-only: partner management is restricted to Chief Executive and Admin.
                         </p>
                       )}
@@ -939,40 +940,40 @@ export function OrganizationRulesPage() {
 
                   <section className="space-y-3">
                     <header className="px-0.5">
-                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Department managers</h3>
-                      <p className="mt-1 text-sm leading-relaxed text-zinc-500">
+                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Department managers</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
                         Read-only here. Update names and emails in{" "}
-                        <Link to="/departments" className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600">
+                        <Link to="/departments" className="font-medium text-zinc-900 dark:text-zinc-100 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600">
                           Departments
                         </Link>
                         .
                       </p>
                     </header>
                     {departmentRows.length === 0 ? (
-                      <div className="rounded-[20px] bg-zinc-50/50 py-10 text-center text-sm text-zinc-500 ring-1 ring-zinc-200/80">
+                      <div className="rounded-[20px] bg-zinc-50/50 dark:bg-zinc-800/50 py-10 text-center text-sm text-zinc-500 dark:text-zinc-400 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
                         No departments loaded.
                       </div>
                     ) : (
-                      <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
-                        <table className="min-w-full divide-y divide-zinc-100 text-sm">
+                      <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+                        <table className="min-w-full divide-y divide-zinc-100 dark:divide-zinc-800 text-sm">
                           <thead>
-                            <tr className="bg-zinc-50/80 text-left text-xs font-medium text-zinc-500">
+                            <tr className="bg-zinc-50/80 dark:bg-zinc-800/50 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">
                               <th className="px-4 py-3">Department</th>
                               <th className="px-4 py-3">Code</th>
                               <th className="px-4 py-3">Head</th>
                               <th className="w-20 px-4 py-3" />
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-zinc-100">
+                          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                             {departmentRows.map((d) => {
                               const did = d.id || d._id;
                               return (
-                                <tr key={did} className="transition hover:bg-zinc-50/60">
-                                  <td className="px-4 py-3 font-medium text-zinc-900">{d.name}</td>
-                                  <td className="px-4 py-3 text-zinc-500">{d.code || "—"}</td>
-                                  <td className="px-4 py-3 text-zinc-600">{d.head?.trim() || "—"}</td>
+                                <tr key={did} className="transition hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50">
+                                  <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{d.name}</td>
+                                  <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">{d.code || "—"}</td>
+                                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{d.head?.trim() || "—"}</td>
                                   <td className="px-4 py-3 text-right">
-                                    <Link to={`/departments/${did}/edit`} className="text-xs font-semibold text-zinc-700 hover:text-zinc-900">
+                                    <Link to={`/departments/${did}/edit`} className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100">
                                       Edit
                                     </Link>
                                   </td>
@@ -984,6 +985,36 @@ export function OrganizationRulesPage() {
                       </div>
                     )}
                   </section>
+
+                  <section className="space-y-3">
+                    <header className="px-0.5">
+                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Assessment Templates & Objectives</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+                        Configure the criteria managers use to evaluate performance.
+                      </p>
+                    </header>
+                    <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 sm:p-6 mb-4">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                             <Star className="h-4 w-4 text-amber-500" />
+                             Dynamic Evaluation Forms
+                          </p>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                             Build custom assessment metrics and set goal-tracking rules for period-over-period reviews.
+                          </p>
+                        </div>
+                        <div className="shrink-0">
+                          <Link
+                            to="/admin/assessment-templates"
+                            className="inline-flex items-center gap-1.5 rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold text-white shadow-sm ring-1 ring-inset ring-zinc-950 hover:bg-zinc-800 active:scale-[0.98] transition-all"
+                          >
+                            Manage Templates
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
                 </SectionShell>
               )}
 
@@ -991,7 +1022,7 @@ export function OrganizationRulesPage() {
               {activeTab === "documents" && (
                 <SectionShell
                   icon={FileStack}
-                  iconColor="text-zinc-700"
+                  iconColor="text-zinc-700 dark:text-zinc-300"
                   title="Required documents"
                   description="Documents shown to employees in onboarding checklists. Mark items as mandatory to flag missing uploads."
                   actions={
@@ -1007,14 +1038,14 @@ export function OrganizationRulesPage() {
                       {requiredDocs.map((doc, index) => (
                         <li
                           key={index}
-                          className={`relative overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 transition ${
-                            doc.isMandatory ? "ring-zinc-900/15" : "ring-zinc-950/[0.06]"
+                          className={`relative overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 transition ${
+                            doc.isMandatory ? "ring-zinc-900/15" : "ring-zinc-950/[0.06] dark:ring-zinc-800"
                           }`}
                         >
                           <div className="flex flex-col gap-5 p-5 sm:flex-row sm:flex-wrap sm:items-end">
                             <div className="min-w-0 flex-1 sm:min-w-[200px]">
-                              <label className="mb-1.5 flex items-center gap-2 text-xs font-medium text-zinc-500">
-                                <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-lg bg-zinc-100 text-[11px] font-semibold text-zinc-600 ring-1 ring-zinc-200/80">
+                              <label className="mb-1.5 flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                                <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
                                   {index + 1}
                                 </span>
                                 Name
@@ -1022,14 +1053,14 @@ export function OrganizationRulesPage() {
                               <input type="text" className={INPUT_CLS} placeholder="e.g. National ID, employment contract" value={doc.name} onChange={(e) => updateDoc(index, "name", e.target.value)} />
                             </div>
                             <div className="min-w-0 flex-[2] sm:min-w-[280px]">
-                              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Instructions</label>
+                              <label className="mb-1.5 block text-xs font-medium text-zinc-500 dark:text-zinc-400">Instructions</label>
                               <input type="text" className={INPUT_CLS} placeholder="Optional — e.g. must be a clear color scan" value={doc.description} onChange={(e) => updateDoc(index, "description", e.target.value)} />
                             </div>
-                            <div className="flex items-center gap-3 border-t border-zinc-100 pt-4 sm:border-0 sm:pt-0">
-                              <label className="flex cursor-pointer items-center gap-2.5 text-sm text-zinc-800">
-                                <input type="checkbox" className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-400/30" checked={doc.isMandatory} onChange={(e) => updateDoc(index, "isMandatory", e.target.checked)} />
+                            <div className="flex items-center gap-3 border-t border-zinc-100 dark:border-zinc-800/50 pt-4 sm:border-0 sm:pt-0">
+                              <label className="flex cursor-pointer items-center gap-2.5 text-sm text-zinc-800 dark:text-zinc-200">
+                                <input type="checkbox" className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-400/30" checked={doc.isMandatory} onChange={(e) => updateDoc(index, "isMandatory", e.target.checked)} />
                                 <span className="flex items-center gap-1.5 font-medium">
-                                  {doc.isMandatory && <ShieldCheck className="h-4 w-4 text-zinc-700" aria-hidden />}
+                                  {doc.isMandatory && <ShieldCheck className="h-4 w-4 text-zinc-700 dark:text-zinc-300" aria-hidden />}
                                   Mandatory
                                 </span>
                               </label>
@@ -1049,7 +1080,7 @@ export function OrganizationRulesPage() {
               {activeTab === "workplaces" && (
                 <SectionShell
                   icon={MapPinned}
-                  iconColor="text-zinc-700"
+                  iconColor="text-zinc-700 dark:text-zinc-300"
                   title="Workplaces & branches"
                   description="Governorates and cities power workplace pickers. Each branch matches the Branch record shape (name, code, insurance number, location, city, country, status)."
                   actions={
@@ -1066,21 +1097,21 @@ export function OrganizationRulesPage() {
                         const isOpen = expandedLocations[cityIndex] !== false;
                         const filledBranches = (loc.branches || []).filter((b) => (b.name || "").trim() || (b.code || "").trim()).length;
                         return (
-                          <div key={cityIndex} className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06] transition hover:ring-zinc-950/[0.1]">
+                          <div key={cityIndex} className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 transition hover:ring-zinc-950/[0.1]">
                             <button
                               type="button"
                               onClick={() => setExpandedLocations((p) => ({ ...p, [cityIndex]: !isOpen }))}
-                              className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition hover:bg-zinc-50/80"
+                              className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50"
                             >
                               <div className="flex min-w-0 items-center gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 ring-1 ring-zinc-200/80">
-                                  <MapPinned className="h-4 w-4 text-zinc-600" />
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
+                                  <MapPinned className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="truncate text-[15px] font-semibold tracking-tight text-zinc-900">
+                                  <p className="truncate text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
                                     {loc.governorate && loc.city ? `${loc.city}, ${loc.governorate}` : "New location"}
                                   </p>
-                                  <p className="text-xs text-zinc-500">{filledBranches} branch{filledBranches !== 1 ? "es" : ""}</p>
+                                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{filledBranches} branch{filledBranches !== 1 ? "es" : ""}</p>
                                 </div>
                               </div>
                               <div className="flex shrink-0 items-center gap-1">
@@ -1097,7 +1128,7 @@ export function OrganizationRulesPage() {
                             </button>
 
                             {isOpen && (
-                              <div className="space-y-6 border-t border-zinc-100 bg-zinc-50/30 p-5 sm:p-6">
+                              <div className="space-y-6 border-t border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/30 dark:bg-zinc-800/50 p-5 sm:p-6">
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                   <FieldGroup label="Governorate">
                                     <select className={SELECT_CLS} value={loc.governorate} onChange={(e) => updateLocation(cityIndex, "governorate", e.target.value)}>
@@ -1113,21 +1144,21 @@ export function OrganizationRulesPage() {
                                   </FieldGroup>
                                 </div>
 
-                                <div className="border-t border-zinc-100/80 pt-5">
+                                <div className="border-t border-zinc-100 dark:border-zinc-800/50/80 pt-5">
                                   <div className="mb-4 flex items-center justify-between">
-                                    <span className="text-[13px] font-semibold text-zinc-900">Branches</span>
-                                    <button type="button" onClick={() => addBranch(cityIndex)} className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+                                    <span className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100">Branches</span>
+                                    <button type="button" onClick={() => addBranch(cityIndex)} className="text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
                                       + Add branch
                                     </button>
                                   </div>
                                   {loc.branches.length === 0 ? (
-                                    <p className="rounded-2xl bg-white py-8 text-center text-sm text-zinc-500 ring-1 ring-zinc-200/80">No branches — add one to define sites.</p>
+                                    <p className="rounded-2xl bg-white dark:bg-zinc-900 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400 ring-1 ring-zinc-200/80 dark:ring-zinc-700">No branches — add one to define sites.</p>
                                   ) : (
                                     <div className="space-y-4">
                                       {loc.branches.map((branch, bi) => (
-                                        <div key={bi} className="space-y-4 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5">
+                                        <div key={bi} className="space-y-4 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 p-4 shadow-sm sm:p-5">
                                           <div className="flex items-center justify-between gap-2">
-                                            <span className="text-xs font-semibold text-zinc-600">Branch {bi + 1}</span>
+                                            <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Branch {bi + 1}</span>
                                             <button type="button" onClick={() => removeBranch(cityIndex, bi)} className="shrink-0 rounded-lg p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove branch">
                                               <Trash2 className="h-3.5 w-3.5" />
                                             </button>
@@ -1168,7 +1199,7 @@ export function OrganizationRulesPage() {
               {activeTab === "leave" && (
                 <SectionShell
                   icon={Plane}
-                  iconColor="text-zinc-700"
+                  iconColor="text-zinc-700 dark:text-zinc-300"
                   title="Leave & excuse policies"
                   description="Rules by version number — the highest version applies to new requests. Company timezone is used for time-off logic."
                   actions={
@@ -1184,10 +1215,10 @@ export function OrganizationRulesPage() {
                     </div>
                   }
                 >
-                  <div className="flex gap-3 rounded-2xl bg-zinc-100/70 px-4 py-3.5 text-xs leading-relaxed text-zinc-600 ring-1 ring-zinc-200/80">
+                  <div className="flex gap-3 rounded-2xl bg-zinc-100/70 dark:bg-zinc-800/80 px-4 py-3.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
                     <Info className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" aria-hidden />
                     <p>
-                      Each version defines vacation and excuse rules independently. The <strong className="font-semibold text-zinc-800">highest version number</strong> is active for new requests. Older versions stay for audit.
+                      Each version defines vacation and excuse rules independently. The <strong className="font-semibold text-zinc-800 dark:text-zinc-200">highest version number</strong> is active for new requests. Older versions stay for audit.
                     </p>
                   </div>
 
@@ -1202,16 +1233,16 @@ export function OrganizationRulesPage() {
                           <div
                             key={idx}
                             className={`overflow-hidden rounded-[20px] shadow-sm ring-1 transition ${
-                              isHighest ? "bg-white ring-zinc-900/20" : "bg-white ring-zinc-950/[0.06]"
+                              isHighest ? "bg-white dark:bg-zinc-900 ring-zinc-900/20" : "bg-white dark:bg-zinc-900 ring-zinc-950/[0.06] dark:ring-zinc-800"
                             }`}
                           >
                             <button
                               type="button"
                               onClick={() => setExpandedPolicies((prev) => ({ ...prev, [p.version]: !isOpen }))}
-                              className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition hover:bg-zinc-50/80"
+                              className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50"
                             >
                               <div className="flex items-center gap-3">
-                                <span className="text-[15px] font-semibold tracking-tight text-zinc-900">Version {p.version}</span>
+                                <span className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Version {p.version}</span>
                                 {isHighest && (
                                   <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
                                     <CheckCircle2 className="h-3 w-3" /> Active
@@ -1227,19 +1258,19 @@ export function OrganizationRulesPage() {
                             </button>
 
                             {isOpen && (
-                              <div className="space-y-6 border-t border-zinc-100 bg-zinc-50/30 p-5 sm:p-6">
+                              <div className="space-y-6 border-t border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/30 dark:bg-zinc-800/50 p-5 sm:p-6">
                                 <FieldGroup label="Version # (highest wins)" className="max-w-[10rem]">
                                   <input type="number" className={NUM_CLS} value={p.version} onChange={(e) => updateLeavePolicy(idx, { version: Number(e.target.value) })} />
                                 </FieldGroup>
 
                                 <div className="grid gap-5 sm:grid-cols-2">
                                   {/* Vacation */}
-                                  <div className="space-y-4 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-sm">
-                                    <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
-                                      <Plane className="h-4 w-4 text-zinc-500" />
-                                      <p className="text-[13px] font-semibold tracking-tight text-zinc-900">Vacation rules</p>
+                                  <div className="space-y-4 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 p-5 shadow-sm">
+                                    <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800/50 pb-3">
+                                      <Plane className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+                                      <p className="text-[13px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Vacation rules</p>
                                     </div>
-                                    <label className="flex items-center gap-2 text-xs text-zinc-700 cursor-pointer">
+                                    <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
                                       <input type="checkbox" className="h-4 w-4 rounded border-zinc-300" checked={Boolean(p.vacationRules?.entitlementVariesByYear)} onChange={(e) => updateLeavePolicyNested(idx, "vacationRules", "entitlementVariesByYear", e.target.checked)} />
                                       Entitlement differs after first year
                                     </label>
@@ -1266,10 +1297,10 @@ export function OrganizationRulesPage() {
                                   </div>
 
                                   {/* Excuse */}
-                                  <div className="space-y-4 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-sm">
-                                    <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
-                                      <Clock className="h-4 w-4 text-zinc-500" />
-                                      <p className="text-[13px] font-semibold tracking-tight text-zinc-900">Excuse rules</p>
+                                  <div className="space-y-4 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 p-5 shadow-sm">
+                                    <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800/50 pb-3">
+                                      <Clock className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+                                      <p className="text-[13px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Excuse rules</p>
                                     </div>
                                     <FieldGroup label="Max hours per excuse">
                                       <input type="number" min={0.25} step={0.25} className={`${NUM_CLS} max-w-[8rem]`} value={p.excuseRules?.maxHoursPerExcuse ?? 8} onChange={(e) => updateLeavePolicyNested(idx, "excuseRules", "maxHoursPerExcuse", Number(e.target.value))} />
@@ -1306,7 +1337,7 @@ export function OrganizationRulesPage() {
               {activeTab === "attendance" && (
                 <SectionShell
                   icon={Clock}
-                  iconColor="text-zinc-700"
+                  iconColor="text-zinc-700 dark:text-zinc-300"
                   title="Attendance & deduction rules"
                   description="Global work hours (start/end support seconds), grace period, and penalty tiers for lateness, absence, and early departure. Deductions are expressed as days deducted from monthly pay."
                 >
@@ -1314,41 +1345,41 @@ export function OrganizationRulesPage() {
                     {/* —— Schedule & grace —— */}
                     <section className="space-y-3">
                       <header className="px-0.5">
-                        <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Schedule & grace</h3>
-                        <p className="mt-1 max-w-prose text-sm leading-snug text-zinc-500">
+                        <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Schedule & grace</h3>
+                        <p className="mt-1 max-w-prose text-sm leading-snug text-zinc-500 dark:text-zinc-400">
                           Company default check-in and check-out. Supports seconds. Grace minutes extend how late someone can arrive before status becomes late, unless the monthly grace budget has run out.
                         </p>
                       </header>
 
-                      <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
-                        <div className="grid divide-y divide-zinc-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                      <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+                        <div className="grid divide-y divide-zinc-100 dark:divide-zinc-800 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                           <div className="p-4 sm:p-5">
-                            <label className="block text-xs font-medium text-zinc-500">Start</label>
+                            <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400">Start</label>
                             <input
                               type="time"
                               step={1}
-                              className="mt-2 w-full min-w-0 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-[15px] font-medium text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                              className="mt-2 w-full min-w-0 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-[15px] font-medium text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700"
                               value={attendanceRules.standardStartTime}
                               onChange={(e) => updateAttendanceField("standardStartTime", e.target.value)}
                             />
                           </div>
                           <div className="p-4 sm:p-5">
-                            <label className="block text-xs font-medium text-zinc-500">End</label>
+                            <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400">End</label>
                             <input
                               type="time"
                               step={1}
-                              className="mt-2 w-full min-w-0 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-[15px] font-medium text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                              className="mt-2 w-full min-w-0 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-[15px] font-medium text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700"
                               value={attendanceRules.standardEndTime}
                               onChange={(e) => updateAttendanceField("standardEndTime", e.target.value)}
                             />
                           </div>
                           <div className="p-4 sm:p-5">
-                            <label className="block text-xs font-medium text-zinc-500">Grace period</label>
+                            <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400">Grace period</label>
                             <div className="mt-2 flex items-center gap-2">
                               <input
                                 type="number"
                                 min={0}
-                                className="w-full min-w-0 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-[15px] font-medium tabular-nums text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                                className="w-full min-w-0 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-[15px] font-medium tabular-nums text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700"
                                 value={attendanceRules.gracePeriodMinutes}
                                 onChange={(e) => updateAttendanceField("gracePeriodMinutes", Number(e.target.value))}
                               />
@@ -1357,31 +1388,31 @@ export function OrganizationRulesPage() {
                           </div>
                         </div>
 
-                        <div className="border-t border-zinc-100 bg-zinc-50/40 px-4 py-4 sm:px-5">
+                        <div className="border-t border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/40 dark:bg-zinc-800/50 px-4 py-4 sm:px-5">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                             <label className="flex cursor-pointer items-start gap-3 sm:items-center">
                               <input
                                 type="checkbox"
-                                className="mt-0.5 h-[18px] w-[18px] shrink-0 rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-400/30 sm:mt-0"
+                                className="mt-0.5 h-[18px] w-[18px] shrink-0 rounded-md border-zinc-300 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-400/30 sm:mt-0"
                                 checked={Boolean(attendanceRules.monthlyGraceUsesEnabled)}
                                 onChange={(e) => updateAttendanceField("monthlyGraceUsesEnabled", e.target.checked)}
                               />
                               <span>
-                                <span className="block text-[15px] font-medium text-zinc-900">Monthly grace budget</span>
-                                <span className="mt-0.5 block text-xs leading-snug text-zinc-500">
+                                <span className="block text-[15px] font-medium text-zinc-900 dark:text-zinc-100">Monthly grace budget</span>
+                                <span className="mt-0.5 block text-xs leading-snug text-zinc-500 dark:text-zinc-400">
                                   Limit how many times per fiscal month an arrival can sit in the grace window without counting as late. Excused late days do not use a slot.
                                 </span>
                               </span>
                             </label>
                             <div className="flex flex-wrap items-center gap-3 sm:justify-end">
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-zinc-500">Max / month</span>
+                                <span className="text-xs text-zinc-500 dark:text-zinc-400">Max / month</span>
                                 <input
                                   type="number"
                                   min={0}
                                   max={31}
                                   disabled={!attendanceRules.monthlyGraceUsesEnabled}
-                                  className="w-14 rounded-xl border border-zinc-200 bg-white px-2.5 py-2 text-center text-sm font-semibold tabular-nums text-zinc-900 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200/80 disabled:cursor-not-allowed disabled:opacity-45"
+                                  className="w-14 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2.5 py-2 text-center text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700 disabled:cursor-not-allowed disabled:opacity-45"
                                   value={attendanceRules.monthlyGraceUsesAllowed ?? 0}
                                   onChange={(e) =>
                                     updateAttendanceField(
@@ -1394,7 +1425,7 @@ export function OrganizationRulesPage() {
                               <button
                                 type="button"
                                 onClick={() => setAttendanceRules((p) => ({ ...p, monthlyGraceUsesEnabled: false }))}
-                                className="text-sm font-medium text-zinc-500 transition hover:text-zinc-800"
+                                className="text-sm font-medium text-zinc-500 dark:text-zinc-400 transition hover:text-zinc-800 dark:hover:text-zinc-200"
                               >
                                 Turn off
                               </button>
@@ -1402,8 +1433,8 @@ export function OrganizationRulesPage() {
                           </div>
                         </div>
 
-                        <div className="border-t border-zinc-100 px-4 py-4 sm:px-5">
-                          <label className="block text-xs font-medium text-zinc-500">Working days per month</label>
+                        <div className="border-t border-zinc-100 dark:border-zinc-800/50 px-4 py-4 sm:px-5">
+                          <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400">Working days per month</label>
                           <p className="mt-1 max-w-prose text-xs leading-relaxed text-zinc-400">
                             One number for salary math: attendance deductions, payroll daily rate, and assessments. Synced with payroll policy.
                           </p>
@@ -1411,7 +1442,7 @@ export function OrganizationRulesPage() {
                             type="number"
                             min={1}
                             max={31}
-                            className="mt-3 w-24 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-[15px] font-semibold tabular-nums text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                            className="mt-3 w-24 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-[15px] font-semibold tabular-nums text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700"
                             value={attendanceRules.workingDaysPerMonth}
                             onChange={(e) => updateAttendanceField("workingDaysPerMonth", Number(e.target.value))}
                           />
@@ -1425,33 +1456,33 @@ export function OrganizationRulesPage() {
                         subtitleDir="rtl"
                       >
                         <div className="space-y-4">
-                          <p className="text-xs leading-relaxed text-zinc-600">
+                          <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
                             Workdays in the fiscal month (excluding weekly rest and holidays) count toward the budget when check-in is after shift start but still within the grace window. After the limit, late is measured from shift start and the former grace window can incur the first tier.
                           </p>
                           <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200/80">
-                              <p className="text-xs font-semibold text-zinc-900">Budget off</p>
-                              <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-zinc-600">
-                                <li>Example: Mon / Wed / Fri, check-in <strong className="text-zinc-800">09:07</strong>, shift <strong>09:00</strong>, grace <strong>10 min</strong>.</li>
+                            <div className="rounded-2xl bg-white dark:bg-zinc-900 p-4 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
+                              <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Budget off</p>
+                              <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                                <li>Example: Mon / Wed / Fri, check-in <strong className="text-zinc-800 dark:text-zinc-200">09:07</strong>, shift <strong>09:00</strong>, grace <strong>10 min</strong>.</li>
                                 <li>All three → <strong className="text-emerald-600">PRESENT</strong>; no tier deduction.</li>
                               </ul>
                             </div>
-                            <div className="rounded-2xl bg-white p-4 ring-1 ring-zinc-200/80">
-                              <p className="text-xs font-semibold text-zinc-900">Budget on (max 2 / month)</p>
-                              <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-zinc-600">
+                            <div className="rounded-2xl bg-white dark:bg-zinc-900 p-4 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
+                              <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Budget on (max 2 / month)</p>
+                              <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
                                 <li>
-                                  <strong className="text-zinc-800">Mon</strong> & <strong className="text-zinc-800">Wed</strong> →{" "}
+                                  <strong className="text-zinc-800 dark:text-zinc-200">Mon</strong> & <strong className="text-zinc-800 dark:text-zinc-200">Wed</strong> →{" "}
                                   <strong className="text-emerald-600">PRESENT</strong> (uses 1 &amp; 2).
                                 </li>
                                 <li>
-                                  <strong className="text-zinc-800">Fri</strong> → quota used →{" "}
+                                  <strong className="text-zinc-800 dark:text-zinc-200">Fri</strong> → quota used →{" "}
                                   <strong className="text-red-600/90">LATE</strong> from shift start (~7 min); tiers apply.
                                 </li>
                               </ul>
                             </div>
                           </div>
                           <MonthlyGraceDeductionPreview rules={attendanceRules} />
-                          <p className="text-xs leading-relaxed text-zinc-600" dir="rtl">
+                          <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400" dir="rtl">
                             ملخص: مع إيقاف الرصيد كل الأيام في المثال <strong>حاضر</strong>. مع حدّ <strong>مرتين</strong> اليوم الثالث يصبح <strong>متأخراً</strong> ويُخصم حسب الجدول.
                           </p>
                         </div>
@@ -1461,12 +1492,12 @@ export function OrganizationRulesPage() {
                     {/* —— Calendar —— */}
                     <section className="space-y-3">
                       <header className="px-0.5">
-                        <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Weekly rest</h3>
-                        <p className="mt-1 max-w-prose text-sm leading-snug text-zinc-500">
+                        <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Weekly rest</h3>
+                        <p className="mt-1 max-w-prose text-sm leading-snug text-zinc-500 dark:text-zinc-400">
                           Stored as UTC weekday (0 Sunday … 6 Saturday), same as attendance dates. Egypt: often Friday + Saturday. Clear all to count every calendar day in reports.
                         </p>
                       </header>
-                      <div className="flex flex-wrap gap-2 rounded-[20px] bg-white p-4 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-5">
+                      <div className="flex flex-wrap gap-2 rounded-[20px] bg-white dark:bg-zinc-900 p-4 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 sm:p-5">
                         {[
                           { dow: 0, label: "Sun" },
                           { dow: 1, label: "Mon" },
@@ -1485,7 +1516,7 @@ export function OrganizationRulesPage() {
                               className={`min-h-[44px] min-w-[44px] rounded-full px-4 text-sm font-medium transition ${
                                 selected
                                   ? "bg-zinc-900 text-white shadow-sm"
-                                  : "bg-zinc-100 text-zinc-600 ring-1 ring-zinc-200/80 hover:bg-zinc-200/80"
+                                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 ring-1 ring-zinc-200/80 dark:ring-zinc-700 hover:bg-zinc-200/80"
                               }`}
                             >
                               {label}
@@ -1501,8 +1532,8 @@ export function OrganizationRulesPage() {
                     {/* —— Late tiers —— */}
                     <section className="space-y-4">
                       <header className="px-0.5">
-                        <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Late arrival tiers</h3>
-                        <p className="mt-1 max-w-prose text-sm leading-snug text-zinc-500">
+                        <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Late arrival tiers</h3>
+                        <p className="mt-1 max-w-prose text-sm leading-snug text-zinc-500 dark:text-zinc-400">
                           Minutes after shift start; deduction is expressed in days of monthly pay. Tiers must be contiguous when saved.
                         </p>
                       </header>
@@ -1514,17 +1545,17 @@ export function OrganizationRulesPage() {
                         subtitleDir="rtl"
                       >
                         <div className="space-y-4">
-                          <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-200/80">
+                          <div className="overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
                             <table className="min-w-full text-left font-mono text-[11px] sm:text-xs">
                               <thead>
-                                <tr className="border-b border-zinc-100 bg-zinc-50/90">
-                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500">From</th>
-                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500">To</th>
-                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500">Deduction</th>
-                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500">Clock</th>
+                                <tr className="border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/90 dark:bg-zinc-800/50">
+                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500 dark:text-zinc-400">From</th>
+                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500 dark:text-zinc-400">To</th>
+                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500 dark:text-zinc-400">Deduction</th>
+                                  <th className="px-3 py-2.5 font-sans text-xs font-medium text-zinc-500 dark:text-zinc-400">Clock</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-zinc-100 text-zinc-700">
+                              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 text-zinc-700 dark:text-zinc-300">
                                 <tr>
                                   <td className="px-3 py-2.5">01:00</td>
                                   <td className="px-3 py-2.5">10:00</td>
@@ -1533,7 +1564,7 @@ export function OrganizationRulesPage() {
                                     <strong>09:01:01</strong> → <strong>09:10:00</strong>
                                   </td>
                                 </tr>
-                                <tr className="bg-zinc-50/50">
+                                <tr className="bg-zinc-50/50 dark:bg-zinc-800/50">
                                   <td className="px-3 py-2.5">10:00</td>
                                   <td className="px-3 py-2.5">30:00</td>
                                   <td className="px-3 py-2.5 font-sans">0.5 d</td>
@@ -1544,10 +1575,10 @@ export function OrganizationRulesPage() {
                               </tbody>
                             </table>
                           </div>
-                          <div className="rounded-2xl bg-zinc-100/60 px-4 py-3 text-xs leading-relaxed text-zinc-600">
-                            <strong className="text-zinc-800">Same 10:00 on two rows?</strong> Yes — tier 1 ends at second 600; tier 2 starts at second 601 (<code className="rounded bg-white/90 px-1 ring-1 ring-zinc-200/80">floor(from×60)+1</code>), so you do not need to type 10:01.
+                          <div className="rounded-2xl bg-zinc-100/60 dark:bg-zinc-800/80 px-4 py-3 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                            <strong className="text-zinc-800 dark:text-zinc-200">Same 10:00 on two rows?</strong> Yes — tier 1 ends at second 600; tier 2 starts at second 601 (<code className="rounded bg-white dark:bg-zinc-900/90 px-1 ring-1 ring-zinc-200/80 dark:ring-zinc-700">floor(from×60)+1</code>), so you do not need to type 10:01.
                           </div>
-                          <p className="text-xs leading-relaxed text-zinc-600" dir="rtl">
+                          <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400" dir="rtl">
                             الشريحة الثانية قد تبدأ بنفس «10:00» كقيمة من؛ السيرفر يحسب أول ثانية للشريحة الثانية تلقائياً.
                           </p>
                         </div>
@@ -1565,24 +1596,24 @@ export function OrganizationRulesPage() {
                       </div>
 
                       {attendanceRules.lateDeductionTiers.length === 0 ? (
-                        <div className="rounded-[20px] border border-dashed border-zinc-200 bg-zinc-50/30 px-4 py-10 text-center">
-                          <p className="text-sm font-medium text-zinc-600">No late tiers</p>
+                        <div className="rounded-[20px] border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-800/50 px-4 py-10 text-center">
+                          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">No late tiers</p>
                           <p className="mx-auto mt-1 max-w-sm text-xs text-zinc-400">Late arrivals will not reduce pay until you add at least one tier.</p>
                         </div>
                       ) : (
-                        <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
-                          <table className="min-w-full divide-y divide-zinc-100 text-sm">
+                        <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+                          <table className="min-w-full divide-y divide-zinc-100 dark:divide-zinc-800 text-sm">
                             <thead>
-                              <tr className="bg-zinc-50/80 text-left text-xs font-medium text-zinc-500">
+                              <tr className="bg-zinc-50/80 dark:bg-zinc-800/50 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">
                                 <th className="whitespace-nowrap px-4 py-3">From (mm:ss)</th>
                                 <th className="whitespace-nowrap px-4 py-3">To (mm:ss)</th>
                                 <th className="whitespace-nowrap px-4 py-3">Days deducted</th>
                                 <th className="w-12 px-2 py-3" />
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-zinc-100">
+                            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                               {attendanceRules.lateDeductionTiers.map((tier, idx) => (
-                                <tr key={idx} className="transition hover:bg-zinc-50/60">
+                                <tr key={idx} className="transition hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50">
                                   <td className="px-4 py-3 align-middle">
                                     <LateTierMmSsInput
                                       valueMinutes={tier.fromMinutes}
@@ -1628,8 +1659,8 @@ export function OrganizationRulesPage() {
 
                   <section className="space-y-4">
                     <header className="px-0.5">
-                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">Other attendance deductions</h3>
-                      <p className="mt-1 max-w-prose text-sm leading-relaxed text-zinc-500">
+                      <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Other attendance deductions</h3>
+                      <p className="mt-1 max-w-prose text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
                         Fixed day amounts per event type (separate from late tiers above).
                       </p>
                     </header>
@@ -1671,7 +1702,7 @@ export function OrganizationRulesPage() {
               {activeTab === "salary" && (<>
                 <SectionShell
                   icon={Percent}
-                  iconColor="text-zinc-700"
+                  iconColor="text-zinc-700 dark:text-zinc-300"
                   title="Annual salary increases"
                   description="Default and overrides for processing increases. Department and employee rules take precedence over the global default."
                   actions={
@@ -1683,19 +1714,19 @@ export function OrganizationRulesPage() {
                   {salaryIncreaseRules.length === 0 ? (
                     <EmptyState icon={Percent} title="No salary rules" description="Start with one 'Global default' percentage, then add department overrides." actionLabel="Add a rule" onAction={addSalaryRule} />
                   ) : (
-                    <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
-                      <table className="min-w-full divide-y divide-zinc-100 text-sm">
+                    <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+                      <table className="min-w-full divide-y divide-zinc-100 dark:divide-zinc-800 text-sm">
                         <thead>
-                          <tr className="bg-zinc-50/80 text-left text-xs font-medium text-zinc-500">
+                          <tr className="bg-zinc-50/80 dark:bg-zinc-800/50 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">
                             <th className="whitespace-nowrap px-4 py-3">Type</th>
                             <th className="whitespace-nowrap px-4 py-3">Applies to</th>
                             <th className="whitespace-nowrap px-4 py-3 text-right">Rate</th>
                             <th className="w-10 px-2 py-3" />
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-zinc-100">
+                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                           {salaryIncreaseRules.map((rule, idx) => (
-                            <tr key={idx} className="align-top transition hover:bg-zinc-50/60">
+                            <tr key={idx} className="align-top transition hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50">
                               <td className="px-4 py-3">
                                 <div className="flex flex-wrap items-center gap-2">
                                   {ruleBadge(rule.type)}
@@ -1708,7 +1739,7 @@ export function OrganizationRulesPage() {
                               </td>
                               <td className="px-4 py-3">
                                 {rule.type === "DEFAULT" ? (
-                                  <span className="inline-flex items-center gap-1.5 text-zinc-600"><Building2 className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden /> All departments (fallback)</span>
+                                  <span className="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400"><Building2 className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden /> All departments (fallback)</span>
                                 ) : rule.type === "DEPARTMENT" ? (
                                   <div className="flex items-start gap-2">
                                     <Building2 className="mt-1 h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden />
@@ -1734,7 +1765,7 @@ export function OrganizationRulesPage() {
                           ))}
                         </tbody>
                       </table>
-                      <p className="border-t border-zinc-100 bg-zinc-50/50 px-4 py-3 text-xs leading-relaxed text-zinc-500">
+                      <p className="border-t border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/50 px-4 py-3 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
                         Rows without a target (non-default) are excluded when you save.
                       </p>
                     </div>
@@ -1744,28 +1775,28 @@ export function OrganizationRulesPage() {
                 <div className="mt-10">
                   <SectionShell
                     icon={Gift}
-                    iconColor="text-zinc-700"
+                    iconColor="text-zinc-700 dark:text-zinc-300"
                     title="Assessment payroll rules"
                     description="Configure how assessment bonuses and overtime translate to monetary amounts in the monthly payroll report. Bonus days and overtime are multiplied by the employee's daily gross rate."
                   >
                     <div className="space-y-4">
-                      <div className="overflow-hidden divide-y divide-zinc-100 rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+                      <div className="overflow-hidden divide-y divide-zinc-100 dark:divide-zinc-800 rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
                         <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                           <div className="min-w-0">
                             <label className="flex cursor-pointer items-center gap-3">
                               <input
                                 type="checkbox"
-                                className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-400/30"
+                                className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-400/30"
                                 checked={assessmentPayrollRules.bonusDaysEnabled}
                                 onChange={(e) => setAssessmentPayrollRules((p) => ({ ...p, bonusDaysEnabled: e.target.checked }))}
                               />
-                              <span className="text-[15px] font-semibold tracking-tight text-zinc-900">Bonus days</span>
+                              <span className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Bonus days</span>
                             </label>
-                            <p className="mt-1 pl-9 text-xs leading-relaxed text-zinc-500">Days in assessment × multiplier × daily gross rate</p>
+                            <p className="mt-1 pl-9 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">Days in assessment × multiplier × daily gross rate</p>
                           </div>
                           {assessmentPayrollRules.bonusDaysEnabled && (
                             <div className="flex flex-wrap items-center gap-2 pl-9 sm:pl-0">
-                              <span className="text-xs font-medium text-zinc-500">Multiplier</span>
+                              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Multiplier</span>
                               <input
                                 type="number"
                                 min={0}
@@ -1784,17 +1815,17 @@ export function OrganizationRulesPage() {
                             <label className="flex cursor-pointer items-center gap-3">
                               <input
                                 type="checkbox"
-                                className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-400/30"
+                                className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-400/30"
                                 checked={assessmentPayrollRules.overtimeEnabled}
                                 onChange={(e) => setAssessmentPayrollRules((p) => ({ ...p, overtimeEnabled: e.target.checked }))}
                               />
-                              <span className="text-[15px] font-semibold tracking-tight text-zinc-900">Overtime hours</span>
+                              <span className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Overtime hours</span>
                             </label>
-                            <p className="mt-1 pl-9 text-xs leading-relaxed text-zinc-500">Hours in assessment × multiplier × daily gross rate</p>
+                            <p className="mt-1 pl-9 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">Hours in assessment × multiplier × daily gross rate</p>
                           </div>
                           {assessmentPayrollRules.overtimeEnabled && (
                             <div className="flex flex-wrap items-center gap-2 pl-9 sm:pl-0">
-                              <span className="text-xs font-medium text-zinc-500">Multiplier</span>
+                              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Multiplier</span>
                               <input
                                 type="number"
                                 min={0}
@@ -1813,17 +1844,17 @@ export function OrganizationRulesPage() {
                             <label className="flex cursor-pointer items-center gap-3">
                               <input
                                 type="checkbox"
-                                className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-400/30"
+                                className="h-[18px] w-[18px] rounded-md border-zinc-300 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-400/30"
                                 checked={assessmentPayrollRules.deductionEnabled}
                                 onChange={(e) => setAssessmentPayrollRules((p) => ({ ...p, deductionEnabled: e.target.checked }))}
                               />
-                              <span className="text-[15px] font-semibold tracking-tight text-zinc-900">Deduction (EGP)</span>
+                              <span className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Deduction (EGP)</span>
                             </label>
-                            <p className="mt-1 pl-9 text-xs leading-relaxed text-zinc-500">Fixed EGP in assessment × multiplier (no daily rate)</p>
+                            <p className="mt-1 pl-9 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">Fixed EGP in assessment × multiplier (no daily rate)</p>
                           </div>
                           {assessmentPayrollRules.deductionEnabled && (
                             <div className="flex flex-wrap items-center gap-2 pl-9 sm:pl-0">
-                              <span className="text-xs font-medium text-zinc-500">Multiplier</span>
+                              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Multiplier</span>
                               <input
                                 type="number"
                                 min={0}
@@ -1838,8 +1869,8 @@ export function OrganizationRulesPage() {
                         </div>
                       </div>
 
-                      <div className="rounded-2xl bg-zinc-100/60 px-4 py-3 text-xs leading-relaxed text-zinc-600">
-                        <strong className="text-zinc-800">Formulas:</strong>{" "}
+                      <div className="rounded-2xl bg-zinc-100/60 dark:bg-zinc-800/80 px-4 py-3 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                        <strong className="text-zinc-800 dark:text-zinc-200">Formulas:</strong>{" "}
                         Bonus = days × multiplier × daily gross rate. Overtime = hours × multiplier × daily gross rate. Deduction = EGP × multiplier. Net = bonus + overtime − deduction. Only HR-approved assessments count.
                       </div>
                     </div>
@@ -1851,12 +1882,12 @@ export function OrganizationRulesPage() {
               {activeTab === "payroll" && (
                 <SectionShell
                   icon={Gift}
-                  iconColor="text-zinc-700"
+                  iconColor="text-zinc-700 dark:text-zinc-300"
                   title="Payroll computation settings"
                   description="Egyptian labor law defaults (2026). Tax brackets, social insurance rates, overtime multiplier, and personal exemption. These values drive the payroll engine."
                 >
                   <div className="space-y-8">
-                    <div className="overflow-hidden rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-6">
+                    <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 sm:p-6">
                     <FieldGroup
                       label="Amount decimal places (payroll rounding)"
                       hint="HR sets how all EGP amounts are rounded in payroll (0 = whole pounds, 2 = fils to two decimals). Applies to compute, lines, and totals."
@@ -1882,7 +1913,7 @@ export function OrganizationRulesPage() {
                           min={1}
                           max={31}
                           readOnly
-                          className={`${NUM_CLS} cursor-not-allowed bg-zinc-50 text-zinc-700`}
+                          className={`${NUM_CLS} cursor-not-allowed bg-zinc-50 dark:bg-zinc-800/50 text-zinc-700 dark:text-zinc-300`}
                           value={attendanceRules.workingDaysPerMonth}
                           aria-readonly
                         />
@@ -1899,8 +1930,8 @@ export function OrganizationRulesPage() {
                     </div>
                     </div>
 
-                    <div className="overflow-hidden rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-6">
-                      <p className="mb-4 text-[13px] font-semibold tracking-tight text-zinc-900">Social insurance</p>
+                    <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 sm:p-6">
+                      <p className="mb-4 text-[13px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Social insurance</p>
                       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                         <FieldGroup label="Employee share">
                           <div className="flex items-center gap-1">
@@ -1929,9 +1960,9 @@ export function OrganizationRulesPage() {
                       </FieldGroup>
                     </div>
 
-                    <div className="overflow-hidden rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:p-6">
+                    <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 sm:p-6">
                       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-[13px] font-semibold tracking-tight text-zinc-900">Tax brackets (annual EGP)</p>
+                        <p className="text-[13px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Tax brackets (annual EGP)</p>
                         <button
                           type="button"
                           onClick={() => {
@@ -1946,16 +1977,16 @@ export function OrganizationRulesPage() {
                         </button>
                       </div>
                       <div className="overflow-hidden rounded-xl ring-1 ring-zinc-100">
-                        <table className="min-w-full divide-y divide-zinc-100 text-xs">
+                        <table className="min-w-full divide-y divide-zinc-100 dark:divide-zinc-800 text-xs">
                           <thead>
-                            <tr className="bg-zinc-50/80 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                            <tr className="bg-zinc-50/80 dark:bg-zinc-800/50 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                               <th className="px-3 py-2">From (EGP)</th>
                               <th className="px-3 py-2">To (EGP)</th>
                               <th className="px-3 py-2">Rate</th>
                               <th className="w-10 px-2 py-2" />
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-zinc-50 bg-white">
+                          <tbody className="divide-y divide-zinc-50 bg-white dark:bg-zinc-900">
                             {(payrollConfig.taxBrackets || []).map((b, idx) => (
                               <tr key={idx}>
                                 <td className="px-3 py-2">
@@ -2007,10 +2038,10 @@ export function OrganizationRulesPage() {
 
       {/* Sticky save bar */}
       {!loading && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white/95 backdrop-blur-md shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-md shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
             <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-3 text-xs text-zinc-500">
+              <div className="hidden sm:flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
                 <span>{stats.filledDocs} doc{stats.filledDocs !== 1 ? "s" : ""}</span>
                 <span className="text-zinc-300">·</span>
                 <span>{stats.filledLocs} location{stats.filledLocs !== 1 ? "s" : ""}</span>
@@ -2038,12 +2069,12 @@ export function OrganizationRulesPage() {
 
 function EmptyState({ icon: Icon, title, description, actionLabel, onAction }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-[20px] border border-dashed border-zinc-200 bg-zinc-50/40 py-16 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+    <div className="flex flex-col items-center justify-center rounded-[20px] border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-800/50 py-16 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-200/80 dark:ring-zinc-700">
         <Icon className="h-7 w-7 text-zinc-300" aria-hidden />
       </div>
-      <p className="mt-4 text-[15px] font-semibold tracking-tight text-zinc-900">{title}</p>
-      <p className="mt-1.5 max-w-sm px-4 text-sm leading-relaxed text-zinc-500">{description}</p>
+      <p className="mt-4 text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{title}</p>
+      <p className="mt-1.5 max-w-sm px-4 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</p>
       <button type="button" onClick={onAction} className="mt-6 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] motion-reduce:active:scale-100">
         {actionLabel}
       </button>
@@ -2055,12 +2086,12 @@ function DeductionCard({ label, description, value, onChange, color = "zinc" }) 
   const dotColors = { red: "bg-red-500", amber: "bg-amber-500", zinc: "bg-zinc-400", orange: "bg-orange-500" };
   const dot = dotColors[color] || dotColors.zinc;
   return (
-    <div className="space-y-3 rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
+    <div className="space-y-3 rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
       <div className="flex items-center gap-2">
         <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} aria-hidden />
-        <span className="text-[13px] font-semibold tracking-tight text-zinc-900">{label}</span>
+        <span className="text-[13px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{label}</span>
       </div>
-      <p className="text-xs leading-relaxed text-zinc-500">{description}</p>
+      <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</p>
       <div className="flex items-center gap-2">
         <input type="number" min={0} step={0.25} className={`${NUM_CLS} w-full max-w-[6.5rem] font-semibold`} value={value} onChange={(e) => onChange(Number(e.target.value))} />
         <span className="text-xs text-zinc-400">days</span>

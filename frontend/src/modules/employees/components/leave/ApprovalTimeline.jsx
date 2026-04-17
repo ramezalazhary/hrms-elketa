@@ -7,10 +7,10 @@ export function ApprovalTimeline({ approvals = [] }) {
       {approvals.map((step, idx) => (
         <div key={`${step.role}-${idx}`} className="flex items-center gap-2">
           {idx > 0 ? <span className="text-zinc-300">→</span> : null}
-          <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-zinc-700">
+          <span className="rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-2 py-1 text-zinc-700 dark:text-zinc-300">
             {step.role === "MANAGEMENT" ? "Mgmt" : step.role} · {step.status}
           </span>
-          {step.processedBy ? <span className="text-zinc-500">{step.processedBy}</span> : null}
+          {step.processedBy ? <span className="text-zinc-500 dark:text-zinc-400">{step.processedBy}</span> : null}
         </div>
       ))}
     </div>
@@ -23,7 +23,7 @@ export function AuditTimeline({ logs, loading, open, onToggle }) {
       <button
         type="button"
         onClick={onToggle}
-        className="inline-flex items-center gap-1 text-xs font-medium text-zinc-700 hover:underline"
+        className="inline-flex items-center gap-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:underline"
       >
         <History className="h-3 w-3" />
         {loading ? "Loading..." : open ? "Hide audit trail" : "View audit trail"}
@@ -32,8 +32,8 @@ export function AuditTimeline({ logs, loading, open, onToggle }) {
         <div className="mt-2 space-y-1">
           {!logs?.length ? <p className="text-xs text-zinc-400">No history entries.</p> : null}
           {(logs || []).map((log, index) => (
-            <div key={index} className="rounded-md border border-zinc-100 bg-zinc-50 px-2 py-1 text-xs text-zinc-600">
-              <span className="font-semibold text-zinc-800">{log.operation}</span>
+            <div key={index} className="rounded-md border border-zinc-100 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-800/50 px-2 py-1 text-xs text-zinc-600 dark:text-zinc-400">
+              <span className="font-semibold text-zinc-800 dark:text-zinc-200">{log.operation}</span>
               {" by "}
               <span className="font-medium">{log.performedBy}</span>
               {log.newValues?.comment ? ` — "${log.newValues.comment}"` : ""}

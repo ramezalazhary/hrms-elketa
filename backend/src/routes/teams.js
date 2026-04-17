@@ -168,24 +168,8 @@ router.post(
 
       await newTeam.save();
 
-      // Also update the nested team in Department.teams for dual-location consistency
-      await Department.updateOne(
-        { _id: departmentId },
-        {
-          $push: {
-            teams: {
-              name: newTeam.name,
-              leaderEmail: leaderEmail || "",
-              leaderTitle: leaderTitle || "Team Leader",
-              leaderResponsibility: leaderResponsibility || "",
-              description: description || "",
-              positions: positions || [],
-              members: members || [],
-              status: status || "ACTIVE",
-            },
-          },
-        },
-      );
+      // FROZEN: legacy dual-write to Department.teams[] removed.
+      // Team collection (standalone) is the single source of truth.
 
       await Team.populate(newTeam, { path: "departmentId", select: "name" });
 
@@ -310,23 +294,8 @@ router.put(
 
       await team.save();
 
-      // Also update the nested team in Department.teams for dual-location consistency
-      // Use OLD name to find the embedded team (it hasn't been renamed there yet)
-      await Department.updateOne(
-        { _id: team.departmentId, "teams.name": oldTeamName },
-        {
-          $set: {
-            "teams.$.name": team.name,
-            "teams.$.leaderEmail": team.leaderEmail || "",
-            "teams.$.leaderTitle": team.leaderTitle || "Team Leader",
-            "teams.$.leaderResponsibility": team.leaderResponsibility || "",
-            "teams.$.description": team.description || "",
-            "teams.$.positions": team.positions || [],
-            "teams.$.members": team.members || [],
-            "teams.$.status": team.status || "ACTIVE",
-          },
-        },
-      );
+      // FROZEN: legacy dual-write to Department.teams[] removed.
+      // Team collection (standalone) is the single source of truth.
 
       // If team was renamed, cascade to Employee.team (string field)
       if (team.name !== oldTeamName) {
@@ -394,11 +363,8 @@ router.delete(
 
       await Team.findByIdAndDelete(team._id);
 
-      // Also remove the nested team from Department.teams for dual-location consistency
-      await Department.updateOne(
-        { _id: team.departmentId },
-        { $pull: { teams: { name: team.name } } },
-      );
+      // FROZEN: legacy dual-write to Department.teams[] removed.
+      // Team collection (standalone) is the single source of truth.
 
       res.json({
         message: "Team deleted successfully",

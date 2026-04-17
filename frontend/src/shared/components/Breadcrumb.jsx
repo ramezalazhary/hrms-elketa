@@ -52,15 +52,15 @@ export function Breadcrumb({
             )}
 
             {item.isCurrent ? (
-              <span className="text-zinc-900 font-medium" aria-current="page">
+              <span className="text-zinc-900 dark:text-zinc-100 font-medium" aria-current="page">
                 {item.label}
               </span>
             ) : (
               <Link
                 to={item.href}
                 className={cn(
-                  "flex items-center hover:text-zinc-700 transition-colors",
-                  index === 0 ? "text-zinc-500" : "text-zinc-600",
+                  "flex items-center hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors",
+                  index === 0 ? "text-zinc-500 dark:text-zinc-400" : "text-zinc-600 dark:text-zinc-400",
                 )}
               >
                 {index === 0 && <Home className="w-4 h-4 mr-1" />}
@@ -97,15 +97,15 @@ export function PageHeader({
   return (
     <div className={cn("mb-6 space-y-4", className)}>
       {breadcrumb && (
-        <Breadcrumb items={breadcrumb} className="text-zinc-600" />
+        <Breadcrumb items={breadcrumb} className="text-zinc-600 dark:text-zinc-400" />
       )}
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 tracking-tight">
+          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">
             {title}
           </h1>
-          {subtitle && <p className="mt-1 text-sm text-zinc-600">{subtitle}</p>}
+          {subtitle && <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{subtitle}</p>}
         </div>
 
         {actions && <div className="flex items-center gap-3">{actions}</div>}

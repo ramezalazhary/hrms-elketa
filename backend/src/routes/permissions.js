@@ -429,6 +429,11 @@ router.put(
     try {
       const employee = await Employee.findById(req.params.userId);
       if (!employee) return res.status(404).json({ error: "User not found" });
+      if (!(await isHrDepartmentMember({ email: employee.email, id: employee._id }))) {
+        return res.status(400).json({
+          error: "Target user must belong to HR department",
+        });
+      }
       const role = normalizeRole(employee.role);
       if (role !== "HR" && role !== "HR_STAFF" && role !== "HR_MANAGER") {
         return res.status(400).json({ error: "Target user is not in HR role" });

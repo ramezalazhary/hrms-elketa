@@ -62,6 +62,23 @@ const PayrollRecordSchema = new Schema(
     assessmentDeductionEgp: { type: Number, default: 0 },
     assessmentDeductionAmount: { type: Number, default: 0 },
     assessmentCount: { type: Number, default: 0 },
+    
+    // Snapshot of the specific assessments included in this computation
+    assessmentSnapshotList: [{
+      assessmentId: { type: Schema.Types.ObjectId },
+      sourceModel: { type: String }, // "PerformanceReview" or "Assessment"
+      evaluatorId: { type: Schema.Types.ObjectId, ref: "Employee" },
+      period: {
+        year: { type: Number },
+        month: { type: Number },
+      },
+      daysBonus: { type: Number, default: 0 },
+      overtime: { type: Number, default: 0 },
+      deduction: { type: Number, default: 0 },
+      deductionType: { type: String, enum: ["DAYS", "AMOUNT"], default: "AMOUNT" },
+      bonusStatus: { type: String },
+      snapshotAt: { type: Date, default: Date.now },
+    }],
 
     totalAdditions: { type: Number, default: 0 },
 

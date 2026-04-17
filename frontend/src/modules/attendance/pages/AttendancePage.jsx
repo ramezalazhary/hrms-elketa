@@ -395,15 +395,15 @@ export function AttendancePage() {
   };
 
   const STATUS_COLORS = {
-    PRESENT: "bg-zinc-100 text-zinc-800",
+    PRESENT: "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200",
     LATE: "bg-amber-50 text-amber-800",
     ABSENT: "bg-red-50 text-red-800",
-    ON_LEAVE: "bg-zinc-50 text-zinc-700 ring-1 ring-zinc-200/80",
-    EXCUSED: "bg-zinc-100 text-zinc-700",
+    ON_LEAVE: "bg-zinc-50 dark:bg-zinc-800/50 text-zinc-700 dark:text-zinc-300 ring-1 ring-zinc-200/80 dark:ring-zinc-700",
+    EXCUSED: "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300",
     PARTIAL_EXCUSED: "bg-violet-50 text-violet-800",
     EARLY_DEPARTURE: "bg-orange-50 text-orange-800",
     INCOMPLETE: "bg-yellow-50 text-yellow-800",
-    HOLIDAY: "bg-zinc-100 text-zinc-800",
+    HOLIDAY: "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200",
   };
 
   return (
@@ -426,14 +426,14 @@ export function AttendancePage() {
             </button>
             <button
                onClick={handleDownloadTemplate}
-               className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+               className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-800 dark:text-zinc-200 shadow-sm transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
              >
                <Download size={16} />
                Download Template
              </button>
              <label className="relative cursor-pointer">
                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} disabled={isImporting} />
-               <div className={`inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 ${isImporting ? "pointer-events-none opacity-50" : ""}`}>
+               <div className={`inline-flex items-center gap-2 rounded-full border border-zinc-200/90 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-800 dark:text-zinc-200 shadow-sm transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${isImporting ? "pointer-events-none opacity-50" : ""}`}>
                  <FileUp size={16} />
                  {isImporting ? "Importing..." : "Import Excel"}
                </div>
@@ -443,11 +443,11 @@ export function AttendancePage() {
       }
     >
       {/* Tab bar — segmented */}
-      <div className="mb-8 inline-flex w-full max-w-md gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 sm:w-auto">
+      <div className="mb-8 inline-flex w-full max-w-md gap-0.5 rounded-2xl bg-zinc-100/90 dark:bg-zinc-800/80 p-1 ring-1 ring-zinc-200/80 dark:ring-zinc-700 sm:w-auto">
         <button
           type="button"
           onClick={() => setActiveTab("daily")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${activeTab === "daily" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${activeTab === "daily" ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"}`}
         >
           <CalendarRange size={16} />
           Daily Records
@@ -456,7 +456,7 @@ export function AttendancePage() {
           <button
             type="button"
             onClick={() => setActiveTab("monthly")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${activeTab === "monthly" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${activeTab === "monthly" ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"}`}
           >
             <BarChart3 size={16} />
             Monthly Report
@@ -471,26 +471,26 @@ export function AttendancePage() {
         </div>
       )}
 
-      <div className="mb-6 flex flex-col gap-4 rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <div className="mb-6 flex flex-col gap-4 rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 ring-1 ring-zinc-200/80 text-zinc-700">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800 ring-1 ring-zinc-200/80 dark:ring-zinc-700 text-zinc-700 dark:text-zinc-300">
             <CalendarRange className="h-5 w-5" strokeWidth={1.75} />
           </div>
           <div>
-            <p className="text-[15px] font-semibold tracking-tight text-zinc-900">Records in view</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
-              <span className="mr-2 rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 font-semibold text-zinc-700">
+            <p className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Records in view</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+              <span className="mr-2 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-2 py-0.5 font-semibold text-zinc-700 dark:text-zinc-300">
                 {getAccessLevelLabel(attendanceAccessLevel)}
               </span>
-              <span className="font-semibold text-zinc-900">{items.length}</span> row{items.length === 1 ? "" : "s"}{" "}
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">{items.length}</span> row{items.length === 1 ? "" : "s"}{" "}
               · {startDate} → {endDate}
               {canManageAttendanceActions && employeeCode.trim() ? (
-                <span className="text-zinc-700"> · code contains “{employeeCode.trim()}”</span>
+                <span className="text-zinc-700 dark:text-zinc-300"> · code contains “{employeeCode.trim()}”</span>
               ) : null}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs leading-relaxed text-zinc-500">
+        <div className="flex items-center gap-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
           <Clock className="h-4 w-4 shrink-0 text-zinc-400" />
           Times are stored as 24h on the server; this table shows the saved values.
         </div>
@@ -541,10 +541,10 @@ export function AttendancePage() {
       )}
 
       {canManageAttendanceActions && (
-        <div className="mb-6 flex items-start gap-3 rounded-2xl bg-zinc-100/70 p-4 ring-1 ring-zinc-200/80">
+        <div className="mb-6 flex items-start gap-3 rounded-2xl bg-zinc-100/70 dark:bg-zinc-800/80 p-4 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
           <Info size={18} className="mt-0.5 shrink-0 text-zinc-400" />
-          <div className="text-xs font-medium leading-relaxed text-zinc-600">
-            <p className="mb-1 font-semibold text-zinc-900">Import & template</p>
+          <div className="text-xs font-medium leading-relaxed text-zinc-600 dark:text-zinc-400">
+            <p className="mb-1 font-semibold text-zinc-900 dark:text-zinc-100">Import & template</p>
             <p>
               Excel columns (flexible names):{" "}
               <strong>Employee Code</strong>, <strong>Date</strong>, <strong>Check In</strong>, <strong>Check Out</strong>.
@@ -555,21 +555,21 @@ export function AttendancePage() {
       )}
 
       {/* Search & filters */}
-      <div className="mb-6 grid grid-cols-1 gap-5 rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] md:grid-cols-2 lg:grid-cols-4 sm:p-6">
+      <div className="mb-6 grid grid-cols-1 gap-5 rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 md:grid-cols-2 lg:grid-cols-4 sm:p-6">
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-zinc-500">Start date</label>
+          <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Start date</label>
           <input 
             type="date" 
-            className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" 
+            className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700" 
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-zinc-500">Until date</label>
+          <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Until date</label>
           <input 
             type="date" 
-            className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" 
+            className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700" 
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
           />
@@ -577,7 +577,7 @@ export function AttendancePage() {
 
         {canManageAttendanceActions && (
           <div className="flex flex-col gap-1.5 flex-1">
-             <label className="text-xs font-medium text-zinc-500">Search employee code</label>
+             <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Search employee code</label>
              <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                 <input 
@@ -585,7 +585,7 @@ export function AttendancePage() {
                   placeholder="e.g. #IT-001"
                   value={employeeCode}
                   onChange={(e) => setEmployeeCode(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 py-2.5 pl-10 pr-3 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" 
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 py-2.5 pl-10 pr-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700" 
                 />
              </div>
           </div>
@@ -593,16 +593,16 @@ export function AttendancePage() {
 
         {canManageAttendanceActions && (
           <div className="flex items-center justify-end lg:items-end">
-            <div className="flex h-full w-full items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-4 py-3 lg:w-auto">
+            <div className="flex h-full w-full items-center gap-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-800/50 px-4 py-3 lg:w-auto">
               <div className="flex items-center gap-2">
                  <ShieldCheck size={16} className={isOverwriteEnabled ? "text-amber-600" : "text-zinc-400"} />
-                 <span className="text-xs font-bold text-zinc-700">Overwrite</span>
+                 <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Overwrite</span>
               </div>
               <button 
                 onClick={() => setIsOverwriteEnabled(!isOverwriteEnabled)}
                 className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isOverwriteEnabled ? 'bg-amber-500' : 'bg-zinc-200'}`}
               >
-                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isOverwriteEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white dark:bg-zinc-900 shadow ring-0 transition duration-200 ease-in-out ${isOverwriteEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
               </button>
             </div>
           </div>
@@ -610,7 +610,7 @@ export function AttendancePage() {
       </div>
 
       <DataTable
-        className="overflow-hidden rounded-[24px] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-zinc-950/[0.04] backdrop-blur"
+        className="overflow-hidden rounded-[24px] border border-zinc-200/70 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/95 shadow-sm ring-1 ring-zinc-950/[0.04] backdrop-blur"
         onRowClick={(row) => {
           const rowId = row?._id;
           if (!rowId) return;
@@ -627,11 +627,11 @@ export function AttendancePage() {
           const leaveLoading = leaveRefId && linkedLeaveLoadingId === leaveRefId;
           return (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2">
+            <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Date</p>
-              <p className="mt-1 text-xs font-semibold text-zinc-900">{formatAttendanceDate(row.date)}</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100">{formatAttendanceDate(row.date)}</p>
             </div>
-            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2">
+            <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Attendance status</p>
               <div className="mt-1 flex items-center gap-2">
                 <StatusBadge status={row.status} />
@@ -647,50 +647,50 @@ export function AttendancePage() {
                 </p>
               )}
             </div>
-            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2">
+            <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Check window</p>
-              <p className="mt-1 text-xs font-semibold text-zinc-900 tabular-nums">
+              <p className="mt-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">
                 {row.checkIn || "—"} → {row.checkOut || "—"}
               </p>
             </div>
-            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2">
+            <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Total hours</p>
-              <p className="mt-1 text-xs font-semibold text-zinc-900 tabular-nums">{formatTotalHours(row.totalHours)}</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{formatTotalHours(row.totalHours)}</p>
             </div>
-            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2">
+            <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Punch check</p>
               <div className="mt-1"><PunchIssueBadge issue={getAttendancePunchIssue(row)} /></div>
             </div>
-            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 sm:col-span-2">
+            <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-2 sm:col-span-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Employee</p>
-              <p className="mt-1 text-xs font-semibold text-zinc-900">
+              <p className="mt-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
                 {getAttendanceEmployee(row)?.fullName || row.employeeCode || "—"}
               </p>
             </div>
-            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 sm:col-span-2">
+            <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-2 sm:col-span-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Employee code</p>
-              <p className="mt-1 text-xs font-semibold text-zinc-900">{row.employeeCode || "—"}</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100">{row.employeeCode || "—"}</p>
             </div>
-            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 sm:col-span-2">
+            <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-2 sm:col-span-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Notes</p>
-              <p className="mt-1 text-xs text-zinc-700">{row.remarks || "No additional notes."}</p>
+              <p className="mt-1 text-xs text-zinc-700 dark:text-zinc-300">{row.remarks || "No additional notes."}</p>
             </div>
-            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 sm:col-span-2">
+            <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-2 sm:col-span-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Created</p>
-              <p className="mt-1 text-xs text-zinc-700">{formatWorkDateTime(row.createdAt)}</p>
+              <p className="mt-1 text-xs text-zinc-700 dark:text-zinc-300">{formatWorkDateTime(row.createdAt)}</p>
             </div>
-            <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-2 sm:col-span-2">
+            <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-2 sm:col-span-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Last update</p>
-              <p className="mt-1 text-xs text-zinc-700">{formatWorkDateTime(row.updatedAt)}</p>
+              <p className="mt-1 text-xs text-zinc-700 dark:text-zinc-300">{formatWorkDateTime(row.updatedAt)}</p>
             </div>
             {canManageAttendanceActions && (
-              <div className="rounded-xl border border-zinc-200/80 bg-white px-3 py-3 sm:col-span-2 lg:col-span-4">
+              <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-3 sm:col-span-2 lg:col-span-4">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Row actions</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => handleEditClick(row)}
-                    className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                    className="inline-flex items-center gap-1 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                   >
                     <Edit2 size={12} />
                     Edit
@@ -699,7 +699,7 @@ export function AttendancePage() {
                     <button
                       type="button"
                       onClick={() => setDeleteId(row._id)}
-                      className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                      className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50"
                     >
                       <Trash2 size={12} />
                       Delete
@@ -714,14 +714,14 @@ export function AttendancePage() {
                 {leaveLoading ? (
                   <p className="mt-1 text-xs text-violet-700">Loading leave approval details...</p>
                 ) : linkedLeave ? (
-                  <div className="mt-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs text-zinc-700">
-                    <p><span className="font-semibold text-zinc-900">Type:</span> {linkedLeave.kind === "EXCUSE" ? "Excuse" : (linkedLeave.leaveType || linkedLeave.kind || "Leave")}</p>
-                    <p><span className="font-semibold text-zinc-900">Request status:</span> {linkedLeave.status || "—"}</p>
-                    <p><span className="font-semibold text-zinc-900">Payment:</span> {linkedLeave.effectivePaymentType || "—"}</p>
-                    <p><span className="font-semibold text-zinc-900">Source:</span> {row?.excuseLeaveRequestId ? "Excuse coverage" : "Vacation approval"}</p>
+                  <div className="mt-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs text-zinc-700 dark:text-zinc-300">
+                    <p><span className="font-semibold text-zinc-900 dark:text-zinc-100">Type:</span> {linkedLeave.kind === "EXCUSE" ? "Excuse" : (linkedLeave.leaveType || linkedLeave.kind || "Leave")}</p>
+                    <p><span className="font-semibold text-zinc-900 dark:text-zinc-100">Request status:</span> {linkedLeave.status || "—"}</p>
+                    <p><span className="font-semibold text-zinc-900 dark:text-zinc-100">Payment:</span> {linkedLeave.effectivePaymentType || "—"}</p>
+                    <p><span className="font-semibold text-zinc-900 dark:text-zinc-100">Source:</span> {row?.excuseLeaveRequestId ? "Excuse coverage" : "Vacation approval"}</p>
                     {linkedLeave.unpaidReason && (
                       <p className="sm:col-span-2 lg:col-span-4">
-                        <span className="font-semibold text-zinc-900">Unpaid reason:</span> {linkedLeave.unpaidReason}
+                        <span className="font-semibold text-zinc-900 dark:text-zinc-100">Unpaid reason:</span> {linkedLeave.unpaidReason}
                       </p>
                     )}
                   </div>
@@ -762,14 +762,14 @@ export function AttendancePage() {
                     <button
                       type="button"
                       onClick={() => openDeductionDecisionModal(row, "SALARY")}
-                      className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                      className="inline-flex items-center gap-1 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                     >
                       Set Salary
                     </button>
                     <button
                       type="button"
                       onClick={() => openDeductionDecisionModal(row, "VACATION_BALANCE")}
-                      className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                      className="inline-flex items-center gap-1 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                     >
                       Set Vacation Balance
                     </button>
@@ -791,8 +791,8 @@ export function AttendancePage() {
                     onClick={() => handleRestDayApprovalToggle(row)}
                     className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold ${
                       row?.restDayWorkApproved
-                        ? "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
-                        : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                        ? "border-emerald-200 bg-white dark:bg-zinc-900 text-emerald-700 hover:bg-emerald-50"
+                        : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                     }`}
                   >
                     {row?.restDayWorkApproved ? "Approved (paid in payroll)" : "Not approved (excluded from payroll)"}
@@ -819,14 +819,14 @@ export function AttendancePage() {
               const dept = emp?.department;
               return (
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-zinc-900">
+                  <p className="truncate font-semibold text-zinc-900 dark:text-zinc-100">
                     {name || (
-                      <span className="text-zinc-500 italic">
+                      <span className="text-zinc-500 dark:text-zinc-400 italic">
                         {row.employeeCode ? `Not linked (${row.employeeCode})` : "No profile"}
                       </span>
                     )}
                   </p>
-                  <p className="truncate text-[10px] leading-none text-zinc-500">{dept || "—"}</p>
+                  <p className="truncate text-[10px] leading-none text-zinc-500 dark:text-zinc-400">{dept || "—"}</p>
                 </div>
               );
             },
@@ -836,7 +836,7 @@ export function AttendancePage() {
             header: "Work date",
             cellClassName: "whitespace-nowrap",
             render: (row) => (
-              <span className="text-sm font-medium text-zinc-700">
+              <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 {formatAttendanceDate(row.date)}
               </span>
             ),
@@ -846,7 +846,7 @@ export function AttendancePage() {
             header: "Time window",
             cellClassName: "whitespace-nowrap",
             render: (row) => (
-              <div className="rounded-lg border border-zinc-200/80 bg-zinc-50/70 px-2.5 py-1 text-xs font-semibold text-zinc-800 tabular-nums">
+              <div className="rounded-lg border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-800/50 px-2.5 py-1 text-xs font-semibold text-zinc-800 dark:text-zinc-200 tabular-nums">
                 {(row.checkIn || "—")} {"->"} {(row.checkOut || "—")}
               </div>
             ),
@@ -872,15 +872,15 @@ export function AttendancePage() {
       {/* Manual Add/Edit Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-[480px] max-w-[calc(100vw-2rem)] rounded-[20px] bg-white p-6 shadow-xl ring-1 ring-zinc-950/[0.08] animate-in zoom-in-95 duration-200">
-            <h3 className="text-[17px] font-semibold tracking-tight text-zinc-900">{editingId ? "Edit Record" : "Add Manual Attendance"}</h3>
-            <p className="mt-1 text-sm leading-relaxed text-zinc-500">Enter explicit check-in/out times for an employee.</p>
+          <div className="w-[480px] max-w-[calc(100vw-2rem)] rounded-[20px] bg-white dark:bg-zinc-900 p-6 shadow-xl ring-1 ring-zinc-950/[0.08] animate-in zoom-in-95 duration-200">
+            <h3 className="text-[17px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{editingId ? "Edit Record" : "Add Manual Attendance"}</h3>
+            <p className="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">Enter explicit check-in/out times for an employee.</p>
             
             <div className="mt-6 space-y-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-zinc-500">Employee</label>
+                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Employee</label>
                 <select 
-                  className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                  className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700"
                   value={formData.employeeId}
                   onChange={(e) => setFormData({...formData, employeeId: e.target.value})}
                   disabled={!!editingId}
@@ -893,28 +893,28 @@ export function AttendancePage() {
               </div>
               
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-zinc-500">Date</label>
-                <input type="date" className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} disabled={!!editingId} />
+                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Date</label>
+                <input type="date" className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} disabled={!!editingId} />
               </div>
               {editingId && formData.status && (
-                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
-                  <span className="font-semibold text-zinc-700">Saved status</span>
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-100 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400">
+                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">Saved status</span>
                   <StatusBadge status={formData.status} />
-                  <span className="text-zinc-500">Saving recomputes from times and policy.</span>
+                  <span className="text-zinc-500 dark:text-zinc-400">Saving recomputes from times and policy.</span>
                 </div>
               )}
-              <p className="text-xs text-zinc-500 leading-relaxed">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
                 Present / Late / Early departure / Incomplete is always calculated on the server from the times below and company attendance rules (including approved leave or excuses where applicable).
               </p>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-zinc-500">Check in</label>
-                  <input type="text" placeholder="09:00:00 AM or 09:00" className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" value={formData.checkIn} onChange={(e) => setFormData({...formData, checkIn: e.target.value})} />
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Check in</label>
+                  <input type="text" placeholder="09:00:00 AM or 09:00" className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700" value={formData.checkIn} onChange={(e) => setFormData({...formData, checkIn: e.target.value})} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-zinc-500">Check out</label>
-                  <input type="text" placeholder="05:00:00 PM or 17:00" className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80" value={formData.checkOut} onChange={(e) => setFormData({...formData, checkOut: e.target.value})} />
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Check out</label>
+                  <input type="text" placeholder="05:00:00 PM or 17:00" className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700" value={formData.checkOut} onChange={(e) => setFormData({...formData, checkOut: e.target.value})} />
                 </div>
               </div>
             </div>
@@ -923,7 +923,7 @@ export function AttendancePage() {
               <button 
                 type="button"
                 onClick={() => setIsAddModalOpen(false)}
-                className="rounded-full px-4 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100"
+                className="rounded-full px-4 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
                 Cancel
               </button>
@@ -942,19 +942,19 @@ export function AttendancePage() {
       {/* Delete Confirmation Modal */}
       {deleteId && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-[400px] max-w-[calc(100vw-2rem)] rounded-[20px] bg-white p-8 shadow-xl ring-1 ring-zinc-950/[0.08] animate-in zoom-in-95 duration-200">
+          <div className="w-[400px] max-w-[calc(100vw-2rem)] rounded-[20px] bg-white dark:bg-zinc-900 p-8 shadow-xl ring-1 ring-zinc-950/[0.08] animate-in zoom-in-95 duration-200">
             <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600 ring-1 ring-red-100/80">
               <AlertTriangle size={26} />
             </div>
-            <h3 className="text-[17px] font-semibold tracking-tight text-zinc-900">Confirm deletion</h3>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+            <h3 className="text-[17px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Confirm deletion</h3>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
               Are you sure you want to delete this attendance record? This action is permanent and cannot be undone.
             </p>
             <div className="mt-8 flex items-center gap-3">
               <button 
                 type="button"
                 onClick={() => setDeleteId(null)}
-                className="flex-1 rounded-full px-4 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100"
+                className="flex-1 rounded-full px-4 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
                 Cancel
               </button>
@@ -973,17 +973,17 @@ export function AttendancePage() {
       {/* Deduction Decision Modal */}
       {deductionDecisionModal.open && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/35 backdrop-blur-xl animate-in fade-in duration-200">
-          <div className="w-[460px] max-w-[calc(100vw-2rem)] rounded-[28px] border border-white/70 bg-white/90 p-6 shadow-2xl ring-1 ring-zinc-950/[0.06] animate-in zoom-in-95 duration-200">
+          <div className="w-[460px] max-w-[calc(100vw-2rem)] rounded-[28px] border border-white/70 bg-white dark:bg-zinc-900/90 p-6 shadow-2xl ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 animate-in zoom-in-95 duration-200">
             <div className="mb-5">
-              <h3 className="text-[20px] font-semibold tracking-tight text-zinc-900">Deduction Decision</h3>
-              <p className="mt-1 text-sm text-zinc-500">
+              <h3 className="text-[20px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Deduction Decision</h3>
+              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                 Set final payroll routing and value for this partial excuse row.
               </p>
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Deduction Source</p>
+              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/70 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Deduction Source</p>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {["SALARY", "VACATION_BALANCE"].map((source) => (
                     <button
@@ -999,7 +999,7 @@ export function AttendancePage() {
                       className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
                         deductionDecisionModal.source === source
                           ? "border-zinc-900 bg-zinc-900 text-white"
-                          : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                          : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                       }`}
                     >
                       {source === "SALARY" ? "Salary" : "Vacation Balance"}
@@ -1010,7 +1010,7 @@ export function AttendancePage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-500">Value Type</label>
+                  <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">Value Type</label>
                   <select
                     value={deductionDecisionModal.valueType}
                     onChange={(e) =>
@@ -1020,14 +1020,14 @@ export function AttendancePage() {
                       }))
                     }
                     disabled={deductionDecisionModal.source === "VACATION_BALANCE"}
-                    className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80 disabled:opacity-60"
+                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700 disabled:opacity-60"
                   >
                     <option value="DAYS">Days</option>
                     <option value="AMOUNT">Amount</option>
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-500">
+                  <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
                     {deductionDecisionModal.valueType === "AMOUNT" ? "Amount" : "Days"}
                   </label>
                   <input
@@ -1038,12 +1038,12 @@ export function AttendancePage() {
                     onChange={(e) =>
                       setDeductionDecisionModal((prev) => ({ ...prev, value: e.target.value }))
                     }
-                    className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700"
                   />
                 </div>
               </div>
 
-              <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 py-2 text-xs text-zinc-600">
+              <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-800/50 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400">
                 {deductionDecisionModal.source === "VACATION_BALANCE"
                   ? "Vacation balance supports DAYS only."
                   : "Salary supports both DAYS and AMOUNT."}
@@ -1055,7 +1055,7 @@ export function AttendancePage() {
                 type="button"
                 onClick={closeDeductionDecisionModal}
                 disabled={deductionDecisionModal.saving}
-                className="rounded-full px-4 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 disabled:opacity-50"
+                className="rounded-full px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 transition hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -1078,23 +1078,23 @@ export function AttendancePage() {
       {activeTab === "monthly" && canViewMonthlyReport && (
         <div className="space-y-6">
           {/* Controls */}
-          <div className="flex flex-col gap-4 rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06] sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-4 rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex flex-wrap gap-4">
               <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Year</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">Year</label>
                 <input
                   type="number"
                   min={2020}
                   max={2100}
-                  className="w-28 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                  className="w-28 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700"
                   value={reportYear}
                   onChange={(e) => setReportYear(Number(e.target.value))}
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Month</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">Month</label>
                 <select
-                  className="w-36 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                  className="w-36 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700"
                   value={reportMonth}
                   onChange={(e) => setReportMonth(Number(e.target.value))}
                 >
@@ -1121,7 +1121,7 @@ export function AttendancePage() {
                   type="button"
                   onClick={handleExportExcel}
                   disabled={isExporting}
-                  className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-800 dark:text-zinc-200 shadow-sm transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 disabled:opacity-50"
                 >
                   <Download size={16} />
                   {isExporting ? "Exporting..." : "Export Excel"}
@@ -1139,8 +1139,8 @@ export function AttendancePage() {
           {monthlyReport && (
             <>
               {/* Period info */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[20px] bg-zinc-50/80 px-4 py-3 text-sm text-zinc-800 ring-1 ring-zinc-200/80">
-                <span className="font-semibold text-zinc-900">Fiscal period</span>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[20px] bg-zinc-50/80 dark:bg-zinc-800/50 px-4 py-3 text-sm text-zinc-800 dark:text-zinc-200 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
+                <span className="font-semibold text-zinc-900 dark:text-zinc-100">Fiscal period</span>
                 <span className="hidden text-zinc-300 sm:inline">·</span>
                 <span>{monthlyReport.period.periodStart?.slice(0, 10)} to {monthlyReport.period.periodEnd?.slice(0, 10)}</span>
                 <span className="hidden text-zinc-300 sm:inline">·</span>
@@ -1184,9 +1184,9 @@ export function AttendancePage() {
               )}
 
               {monthlyReport.policySnapshot && (
-                <div className="rounded-[20px] bg-zinc-50/90 px-4 py-3 text-sm text-zinc-800 ring-1 ring-zinc-200/80">
+                <div className="rounded-[20px] bg-zinc-50/90 dark:bg-zinc-800/50 px-4 py-3 text-sm text-zinc-800 dark:text-zinc-200 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <span className="font-semibold text-zinc-900">Attendance rules used</span>
+                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">Attendance rules used</span>
                     <span>
                       Shift:{" "}
                       <strong>
@@ -1243,9 +1243,9 @@ export function AttendancePage() {
               )}
 
               {/* Summary Table */}
-              <div className="overflow-x-auto rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+              <div className="overflow-x-auto rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
                 <table className="min-w-full divide-y divide-zinc-200 text-sm">
-                  <thead className="bg-zinc-50 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  <thead className="bg-zinc-50 dark:bg-zinc-800/50 text-left text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     <tr>
                       <th className="px-3 py-3 w-8" />
                       <th className="px-3 py-3">Code</th>
@@ -1269,7 +1269,7 @@ export function AttendancePage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100">
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                     {(monthlyReport.summary || []).map((s) => {
                       const isExpanded = expandedEmpId === String(s.employeeId);
                       const empDetail = isExpanded
@@ -1279,32 +1279,32 @@ export function AttendancePage() {
                       return (
                         <React.Fragment key={s.employeeId}>
                           <tr
-                            className="cursor-pointer transition hover:bg-zinc-50/80"
+                            className="cursor-pointer transition hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50"
                             onClick={() => setExpandedEmpId(isExpanded ? null : String(s.employeeId))}
                           >
                             <td className="px-3 py-2.5 text-zinc-400">
                               {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                             </td>
                             <td className="px-3 py-2.5">
-                              <span className="rounded-lg border border-zinc-200/80 bg-zinc-100/80 px-2 py-0.5 font-mono text-xs font-semibold text-zinc-800">
+                              <span className="rounded-lg border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-100/80 dark:bg-zinc-800/80 px-2 py-0.5 font-mono text-xs font-semibold text-zinc-800 dark:text-zinc-200">
                                 {s.employeeCode}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 font-medium text-zinc-900">{s.fullName}</td>
-                            <td className="px-3 py-2.5 text-zinc-500">{s.department || "—"}</td>
-                            <td className="px-3 py-2.5 text-center font-semibold text-zinc-800">{s.presentDays}</td>
+                            <td className="px-3 py-2.5 font-medium text-zinc-900 dark:text-zinc-100">{s.fullName}</td>
+                            <td className="px-3 py-2.5 text-zinc-500 dark:text-zinc-400">{s.department || "—"}</td>
+                            <td className="px-3 py-2.5 text-center font-semibold text-zinc-800 dark:text-zinc-200">{s.presentDays}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-amber-800">{s.lateDays || "—"}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-red-700">{s.absentDays || "—"}</td>
-                            <td className="px-3 py-2.5 text-center font-semibold text-zinc-700">{s.onLeaveDays || "—"}</td>
-                            <td className="px-3 py-2.5 text-center font-semibold text-zinc-700">{s.holidayDays || "—"}</td>
+                            <td className="px-3 py-2.5 text-center font-semibold text-zinc-700 dark:text-zinc-300">{s.onLeaveDays || "—"}</td>
+                            <td className="px-3 py-2.5 text-center font-semibold text-zinc-700 dark:text-zinc-300">{s.holidayDays || "—"}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-orange-700">{s.earlyDepartureDays || "—"}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-yellow-700">{s.incompleteDays || "—"}</td>
-                            <td className="px-3 py-2.5 text-right font-mono text-zinc-700">{s.totalHoursWorked}</td>
+                            <td className="px-3 py-2.5 text-right font-mono text-zinc-700 dark:text-zinc-300">{s.totalHoursWorked}</td>
                             <td className="px-3 py-2.5 text-right font-semibold text-red-600">
                               {s.deductions.totalDeductionDays > 0 ? `-${s.deductions.totalDeductionDays}` : "0"}
                             </td>
-                            <td className="px-3 py-2.5 text-right font-bold text-zinc-900">{s.netEffectiveDays}</td>
-                            <td className="px-3 py-2.5 text-right font-mono font-semibold text-zinc-800">
+                            <td className="px-3 py-2.5 text-right font-bold text-zinc-900 dark:text-zinc-100">{s.netEffectiveDays}</td>
+                            <td className="px-3 py-2.5 text-right font-mono font-semibold text-zinc-800 dark:text-zinc-200">
                               {Number.isFinite(Number(s.approvedOvertimeUnits))
                                 ? Number(s.approvedOvertimeUnits).toLocaleString()
                                 : "—"}
@@ -1312,10 +1312,10 @@ export function AttendancePage() {
                           </tr>
                           {isExpanded && empDetail && (
                             <tr>
-                              <td colSpan={15} className="bg-zinc-50/50 px-4 py-3">
-                                <div className="overflow-x-auto rounded-2xl bg-white ring-1 ring-zinc-200/80">
+                              <td colSpan={15} className="bg-zinc-50/50 dark:bg-zinc-800/50 px-4 py-3">
+                                <div className="overflow-x-auto rounded-2xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
                                   <table className="min-w-full divide-y divide-zinc-200 text-xs">
-                                    <thead className="bg-zinc-100 text-left text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                                    <thead className="bg-zinc-100 dark:bg-zinc-800 text-left text-[10px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                                       <tr>
                                         <th className="px-3 py-2">Date</th>
                                         <th className="px-3 py-2">Status</th>
@@ -1329,7 +1329,7 @@ export function AttendancePage() {
                                         <th className="px-3 py-2">Notes</th>
                                       </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-zinc-100 bg-white">
+                                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
                                       {empDetail.days.map((day) => {
                                         const punchIssue = getAttendancePunchIssue(day);
                                         return (
@@ -1338,25 +1338,25 @@ export function AttendancePage() {
                                           className={
                                             punchIssue
                                               ? "bg-amber-50/35 hover:bg-amber-50/55"
-                                              : "hover:bg-zinc-50/50"
+                                              : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/50"
                                           }
                                         >
-                                          <td className="px-3 py-1.5 font-medium text-zinc-700 whitespace-nowrap">{day.date}</td>
+                                          <td className="px-3 py-1.5 font-medium text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{day.date}</td>
                                           <td className="px-3 py-1.5">
-                                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[day.status] || "bg-zinc-100 text-zinc-600"}`}>
+                                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[day.status] || "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"}`}>
                                               {day.status}
                                             </span>
                                           </td>
-                                          <td className="px-3 py-1.5 text-zinc-800">{day.checkIn || "—"}</td>
-                                          <td className="px-3 py-1.5 text-zinc-800">{day.checkOut || "—"}</td>
+                                          <td className="px-3 py-1.5 text-zinc-800 dark:text-zinc-200">{day.checkIn || "—"}</td>
+                                          <td className="px-3 py-1.5 text-zinc-800 dark:text-zinc-200">{day.checkOut || "—"}</td>
                                           <td className="px-3 py-1.5">
                                             <PunchIssueBadge issue={punchIssue} />
                                           </td>
                                           <td className="px-3 py-1.5 text-right font-mono">{day.rawHours || "—"}</td>
-                                          <td className="px-3 py-1.5 text-right font-mono text-zinc-700">{day.excusedMinutes > 0 ? `${day.excusedMinutes}m` : "—"}</td>
+                                          <td className="px-3 py-1.5 text-right font-mono text-zinc-700 dark:text-zinc-300">{day.excusedMinutes > 0 ? `${day.excusedMinutes}m` : "—"}</td>
                                           <td className="px-3 py-1.5 text-right font-mono font-semibold">{day.effectiveHours ? Math.round(day.effectiveHours * 100) / 100 : "—"}</td>
                                           <td className="px-3 py-1.5 text-right font-semibold text-red-600">{day.deduction > 0 ? `-${day.deduction}` : "—"}</td>
-                                          <td className="px-3 py-1.5 text-zinc-500 max-w-[16rem] truncate" title={day.notes?.join("; ")}>
+                                          <td className="px-3 py-1.5 text-zinc-500 dark:text-zinc-400 max-w-[16rem] truncate" title={day.notes?.join("; ")}>
                                             {day.notes?.length > 0 ? day.notes.join("; ") : "—"}
                                           </td>
                                         </tr>
@@ -1378,10 +1378,10 @@ export function AttendancePage() {
           )}
 
           {!monthlyReport && !monthlyReportLoading && (
-            <div className="flex flex-col items-center justify-center rounded-[20px] border border-dashed border-zinc-200/90 bg-zinc-50/40 py-16 text-center ring-1 ring-zinc-950/[0.04]">
+            <div className="flex flex-col items-center justify-center rounded-[20px] border border-dashed border-zinc-200/90 dark:border-zinc-800/80 bg-zinc-50/40 dark:bg-zinc-800/50 py-16 text-center ring-1 ring-zinc-950/[0.04]">
               <BarChart3 className="h-12 w-12 text-zinc-300" />
-              <p className="mt-4 text-sm font-medium text-zinc-600">No report generated yet</p>
-              <p className="mt-1 text-sm text-zinc-500">
+              <p className="mt-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">No report generated yet</p>
+              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                 Select a year and month, then click "Generate Report" to see the monthly attendance analysis.
               </p>
             </div>

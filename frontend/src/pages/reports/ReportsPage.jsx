@@ -60,28 +60,28 @@ export function ReportsPage() {
     <Layout title="Reports" description={`Access: ${getAccessLevelLabel(reportsAccessLevel)} · System summary and insights.`}>
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-zinc-900 p-4 rounded-lg shadow">
           <div className="text-sm text-gray-600">Total Departments</div>
           <div className="text-2xl font-bold">{summary.departments.total}</div>
           <div className="text-xs text-green-600">
             {summary.departments.active} active
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-zinc-900 p-4 rounded-lg shadow">
           <div className="text-sm text-gray-600">Total Teams</div>
           <div className="text-2xl font-bold">{summary.teams.total}</div>
           <div className="text-xs text-green-600">
             {summary.teams.active} active
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-zinc-900 p-4 rounded-lg shadow">
           <div className="text-sm text-gray-600">Total Positions</div>
           <div className="text-2xl font-bold">{summary.positions.total}</div>
           <div className="text-xs text-green-600">
             {summary.positions.active} active
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-zinc-900 p-4 rounded-lg shadow">
           <div className="text-sm text-gray-600">Total Employees</div>
           <div className="text-2xl font-bold">{summary.employees.total}</div>
           <div className="text-xs text-yellow-600">
@@ -91,7 +91,7 @@ export function ReportsPage() {
       </div>
 
       {/* Employee Status Breakdown */}
-      <div className="bg-white p-4 rounded-lg shadow mb-6">
+      <div className="bg-white dark:bg-zinc-900 p-4 rounded-lg shadow mb-6">
         <h3 className="text-lg font-semibold mb-4">
           Employee Status Breakdown
         </h3>
@@ -150,7 +150,7 @@ export function ReportsPage() {
 
       {/* Unassigned Employees */}
       {unassignedEmployees.length > 0 && (
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white dark:bg-zinc-900 p-4 rounded-lg shadow">
           <h3 className="text-lg font-semibold mb-4">Unassigned Employees</h3>
           <DataTable
             columns={[
@@ -166,7 +166,7 @@ export function ReportsPage() {
                 render: (row) => (
                   <a
                     href={`/employments/assign?employeeId=${row.id || row._id}`}
-                    className="text-zinc-800 hover:underline"
+                    className="text-zinc-800 dark:text-zinc-200 hover:underline"
                   >
                     Assign Now
                   </a>

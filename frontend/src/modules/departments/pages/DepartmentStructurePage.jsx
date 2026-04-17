@@ -92,7 +92,7 @@ export function DepartmentStructurePage() {
             <div className="min-w-0 flex-1 space-y-4">
               <div>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-teal-100 backdrop-blur-sm">
+                  <span className="rounded-full border border-white/20 bg-white dark:bg-zinc-900/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-teal-100 backdrop-blur-sm">
                     {department.type || "Department"}
                   </span>
                   <StatusBadge status={department.status || "ACTIVE"} />
@@ -101,8 +101,8 @@ export function DepartmentStructurePage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-cyan-200">
+                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white dark:bg-zinc-900/5 p-3 backdrop-blur-sm">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white dark:bg-zinc-900/10 text-cyan-200">
                     <UserCircle2 size={20} />
                   </div>
                   <div className="min-w-0">
@@ -111,8 +111,8 @@ export function DepartmentStructurePage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-violet-200">
+                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white dark:bg-zinc-900/5 p-3 backdrop-blur-sm">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white dark:bg-zinc-900/10 text-violet-200">
                     <ShieldCheck size={20} />
                   </div>
                   <div className="min-w-0">
@@ -121,8 +121,8 @@ export function DepartmentStructurePage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm sm:col-span-2 lg:col-span-1">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-teal-200">
+                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white dark:bg-zinc-900/5 p-3 backdrop-blur-sm sm:col-span-2 lg:col-span-1">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white dark:bg-zinc-900/10 text-teal-200">
                     <Calendar size={20} />
                   </div>
                   <div className="min-w-0">
@@ -190,7 +190,7 @@ export function DepartmentStructurePage() {
             </h3>
             <div className="grid gap-4">
               {(department.teams || []).map(team => (
-                <div key={team.id} className="group relative overflow-hidden rounded-2xl border border-violet-100/90 bg-white p-5 shadow-sm ring-1 ring-violet-500/5 transition hover:border-teal-200 hover:shadow-md">
+                <div key={team.id} className="group relative overflow-hidden rounded-2xl border border-violet-100/90 bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-violet-500/5 transition hover:border-teal-200 hover:shadow-md">
                   <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-teal-400 via-cyan-400 to-violet-400 opacity-0 transition group-hover:opacity-100" />
                   <div className="flex justify-between items-start">
                     <div>
@@ -198,7 +198,7 @@ export function DepartmentStructurePage() {
                         {team.name}
                       </h4>
                       <div className="mt-1 flex items-center gap-2">
-                        <span className="text-[10px] font-bold py-0.5 px-1.5 bg-zinc-50 border border-zinc-100 text-zinc-600 rounded">
+                        <span className="text-[10px] font-bold py-0.5 px-1.5 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800/50 text-zinc-600 dark:text-zinc-400 rounded">
                           {team.leaderTitle || "Lead"}: {team.leaderEmail || "Not Assigned"}
                         </span>
                         <span className="rounded-md bg-gradient-to-r from-teal-600 to-cyan-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
@@ -210,17 +210,17 @@ export function DepartmentStructurePage() {
                   
                   <div className="mt-4 flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
                     <UserCircle2 size={12} className="text-zinc-400" />
-                    <span className="text-[10px] text-zinc-500 font-medium">Headcount assigned to this sub-unit.</span>
+                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">Headcount assigned to this sub-unit.</span>
                   </div>
                   
                   <div className="mt-3 flex -space-x-2">
                     {(team.members || []).slice(0, 8).map((email, idx) => (
-                      <div key={idx} className="h-7 w-7 rounded-full border-2 border-white bg-zinc-100 flex items-center justify-center text-[10px] font-bold text-zinc-500 uppercase">
+                      <div key={idx} className="h-7 w-7 rounded-full border-2 border-white bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase">
                         {email[0]}
                       </div>
                     ))}
                     {(team.members || []).length > 8 && (
-                      <div className="h-7 w-7 rounded-full border-2 border-white bg-zinc-50 flex items-center justify-center text-[8px] font-bold text-zinc-400">
+                      <div className="h-7 w-7 rounded-full border-2 border-white bg-zinc-50 dark:bg-zinc-800/50 flex items-center justify-center text-[8px] font-bold text-zinc-400">
                         +{(team.members || []).length - 8}
                       </div>
                     )}
@@ -228,7 +228,7 @@ export function DepartmentStructurePage() {
                 </div>
               ))}
               {(department.teams || []).length === 0 && (
-                <div className="p-8 border border-dashed border-zinc-200 rounded-2xl text-center text-zinc-400 text-sm italic">
+                <div className="p-8 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl text-center text-zinc-400 text-sm italic">
                   No sub-units defined for this department structure.
                 </div>
               )}
@@ -243,7 +243,7 @@ export function DepartmentStructurePage() {
               </span>
               Roles
             </h3>
-            <div className="overflow-hidden rounded-2xl border border-violet-100/80 bg-white shadow-sm ring-1 ring-violet-500/10">
+            <div className="overflow-hidden rounded-2xl border border-violet-100/80 bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-violet-500/10">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
                   <tr className="border-b border-teal-100 bg-gradient-to-r from-teal-50/80 to-cyan-50/50">
@@ -252,21 +252,21 @@ export function DepartmentStructurePage() {
                     <th className="px-6 py-3.5 text-right font-semibold uppercase tracking-wide text-teal-900/80">Filled</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {(department.positions || []).map((pos, idx) => {
                     const count = deptEmployees.filter(e => e.position === pos.title).length;
                     return (
-                      <tr key={idx} className="hover:bg-zinc-50/30 transition-colors group">
+                      <tr key={idx} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-800/50 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="font-semibold text-slate-900 group-hover:text-teal-800">{pos.title}</div>
-                          <div className="text-[10px] text-zinc-500 font-medium">{pos.responsibility || "General task scope"}</div>
+                          <div className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">{pos.responsibility || "General task scope"}</div>
                         </td>
                         <td className="px-6 py-4 text-center font-black text-zinc-400 italic">
                           {pos.level}
                         </td>
                         <td className="px-6 py-4 text-right pr-10">
                            <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                             count > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-zinc-50 text-zinc-400 border border-zinc-100 italic"
+                             count > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-zinc-50 dark:bg-zinc-800/50 text-zinc-400 border border-zinc-100 dark:border-zinc-800/50 italic"
                            }`}>
                              {count} Assigned
                            </span>
@@ -298,7 +298,7 @@ export function DepartmentStructurePage() {
               {department.name}
             </span>
           </div>
-          <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-lg shadow-slate-200/40 ring-1 ring-teal-500/5">
+          <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white dark:bg-zinc-900 shadow-lg shadow-slate-200/40 ring-1 ring-teal-500/5">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>

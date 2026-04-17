@@ -159,7 +159,7 @@ export function DashboardLayout() {
   }
 
   return (
-    <div className="min-h-screen flex overflow-hidden bg-zinc-50 text-zinc-900">
+    <div className="min-h-screen flex overflow-hidden bg-zinc-50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100">
       {sidebarOpen && (
         <button
           type="button"
@@ -170,7 +170,7 @@ export function DashboardLayout() {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-[70] bg-white border-r border-zinc-200 transition-[width] duration-200 ease-out md:translate-x-0 md:static md:inset-0
+        className={`fixed inset-y-0 left-0 z-[70] bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 transition-[width] duration-200 ease-out md:translate-x-0 md:static md:inset-0
           ${
             isCollapsed
               ? "w-[4.5rem]"
@@ -182,21 +182,21 @@ export function DashboardLayout() {
           <button
             type="button"
             onClick={toggleSidebarSize}
-            className="hidden md:flex absolute -right-2.5 top-16 w-5 h-5 bg-white border border-zinc-200 rounded-full items-center justify-center text-zinc-400 hover:text-zinc-700 z-10"
+            className="hidden md:flex absolute -right-2.5 top-16 w-5 h-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 z-10"
           >
             {isCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
           </button>
 
           <div className="flex items-center justify-between mb-8 h-9 px-1">
             {!isCollapsed ? (
-              <span className="text-sm font-medium tracking-tight text-zinc-900">HRMS</span>
+              <span className="text-sm font-medium tracking-tight text-zinc-900 dark:text-zinc-100">HRMS</span>
             ) : (
-              <span className="text-xs font-medium text-zinc-500 mx-auto">H</span>
+              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mx-auto">H</span>
             )}
             <button
               type="button"
               onClick={() => setSidebarOpen(false)}
-              className="md:hidden text-zinc-400 hover:text-zinc-600"
+              className="md:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400"
             >
               <X size={18} />
             </button>
@@ -211,16 +211,16 @@ export function DashboardLayout() {
                       <button
                         type="button"
                         onClick={() => toggleGroup(item.label)}
-                        className="w-full flex items-center justify-between px-2 py-2 text-[10px] font-medium uppercase tracking-widest text-zinc-400 hover:text-zinc-600 mt-4"
+                        className="w-full flex items-center justify-between px-2 py-2 text-[10px] font-medium uppercase tracking-widest text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400 mt-4"
                       >
                         {item.label}
                         <ChevronRight
-                          className={`transition-transform duration-200 ${expandedGroups[item.label] ? "rotate-90 text-zinc-600" : ""}`}
+                          className={`transition-transform duration-200 ${expandedGroups[item.label] ? "rotate-90 text-zinc-600 dark:text-zinc-400" : ""}`}
                           size={12}
                         />
                       </button>
                     ) : (
-                      <div className="h-px bg-zinc-100 my-3 mx-2" />
+                      <div className="h-px bg-zinc-100 dark:bg-zinc-800 my-3 mx-2" />
                     )}
                     {(expandedGroups[item.label] || isCollapsed) && (
                       <div className="space-y-0.5 mt-0.5">
@@ -274,19 +274,19 @@ export function DashboardLayout() {
             )}
           </nav>
 
-          <div className={`mt-auto pt-4 border-t border-zinc-100 ${isCollapsed ? "items-center" : ""}`}>
+          <div className={`mt-auto pt-4 border-t border-zinc-100 dark:border-zinc-800/50 ${isCollapsed ? "items-center" : ""}`}>
             <div
               className={`mb-3 flex items-center gap-2.5 ${isCollapsed ? "justify-center" : "px-1"}`}
             >
-              <div className="w-8 h-8 rounded-full border border-zinc-200 bg-zinc-50 flex items-center justify-center text-xs font-medium text-zinc-600 shrink-0">
+              <div className="w-8 h-8 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 flex items-center justify-center text-xs font-medium text-zinc-600 dark:text-zinc-400 shrink-0">
                 {currentUser?.email?.[0].toUpperCase()}
               </div>
               {!isCollapsed && (
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-zinc-900 truncate">
+                  <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">
                     {currentUser?.email?.split("@")[0]}
                   </p>
-                  <p className="text-[10px] text-zinc-500 font-normal">{currentRole}</p>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-normal">{currentRole}</p>
                 </div>
               )}
             </div>
@@ -297,7 +297,7 @@ export function DashboardLayout() {
                 await dispatch(logoutThunk());
                 navigate("/login");
               }}
-              className={`w-full flex items-center gap-2 px-2 py-2 rounded-md text-xs font-medium text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors ${isCollapsed ? "justify-center" : ""
+              className={`w-full flex items-center gap-2 px-2 py-2 rounded-md text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${isCollapsed ? "justify-center" : ""
                 }`}
               title="Sign out"
             >
@@ -308,22 +308,22 @@ export function DashboardLayout() {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-h-0 bg-zinc-50 min-w-0">
-        <header className="md:hidden shrink-0 h-14 bg-white border-b border-zinc-200 flex items-center px-4 justify-between">
+      <div className="flex-1 flex flex-col min-h-0 bg-zinc-50 dark:bg-zinc-800/50 min-w-0">
+        <header className="md:hidden shrink-0 h-14 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center px-4 justify-between">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="p-2 text-zinc-600 hover:bg-zinc-100 rounded-md"
+            className="p-2 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md"
           >
             <Menu size={20} />
           </button>
-          <span className="text-sm font-medium text-zinc-900">HRMS</span>
-          <div className="w-8 h-8 rounded-full border border-zinc-200 bg-zinc-50 flex items-center justify-center text-xs font-medium text-zinc-600">
+          <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">HRMS</span>
+          <div className="w-8 h-8 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 flex items-center justify-center text-xs font-medium text-zinc-600 dark:text-zinc-400">
             {currentUser?.email?.[0].toUpperCase()}
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 lg:p-8 pt-3 sm:pt-4 md:pt-6 lg:pt-8 selection:bg-zinc-200 selection:text-zinc-900">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 lg:p-8 pt-3 sm:pt-4 md:pt-6 lg:pt-8 selection:bg-zinc-200 selection:text-zinc-900 dark:text-zinc-100">
           <Outlet />
         </main>
       </div>
@@ -342,7 +342,7 @@ function SidebarLink({ to, label, icon: Icon, isCollapsed, closeMobile }) {
         `flex items-center gap-2.5 px-2 py-2 rounded-md text-xs font-medium transition-colors
         ${isActive
           ? "bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100"
-          : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800"
+          : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:text-zinc-800 dark:hover:text-zinc-200"
         }`
       }
     >

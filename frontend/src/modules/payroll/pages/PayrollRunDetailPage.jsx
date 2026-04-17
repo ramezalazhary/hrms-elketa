@@ -279,7 +279,7 @@ export function PayrollRunDetailPage() {
   if (!run) {
     return (
       <Layout>
-        <div className="py-20 text-center text-zinc-500">Run not found</div>
+        <div className="py-20 text-center text-zinc-500 dark:text-zinc-400">Run not found</div>
       </Layout>
     );
   }
@@ -299,16 +299,16 @@ export function PayrollRunDetailPage() {
         {/* Top bar */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/payroll")} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 transition">
+            <button onClick={() => navigate("/payroll")} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition">
               <ArrowLeft size={18} />
             </button>
             <div>
-              <h1 className="text-xl font-bold text-zinc-900">{period}</h1>
+              <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">{period}</h1>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${
                   run.status === "FINALIZED" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" :
                   run.status === "COMPUTED" ? "bg-amber-50 text-amber-700 ring-amber-200" :
-                  "bg-zinc-100 text-zinc-700 ring-zinc-200"
+                  "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 ring-zinc-200"
                 }`}>{run.status}</span>
                 <span className="text-xs text-zinc-400">Created by {run.createdBy}</span>
               </div>
@@ -341,7 +341,7 @@ export function PayrollRunDetailPage() {
                 onClick={handleRepairTotals}
                 disabled={repairing || computing || finalizing}
                 title="Re-sum header cards from all lines if they look wrong"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-600 shadow-sm hover:bg-zinc-50 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 disabled:opacity-50"
               >
                 {repairing ? <Loader2 size={14} className="animate-spin" /> : <Wrench size={14} />}
                 {repairing ? "Repairing…" : "Repair totals"}
@@ -349,12 +349,12 @@ export function PayrollRunDetailPage() {
             )}
             {hasRecords && canManageRunActions && (
               <div className="relative group">
-                <button className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50">
+                <button className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
                   <Download size={14} /> Export
                 </button>
-                <div className="absolute right-0 top-full z-10 mt-1 hidden w-44 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg group-hover:block">
+                <div className="absolute right-0 top-full z-10 mt-1 hidden w-44 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-1 shadow-lg group-hover:block">
                   {["full", "payment", "insurance", "tax"].map((t) => (
-                    <button key={t} onClick={() => handleExport(t)} className="block w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 capitalize">
+                    <button key={t} onClick={() => handleExport(t)} className="block w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 capitalize">
                       {t === "full" ? "Full Payroll" : t === "payment" ? "Payment List" : t === "insurance" ? "Insurance Report" : "Tax Report"}
                     </button>
                   ))}
@@ -366,7 +366,7 @@ export function PayrollRunDetailPage() {
                 type="button"
                 onClick={handleDeleteRun}
                 disabled={computing || finalizing || repairing || resettingProcessing}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white dark:bg-zinc-900 px-3 py-2 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50"
               >
                 <Trash2 size={14} />
                 Delete run
@@ -377,7 +377,7 @@ export function PayrollRunDetailPage() {
                 type="button"
                 onClick={handleResetProcessing}
                 disabled={resettingProcessing || computing || finalizing || repairing}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-amber-700 shadow-sm hover:bg-amber-50 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white dark:bg-zinc-900 px-3 py-2 text-sm font-medium text-amber-700 shadow-sm hover:bg-amber-50 disabled:opacity-50"
               >
                 {resettingProcessing ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
                 {resettingProcessing ? "Resetting..." : "Reset stuck run"}
@@ -400,14 +400,14 @@ export function PayrollRunDetailPage() {
                 {!diffLoading && diffData && (
                   <div className="mt-3 space-y-3">
                     <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
-                      <div className="rounded-md bg-white px-2 py-1"><span className="text-zinc-500">Changed</span><p className="font-semibold text-zinc-800">{fmtInt(diffData.summary?.changed)}</p></div>
-                      <div className="rounded-md bg-white px-2 py-1"><span className="text-zinc-500">Added</span><p className="font-semibold text-zinc-800">{fmtInt(diffData.summary?.added)}</p></div>
-                      <div className="rounded-md bg-white px-2 py-1"><span className="text-zinc-500">Removed</span><p className="font-semibold text-zinc-800">{fmtInt(diffData.summary?.removed)}</p></div>
-                      <div className="rounded-md bg-white px-2 py-1"><span className="text-zinc-500">Unchanged</span><p className="font-semibold text-zinc-800">{fmtInt(diffData.summary?.unchanged)}</p></div>
-                      <div className="rounded-md bg-white px-2 py-1"><span className="text-zinc-500">Net Delta</span><p className="font-semibold text-zinc-800">{fmt(diffData.summary?.netDelta || 0)}</p></div>
+                      <div className="rounded-md bg-white dark:bg-zinc-900 px-2 py-1"><span className="text-zinc-500 dark:text-zinc-400">Changed</span><p className="font-semibold text-zinc-800 dark:text-zinc-200">{fmtInt(diffData.summary?.changed)}</p></div>
+                      <div className="rounded-md bg-white dark:bg-zinc-900 px-2 py-1"><span className="text-zinc-500 dark:text-zinc-400">Added</span><p className="font-semibold text-zinc-800 dark:text-zinc-200">{fmtInt(diffData.summary?.added)}</p></div>
+                      <div className="rounded-md bg-white dark:bg-zinc-900 px-2 py-1"><span className="text-zinc-500 dark:text-zinc-400">Removed</span><p className="font-semibold text-zinc-800 dark:text-zinc-200">{fmtInt(diffData.summary?.removed)}</p></div>
+                      <div className="rounded-md bg-white dark:bg-zinc-900 px-2 py-1"><span className="text-zinc-500 dark:text-zinc-400">Unchanged</span><p className="font-semibold text-zinc-800 dark:text-zinc-200">{fmtInt(diffData.summary?.unchanged)}</p></div>
+                      <div className="rounded-md bg-white dark:bg-zinc-900 px-2 py-1"><span className="text-zinc-500 dark:text-zinc-400">Net Delta</span><p className="font-semibold text-zinc-800 dark:text-zinc-200">{fmt(diffData.summary?.netDelta || 0)}</p></div>
                     </div>
                     {diffData.hasBaseline && (diffData.changes || []).length > 0 && (
-                      <div className="max-h-48 overflow-auto rounded-md border border-amber-200 bg-white">
+                      <div className="max-h-48 overflow-auto rounded-md border border-amber-200 bg-white dark:bg-zinc-900">
                         <table className="min-w-full text-xs">
                           <thead className="sticky top-0 bg-amber-50 text-left text-[10px] uppercase tracking-wide text-amber-700">
                             <tr>
@@ -437,7 +437,7 @@ export function PayrollRunDetailPage() {
                       </div>
                     )}
                     {diffData.hasBaseline && (
-                      <label className="flex items-center gap-2 text-xs text-zinc-700">
+                      <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300">
                         <input
                           type="checkbox"
                           className="h-4 w-4 rounded border-zinc-300"
@@ -448,7 +448,7 @@ export function PayrollRunDetailPage() {
                       </label>
                     )}
                     {!diffData.hasBaseline && (
-                      <p className="text-xs text-zinc-700">
+                      <p className="text-xs text-zinc-700 dark:text-zinc-300">
                         This is the first compute snapshot for this run. Future recomputes will be diffed against this baseline.
                       </p>
                     )}
@@ -474,12 +474,12 @@ export function PayrollRunDetailPage() {
               { label: "Total Tax", value: fmt(t.totalTax), icon: Receipt, cls: "text-amber-500" },
               { label: "Total Net", value: fmt(t.totalNet), icon: Banknote, cls: "text-emerald-500" },
             ].map(({ label, value, icon: Icon, cls }) => (
-              <div key={label} className="rounded-xl border border-zinc-200 bg-white p-4">
+              <div key={label} className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
                 <div className="flex items-center gap-2 mb-1">
                   <Icon size={14} className={cls} />
                   <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">{label}</span>
                 </div>
-                <p className="text-lg font-bold text-zinc-900">{value}</p>
+                <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{value}</p>
               </div>
             ))}
           </div>
@@ -488,22 +488,22 @@ export function PayrollRunDetailPage() {
         {/* Cash vs Visa split */}
         {hasRecords && (
           <div className="grid gap-3 grid-cols-2">
-            <div className="rounded-xl border border-zinc-200 bg-white p-4 flex items-center gap-3">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 flex items-center gap-3">
               <div className="h-9 w-9 rounded-lg bg-green-50 flex items-center justify-center">
                 <Banknote size={18} className="text-green-600" />
               </div>
               <div>
                 <p className="text-xs text-zinc-400 font-medium">Cash ({fmtInt(t.cashCount)})</p>
-                <p className="text-base font-bold text-zinc-900">EGP {fmt(t.cashTotal)}</p>
+                <p className="text-base font-bold text-zinc-900 dark:text-zinc-100">EGP {fmt(t.cashTotal)}</p>
               </div>
             </div>
-            <div className="rounded-xl border border-zinc-200 bg-white p-4 flex items-center gap-3">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 flex items-center gap-3">
               <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center">
                 <Wallet size={18} className="text-blue-600" />
               </div>
               <div>
                 <p className="text-xs text-zinc-400 font-medium">Bank Transfer ({fmtInt(t.visaCount)})</p>
-                <p className="text-base font-bold text-zinc-900">EGP {fmt(t.visaTotal)}</p>
+                <p className="text-base font-bold text-zinc-900 dark:text-zinc-100">EGP {fmt(t.visaTotal)}</p>
               </div>
             </div>
           </div>
@@ -517,7 +517,7 @@ export function PayrollRunDetailPage() {
 
         {/* Tabs */}
         {hasRecords && (
-          <div className="border-b border-zinc-200">
+          <div className="border-b border-zinc-200 dark:border-zinc-800">
             <div className="flex gap-1 overflow-x-auto">
               {[
                 { key: "records", label: "Employee Records" },
@@ -533,7 +533,7 @@ export function PayrollRunDetailPage() {
                   key={key}
                   onClick={() => setActiveTab(key)}
                   className={`whitespace-nowrap px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px ${
-                    activeTab === key ? "border-indigo-600 text-indigo-700" : "border-transparent text-zinc-500 hover:text-zinc-700"
+                    activeTab === key ? "border-indigo-600 text-indigo-700" : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
                   }`}
                 >
                   {label}
@@ -545,9 +545,9 @@ export function PayrollRunDetailPage() {
 
         {/* Records tab */}
         {activeTab === "records" && hasRecords && (
-          <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
             <table className="min-w-full divide-y divide-zinc-200 text-xs">
-              <thead className="bg-zinc-50/90 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              <thead className="bg-zinc-50/90 dark:bg-zinc-800/50 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 <tr>
                   <th className="px-3 py-3">Code</th>
                   <th className="px-3 py-3">Name</th>
@@ -561,13 +561,13 @@ export function PayrollRunDetailPage() {
                   <th className="px-3 py-3 text-right font-bold">Net</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {records.map((r) => {
                   const rid = r.id || r._id;
                   return (
                     <tr
                       key={rid}
-                      className={`${canManageRunActions ? "cursor-pointer hover:bg-zinc-50/80" : ""} transition`}
+                      className={`${canManageRunActions ? "cursor-pointer hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50" : ""} transition`}
                       onClick={() => {
                         if (canManageRunActions) setSelectedRecord(r);
                       }}
@@ -576,7 +576,7 @@ export function PayrollRunDetailPage() {
                       <td className="px-3 py-2.5">
                         <span className="rounded-md border border-teal-200 bg-teal-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-teal-800">{r.employeeCode}</span>
                       </td>
-                      <td className="px-3 py-2.5 font-medium text-zinc-900">
+                      <td className="px-3 py-2.5 font-medium text-zinc-900 dark:text-zinc-100">
                         <div className="space-y-1">
                           <div>{r.fullName}</div>
                           {r.payrollInclusionReason ? (
@@ -586,7 +586,7 @@ export function PayrollRunDetailPage() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 text-zinc-500">{r.department || "—"}</td>
+                      <td className="px-3 py-2.5 text-zinc-500 dark:text-zinc-400">{r.department || "—"}</td>
                       <td className="px-3 py-2.5 text-center">
                         {r.isInsured ? <span className="text-emerald-600 font-semibold">Yes</span> : <span className="text-zinc-400">No</span>}
                       </td>
@@ -595,7 +595,7 @@ export function PayrollRunDetailPage() {
                       <td className="px-3 py-2.5 text-right font-mono text-red-600">-{fmt(r.totalDeductions)}</td>
                       <td className="px-3 py-2.5 text-right font-mono">{r.isInsured ? fmt(r.employeeInsurance) : "—"}</td>
                       <td className="px-3 py-2.5 text-right font-mono">{r.monthlyTax > 0 ? fmt(r.monthlyTax) : "—"}</td>
-                      <td className="px-3 py-2.5 text-right font-bold text-zinc-900">{fmt(r.netSalary)}</td>
+                      <td className="px-3 py-2.5 text-right font-bold text-zinc-900 dark:text-zinc-100">{fmt(r.netSalary)}</td>
                     </tr>
                   );
                 })}
@@ -611,13 +611,13 @@ export function PayrollRunDetailPage() {
               { title: "Cash Employees", data: paymentList.cash, total: paymentList.cashTotal },
               { title: "Bank Transfer Employees", data: paymentList.visa, total: paymentList.visaTotal },
             ].map(({ title, data, total }) => (
-              <div key={title} className="rounded-xl border border-zinc-200 bg-white">
-                <div className="border-b border-zinc-100 px-5 py-3 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-zinc-800">{title} ({data.length})</h3>
-                  <span className="text-sm font-bold text-zinc-900">EGP {fmt(total)}</span>
+              <div key={title} className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                <div className="border-b border-zinc-100 dark:border-zinc-800/50 px-5 py-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{title} ({data.length})</h3>
+                  <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">EGP {fmt(total)}</span>
                 </div>
-                <table className="min-w-full divide-y divide-zinc-100 text-xs">
-                  <thead className="bg-zinc-50/60 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                <table className="min-w-full divide-y divide-zinc-100 dark:divide-zinc-800 text-xs">
+                  <thead className="bg-zinc-50/60 dark:bg-zinc-800/50 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                     <tr>
                       <th className="px-4 py-2">Name</th>
                       <th className="px-4 py-2">Code</th>
@@ -628,12 +628,12 @@ export function PayrollRunDetailPage() {
                   </thead>
                   <tbody className="divide-y divide-zinc-50">
                     {data.map((r, i) => (
-                      <tr key={i} className="hover:bg-zinc-50/50">
-                        <td className="px-4 py-2 text-zinc-800">{r.fullName}</td>
-                        <td className="px-4 py-2 font-mono text-zinc-500">{r.employeeCode}</td>
-                        <td className="px-4 py-2 text-zinc-500">{r.department}</td>
-                        {title.includes("Bank") && <td className="px-4 py-2 font-mono text-zinc-600">{r.bankAccount || "—"}</td>}
-                        <td className="px-4 py-2 text-right font-bold text-zinc-900">{fmt(r.netSalary)}</td>
+                      <tr key={i} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/50">
+                        <td className="px-4 py-2 text-zinc-800 dark:text-zinc-200">{r.fullName}</td>
+                        <td className="px-4 py-2 font-mono text-zinc-500 dark:text-zinc-400">{r.employeeCode}</td>
+                        <td className="px-4 py-2 text-zinc-500 dark:text-zinc-400">{r.department}</td>
+                        {title.includes("Bank") && <td className="px-4 py-2 font-mono text-zinc-600 dark:text-zinc-400">{r.bankAccount || "—"}</td>}
+                        <td className="px-4 py-2 text-right font-bold text-zinc-900 dark:text-zinc-100">{fmt(r.netSalary)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -645,13 +645,13 @@ export function PayrollRunDetailPage() {
 
         {/* Insurance report tab */}
         {canManageRunActions && activeTab === "insurance" && insuranceReport && (
-          <div className="rounded-xl border border-zinc-200 bg-white">
-            <div className="border-b border-zinc-100 px-5 py-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zinc-800">Insurance Report ({insuranceReport.rows.length} insured)</h3>
-              <span className="text-sm font-bold text-zinc-900">Total: EGP {fmt(insuranceReport.totalCombined)}</span>
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+            <div className="border-b border-zinc-100 dark:border-zinc-800/50 px-5 py-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Insurance Report ({insuranceReport.rows.length} insured)</h3>
+              <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Total: EGP {fmt(insuranceReport.totalCombined)}</span>
             </div>
-            <table className="min-w-full divide-y divide-zinc-100 text-xs">
-              <thead className="bg-zinc-50/60 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            <table className="min-w-full divide-y divide-zinc-100 dark:divide-zinc-800 text-xs">
+              <thead className="bg-zinc-50/60 dark:bg-zinc-800/50 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 <tr>
                   <th className="px-4 py-2">Name</th>
                   <th className="px-4 py-2">Insurance #</th>
@@ -662,16 +662,16 @@ export function PayrollRunDetailPage() {
               </thead>
               <tbody className="divide-y divide-zinc-50">
                 {insuranceReport.rows.map((r, i) => (
-                  <tr key={i} className="hover:bg-zinc-50/50">
-                    <td className="px-4 py-2 text-zinc-800">{r.fullName}</td>
-                    <td className="px-4 py-2 font-mono text-zinc-500">{r.insuranceNumber || "—"}</td>
+                  <tr key={i} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/50">
+                    <td className="px-4 py-2 text-zinc-800 dark:text-zinc-200">{r.fullName}</td>
+                    <td className="px-4 py-2 font-mono text-zinc-500 dark:text-zinc-400">{r.insuranceNumber || "—"}</td>
                     <td className="px-4 py-2 text-right font-mono">{fmt(r.insuredWage)}</td>
                     <td className="px-4 py-2 text-right font-mono">{fmt(r.employeeShare)}</td>
                     <td className="px-4 py-2 text-right font-mono">{fmt(r.companyShare)}</td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="bg-zinc-50/80 font-semibold text-xs">
+              <tfoot className="bg-zinc-50/80 dark:bg-zinc-800/50 font-semibold text-xs">
                 <tr>
                   <td colSpan={3} className="px-4 py-2 text-right">Totals</td>
                   <td className="px-4 py-2 text-right">{fmt(insuranceReport.totalEmployee)}</td>
@@ -684,13 +684,13 @@ export function PayrollRunDetailPage() {
 
         {/* Tax report tab */}
         {canManageRunActions && activeTab === "tax" && taxReport && (
-          <div className="rounded-xl border border-zinc-200 bg-white">
-            <div className="border-b border-zinc-100 px-5 py-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zinc-800">Tax Report</h3>
-              <span className="text-sm font-bold text-zinc-900">Monthly Tax: EGP {fmt(taxReport.totalMonthlyTax)}</span>
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+            <div className="border-b border-zinc-100 dark:border-zinc-800/50 px-5 py-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Tax Report</h3>
+              <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Monthly Tax: EGP {fmt(taxReport.totalMonthlyTax)}</span>
             </div>
-            <table className="min-w-full divide-y divide-zinc-100 text-xs">
-              <thead className="bg-zinc-50/60 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            <table className="min-w-full divide-y divide-zinc-100 dark:divide-zinc-800 text-xs">
+              <thead className="bg-zinc-50/60 dark:bg-zinc-800/50 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 <tr>
                   <th className="px-4 py-2">Name</th>
                   <th className="px-4 py-2 text-right">Gross</th>
@@ -701,8 +701,8 @@ export function PayrollRunDetailPage() {
               </thead>
               <tbody className="divide-y divide-zinc-50">
                 {taxReport.rows.map((r, i) => (
-                  <tr key={i} className="hover:bg-zinc-50/50">
-                    <td className="px-4 py-2 text-zinc-800">{r.fullName}</td>
+                  <tr key={i} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/50">
+                    <td className="px-4 py-2 text-zinc-800 dark:text-zinc-200">{r.fullName}</td>
                     <td className="px-4 py-2 text-right font-mono">{fmt(r.grossSalary)}</td>
                     <td className="px-4 py-2 text-right font-mono">{fmt(r.taxableAnnual)}</td>
                     <td className="px-4 py-2 text-right font-mono">{fmt(r.annualTax)}</td>
@@ -716,9 +716,9 @@ export function PayrollRunDetailPage() {
 
         {/* Empty state */}
         {!hasRecords && run.status === "DRAFT" && (
-          <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/30 px-6 py-16 text-center">
+          <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-800/50 px-6 py-16 text-center">
             <Play className="mx-auto mb-3 text-zinc-300" size={36} />
-            <p className="text-sm font-medium text-zinc-600">Run not yet computed</p>
+            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Run not yet computed</p>
             <p className="mt-1 text-xs text-zinc-400">Click "Compute" to calculate payroll for all employees</p>
           </div>
         )}

@@ -43,7 +43,7 @@ export function RequireAdminOrHrHead({ children }) {
 
   if (departmentsLoading) {
     return (
-      <div className="min-h-[50vh] flex items-center justify-center text-sm text-zinc-500">
+      <div className="min-h-[50vh] flex items-center justify-center text-sm text-zinc-500 dark:text-zinc-400">
         Checking access…
       </div>
     );

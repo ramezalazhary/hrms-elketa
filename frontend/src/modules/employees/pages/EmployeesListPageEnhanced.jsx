@@ -161,8 +161,8 @@ export function EmployeesListPage() {
             {getInitials(row.fullName)}
           </div>
           <div>
-            <div className="font-medium text-zinc-900">{row.fullName}</div>
-            <div className="text-sm text-zinc-500">{row.employeeCode}</div>
+            <div className="font-medium text-zinc-900 dark:text-zinc-100">{row.fullName}</div>
+            <div className="text-sm text-zinc-500 dark:text-zinc-400">{row.employeeCode}</div>
           </div>
         </div>
       ),
@@ -171,12 +171,12 @@ export function EmployeesListPage() {
     createColumn("email", "Contact", {
       cell: (row) => (
         <div className="space-y-1">
-          <div className="flex items-center gap-1 text-sm text-zinc-900">
+          <div className="flex items-center gap-1 text-sm text-zinc-900 dark:text-zinc-100">
             <Mail className="w-3 h-3 text-zinc-400" />
             {row.email}
           </div>
           {row.phoneNumber && (
-            <div className="flex items-center gap-1 text-sm text-zinc-500">
+            <div className="flex items-center gap-1 text-sm text-zinc-500 dark:text-zinc-400">
               <Phone className="w-3 h-3 text-zinc-400" />
               {row.phoneNumber}
             </div>
@@ -195,7 +195,7 @@ export function EmployeesListPage() {
     }),
     createColumn("position", "Position", {
       cell: (row) => (
-        <span className="text-sm text-zinc-900">{row.position}</span>
+        <span className="text-sm text-zinc-900 dark:text-zinc-100">{row.position}</span>
       ),
       sortable: true,
     }),
@@ -205,7 +205,7 @@ export function EmployeesListPage() {
     }),
     createColumn("dateOfHire", "Start Date", {
       cell: (row) => (
-        <div className="flex items-center gap-1 text-sm text-zinc-900">
+        <div className="flex items-center gap-1 text-sm text-zinc-900 dark:text-zinc-100">
           <Calendar className="w-4 h-4 text-zinc-400" />
           {formatDate(row.dateOfHire)}
         </div>
@@ -217,21 +217,21 @@ export function EmployeesListPage() {
         <div className="flex items-center gap-2">
           <Link
             to={`/employees/${row._id}`}
-            className="p-1.5 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-md transition-colors"
+            className="p-1.5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
             title="View profile"
           >
             <Eye className="w-4 h-4" />
           </Link>
           <Link
             to={`/employees/${row._id}/edit`}
-            className="p-1.5 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-md transition-colors"
+            className="p-1.5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
             title="Edit employee"
           >
             <Pencil className="w-4 h-4" />
           </Link>
           <button
             onClick={() => handleDelete(row)}
-            className="p-1.5 text-zinc-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+            className="p-1.5 text-zinc-600 dark:text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
             title="Delete employee"
           >
             <UserMinus className="w-4 h-4" />
@@ -247,7 +247,7 @@ export function EmployeesListPage() {
     <div className="flex items-center gap-3">
       <button
         onClick={() => setShowFilters(!showFilters)}
-        className="flex items-center gap-2 px-3 py-2 text-sm border border-zinc-300 rounded-md hover:bg-zinc-50 transition-colors"
+        className="flex items-center gap-2 px-3 py-2 text-sm border border-zinc-300 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
       >
         <Filter className="w-4 h-4" />
         Filters
@@ -257,7 +257,7 @@ export function EmployeesListPage() {
       </button>
       <button
         onClick={() => window.location.reload()}
-        className="flex items-center gap-2 px-3 py-2 text-sm border border-zinc-300 rounded-md hover:bg-zinc-50 transition-colors"
+        className="flex items-center gap-2 px-3 py-2 text-sm border border-zinc-300 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
       >
         <RefreshCw className="w-4 h-4" />
         Refresh
@@ -295,7 +295,7 @@ export function EmployeesListPage() {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-white border border-zinc-200 rounded-lg p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <FormField label="Department">
               <Select
@@ -351,7 +351,7 @@ export function EmployeesListPage() {
               onClick={() =>
                 setFilters({ department: "", status: "", employmentType: "" })
               }
-              className="text-sm text-zinc-600 hover:text-zinc-900"
+              className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               Clear filters
             </button>
@@ -371,7 +371,7 @@ export function EmployeesListPage() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSelectedEmployees([])}
-                className="text-sm text-zinc-600 hover:text-zinc-900"
+                className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
               >
                 Clear selection
               </button>

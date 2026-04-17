@@ -115,9 +115,9 @@ export function DataTable({
     }
 
     return sortConfig.direction === "asc" ? (
-      <ChevronUp className="w-4 h-4 text-zinc-700" />
+      <ChevronUp className="w-4 h-4 text-zinc-700 dark:text-zinc-300" />
     ) : (
-      <ChevronDown className="w-4 h-4 text-zinc-700" />
+      <ChevronDown className="w-4 h-4 text-zinc-700 dark:text-zinc-300" />
     );
   };
 
@@ -126,11 +126,11 @@ export function DataTable({
     return (
       <div
         className={cn(
-          "rounded-lg border border-zinc-200 bg-white overflow-hidden",
+          "rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden",
           className,
         )}
       >
-        <div className="p-4 border-b border-zinc-200">
+        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
           <div className="flex items-center justify-between">
             <div className="h-4 w-32 bg-zinc-200 rounded animate-pulse" />
             <div className="flex items-center gap-2">
@@ -141,7 +141,7 @@ export function DataTable({
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-zinc-50 border-b border-zinc-200">
+            <thead className="bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-800">
               <tr>
                 {columns.map((column) => (
                   <th key={column.accessor} className="px-4 py-3 text-left">
@@ -152,10 +152,10 @@ export function DataTable({
             </thead>
             <tbody>
               {Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className="border-b border-zinc-100">
+                <tr key={i} className="border-b border-zinc-100 dark:border-zinc-800/50">
                   {columns.map((_, j) => (
                     <td key={j} className="px-4 py-3">
-                      <div className="h-4 bg-zinc-100 rounded animate-pulse" />
+                      <div className="h-4 bg-zinc-100 dark:bg-zinc-800 rounded animate-pulse" />
                     </td>
                   ))}
                 </tr>
@@ -173,17 +173,17 @@ export function DataTable({
       emptyState || (
         <div
           className={cn(
-            "rounded-lg border border-zinc-200 bg-white p-8 text-center",
+            "rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 text-center",
             className,
           )}
         >
-          <div className="w-12 h-12 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
             <Search className="w-6 h-6 text-zinc-400" />
           </div>
-          <h3 className="text-lg font-medium text-zinc-900 mb-2">
+          <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-2">
             {emptyText || "No data found"}
           </h3>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
             {searchQuery
               ? `No results match "${searchQuery}"`
               : "No records available"}
@@ -196,13 +196,13 @@ export function DataTable({
   return (
     <div
       className={cn(
-        "rounded-lg border border-zinc-200 bg-white overflow-hidden",
+        "rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden",
         className,
       )}
       {...props}
     >
       {/* Header */}
-      <div className="border-b border-zinc-200 bg-zinc-50/50 p-3 sm:p-4">
+      <div className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 p-3 sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-4">
             {searchable && (
@@ -213,20 +213,20 @@ export function DataTable({
                   placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
-                  className="w-full sm:w-64 pl-10 pr-4 py-2 border border-zinc-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full sm:w-64 pl-10 pr-4 py-2 border border-zinc-200 dark:border-zinc-800 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
             )}
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <button className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors">
+            <button className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors">
               <RefreshCw className="w-4 h-4" />
             </button>
-            <button className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors">
+            <button className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors">
               <Download className="w-4 h-4" />
             </button>
-            <button className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors">
+            <button className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors">
               <Settings className="w-4 h-4" />
             </button>
           </div>
@@ -236,17 +236,17 @@ export function DataTable({
       {/* Table */}
       <div className="overflow-x-auto">
         <table className="w-full table-fixed">
-          <thead className="bg-zinc-50 border-b border-zinc-200">
+          <thead className="bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-800">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column.accessor || column.key}
                   className={cn(
-                    "px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-700 sm:px-4 sm:py-3 sm:text-xs",
+                    "px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-700 dark:text-zinc-300 sm:px-4 sm:py-3 sm:text-xs",
                     column.headerClassName,
                     sortable &&
                       column.sortable !== false &&
-                      "cursor-pointer hover:bg-zinc-100 transition-colors",
+                      "cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors",
                   )}
                   onClick={() =>
                     sortable &&
@@ -264,7 +264,7 @@ export function DataTable({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {paginatedData.map((row, rowIndex) => {
               const key = getRowKey ? getRowKey(row) : (row.id || row._id || rowIndex);
               const isExpanded = expandedRowKey != null && String(expandedRowKey) === String(key);
@@ -272,9 +272,9 @@ export function DataTable({
                 <Fragment key={key}>
                   <tr
                     className={cn(
-                      "hover:bg-zinc-50 transition-colors",
+                      "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors",
                       onRowClick && "cursor-pointer",
-                      isExpanded && "bg-zinc-50/60",
+                      isExpanded && "bg-zinc-50/60 dark:bg-zinc-800/50",
                     )}
                     onClick={(e) => {
                       const interactive = e.target?.closest?.("button,input,a,textarea,select,label");
@@ -286,7 +286,7 @@ export function DataTable({
                       <td
                         key={column.accessor || column.key}
                     className={cn(
-                      "min-w-0 px-3 py-2.5 text-xs text-zinc-900 sm:px-4 sm:py-3 sm:text-sm",
+                      "min-w-0 px-3 py-2.5 text-xs text-zinc-900 dark:text-zinc-100 sm:px-4 sm:py-3 sm:text-sm",
                       column.cellClassName,
                     )}
                       >
@@ -295,7 +295,7 @@ export function DataTable({
                     ))}
                   </tr>
                   {isExpanded && typeof renderExpandedRow === "function" && (
-                    <tr className="bg-zinc-50/40">
+                    <tr className="bg-zinc-50/40 dark:bg-zinc-800/50">
                       <td colSpan={columns.length} className="px-4 py-4">
                         {renderExpandedRow(row)}
                       </td>
@@ -310,9 +310,9 @@ export function DataTable({
 
       {/* Pagination */}
       {pagination && totalPages > 1 && (
-        <div className="border-t border-zinc-200 bg-zinc-50/50 px-3 py-3 sm:px-4">
+        <div className="border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-3 sm:px-4">
           <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <div className="text-xs text-zinc-700 sm:text-sm">
+            <div className="text-xs text-zinc-700 dark:text-zinc-300 sm:text-sm">
               Showing {startRecord} to {endRecord} of {processedData.length}{" "}
               results
             </div>
@@ -320,7 +320,7 @@ export function DataTable({
               <button
                 onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className="px-2.5 py-1 text-xs sm:text-sm border border-zinc-300 rounded-md hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-2.5 py-1 text-xs sm:text-sm border border-zinc-300 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Previous
               </button>
@@ -346,7 +346,7 @@ export function DataTable({
                         "px-2.5 py-1 text-xs sm:text-sm border rounded-md transition-colors",
                         currentPage === pageNum
                           ? "bg-indigo-600 text-white border-indigo-600"
-                          : "border-zinc-300 hover:bg-zinc-100",
+                          : "border-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800",
                       )}
                     >
                       {pageNum}
@@ -360,7 +360,7 @@ export function DataTable({
                   setCurrentPage((prev) => Math.min(prev + 1, totalPages))
                 }
                 disabled={currentPage === totalPages}
-                className="px-2.5 py-1 text-xs sm:text-sm border border-zinc-300 rounded-md hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-2.5 py-1 text-xs sm:text-sm border border-zinc-300 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Next
               </button>

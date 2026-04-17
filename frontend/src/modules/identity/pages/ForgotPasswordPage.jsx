@@ -27,31 +27,31 @@ export function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex bg-zinc-50 items-center justify-center p-6 font-sans text-zinc-900">
+    <div className="min-h-screen w-full flex bg-zinc-50 dark:bg-zinc-800/50 items-center justify-center p-6 font-sans text-zinc-900 dark:text-zinc-100">
       <div className="w-full max-w-[400px]">
         <div className="mb-8 text-center">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-200 bg-white shadow-card mb-4">
-            <Lock className="h-5 w-5 text-zinc-600" aria-hidden />
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-card mb-4">
+            <Lock className="h-5 w-5 text-zinc-600 dark:text-zinc-400" aria-hidden />
           </div>
-          <h1 className="text-base font-medium tracking-tight text-zinc-900">Forgot password</h1>
-          <p className="text-sm text-zinc-500 mt-2 leading-relaxed">
+          <h1 className="text-base font-medium tracking-tight text-zinc-900 dark:text-zinc-100">Forgot password</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2 leading-relaxed">
             We don’t send a reset link. Your request is queued for an administrator (or HR lead) who can set a
             new temporary password. You’ll sign in with that password, then choose your own.
           </p>
         </div>
 
         {status === "success" ? (
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-card space-y-4">
+          <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-card space-y-4">
             <div className="flex items-start gap-3">
               <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" aria-hidden />
-              <div className="text-sm text-zinc-700 space-y-2">
-                <p className="font-medium text-zinc-900">Request received</p>
+              <div className="text-sm text-zinc-700 dark:text-zinc-300 space-y-2">
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">Request received</p>
                 <p>
-                  If an account exists for <span className="font-mono text-zinc-800">{email}</span>, a pending
+                  If an account exists for <span className="font-mono text-zinc-800 dark:text-zinc-200">{email}</span>, a pending
                   item appears in <strong>Administration → Requests</strong> for staff who handle password
                   resets.
                 </p>
-                <p className="text-zinc-500">
+                <p className="text-zinc-500 dark:text-zinc-400">
                   After they set a temporary password, use <strong>Sign in</strong> with your email and that
                   password. You will be asked to change it immediately.
                 </p>
@@ -59,29 +59,29 @@ export function ForgotPasswordPage() {
             </div>
             <Link
               to="/login"
-              className="inline-flex items-center gap-2 text-sm font-medium text-zinc-900 hover:underline"
+              className="inline-flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100 hover:underline"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to sign in
             </Link>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-zinc-200 bg-white p-6 shadow-card">
+          <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-card">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-600 block">Work email</label>
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400 block">Work email</label>
               <input
                 type="email"
                 required
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-md text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400"
                 placeholder="name@company.com"
               />
             </div>
 
             {error ? (
-              <div className="p-2.5 rounded-md bg-zinc-50 text-zinc-700 text-xs border border-zinc-200">
+              <div className="p-2.5 rounded-md bg-zinc-50 dark:bg-zinc-800/50 text-zinc-700 dark:text-zinc-300 text-xs border border-zinc-200 dark:border-zinc-800">
                 {error}
               </div>
             ) : null}
@@ -114,7 +114,7 @@ export function ForgotPasswordPage() {
             </button>
 
             <div className="text-center pt-1">
-              <Link to="/login" className="text-xs text-zinc-500 hover:text-zinc-800">
+              <Link to="/login" className="text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200">
                 Cancel
               </Link>
             </div>

@@ -19,7 +19,7 @@ export function Skeleton({ className, ...props }) {
  */
 export function CardSkeleton({ className }) {
   return (
-    <div className={cn("rounded-lg border border-zinc-200 bg-white p-6", className)}>
+    <div className={cn("rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6", className)}>
       <div className="flex items-center gap-4">
         <Skeleton className="h-12 w-12 rounded-full" />
         <div className="space-y-2">
@@ -36,7 +36,7 @@ export function CardSkeleton({ className }) {
  */
 export function TableRowSkeleton({ columns = 5 }) {
   return (
-    <tr className="border-b border-zinc-100">
+    <tr className="border-b border-zinc-100 dark:border-zinc-800/50">
       {Array.from({ length: columns }).map((_, i) => (
         <td key={i} className="px-4 py-3">
           <Skeleton className={cn("h-4", i === 0 ? "w-8" : "w-full")} />
@@ -51,13 +51,13 @@ export function TableRowSkeleton({ columns = 5 }) {
  */
 export function TableSkeleton({ rows = 5, columns = 5 }) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white overflow-hidden">
-      <div className="bg-zinc-50 px-4 py-3 border-b border-zinc-200">
+    <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+      <div className="bg-zinc-50 dark:bg-zinc-800/50 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
         <Skeleton className="h-4 w-48" />
       </div>
       <table className="w-full">
         <thead>
-          <tr className="border-b border-zinc-200 bg-zinc-50/50">
+          <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50">
             {Array.from({ length: columns }).map((_, i) => (
               <th key={i} className="px-4 py-3 text-left">
                 <Skeleton className="h-3 w-20" />
@@ -80,7 +80,7 @@ export function TableSkeleton({ rows = 5, columns = 5 }) {
  */
 export function FormSkeleton({ fields = 4 }) {
   return (
-    <div className="space-y-4 rounded-lg border border-zinc-200 bg-white p-6">
+    <div className="space-y-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6">
       <Skeleton className="h-6 w-48 mb-6" />
       {Array.from({ length: fields }).map((_, i) => (
         <div key={i} className="space-y-2">

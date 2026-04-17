@@ -72,9 +72,9 @@ function eligibilityBlock(r) {
   const e = r.eligibility;
   if (!e || e.eligible) return null;
   return (
-    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-950">
+    <div className="mt-2 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50/90 dark:bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-200">
       <p className="font-semibold">Policy eligibility: not met yet</p>
-      <p className="mt-0.5 text-amber-900/90">{e.reason || "Does not meet hire-date rules yet."}</p>
+      <p className="mt-0.5 text-amber-900/90 dark:text-amber-300/80">{e.reason || "Does not meet hire-date rules yet."}</p>
       {e.eligibleAfterDate != null && (
         <p className="mt-1">Eligible from approximately {fmtDate(e.eligibleAfterDate)}</p>
       )}
@@ -82,7 +82,7 @@ function eligibilityBlock(r) {
         <p>About {e.daysUntilEligible} calendar day(s) short of policy minimum after hire.</p>
       )}
       {r.preEligibility && (
-        <p className="mt-2 font-medium text-amber-900 border-t border-amber-200/80 pt-2">
+        <p className="mt-2 font-medium text-amber-900 dark:text-amber-300 border-t border-amber-200/80 dark:border-amber-500/20 pt-2">
           If approved, this is recorded but does not deduct from leave balance (pre-eligibility).
         </p>
       )}
@@ -148,7 +148,12 @@ export function LeaveApprovalsPage() {
           return;
         }
         const data = await listLeaveRequestsApi({ queue: "1", limit: "100" });
-        setList(data.requests || []);
+        const queueItems = Array.isArray(data?.requests)
+          ? data.requests.filter(
+              (r) => r?.status === "PENDING" || r?.status === "ESCALATED",
+            )
+          : [];
+        setList(queueItems);
         setBalanceByEmployeeId(data.balanceByEmployeeId || {});
       } else if (tab === "all" && isHr) {
         const params = { limit: "100" };
@@ -305,20 +310,20 @@ export function LeaveApprovalsPage() {
       const ifCancelled = r.status === "PENDING" && days > 0 ? rem + days : null;
       const insufficientBalance = r.status === "PENDING" && (rem <= 0 || rem < days);
       return (
-        <div className="mt-2 rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2 text-xs text-zinc-600 space-y-0.5">
-          <p className="font-medium text-zinc-700">Vacation balance</p>
-          <p>Entitlement {fmtDays(v.entitlementDays)} d · approved {fmtDays(v.approvedDays)} · pending {fmtDays(v.pendingDays)} · <span className="font-semibold text-zinc-800">left {fmtDays(rem)} d</span></p>
-          {Number(v.bonusDays) > 0 && <p className="font-medium text-zinc-800">Includes {fmtDays(v.bonusDays)} bonus day(s)</p>}
+        <div className="mt-2 rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400 space-y-0.5">
+          <p className="font-medium text-zinc-700 dark:text-zinc-300">Vacation balance</p>
+          <p>Entitlement {fmtDays(v.entitlementDays)} d · approved {fmtDays(v.approvedDays)} · pending {fmtDays(v.pendingDays)} · <span className="font-semibold text-zinc-800 dark:text-zinc-200">left {fmtDays(rem)} d</span></p>
+          {Number(v.bonusDays) > 0 && <p className="font-medium text-zinc-800 dark:text-zinc-200">Includes {fmtDays(v.bonusDays)} bonus day(s)</p>}
           {insufficientBalance && (
-            <div className="mt-1.5 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-rose-800 font-medium">
+            <div className="mt-1.5 rounded-md border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 px-2.5 py-1.5 text-rose-800 dark:text-rose-300 font-medium">
               Insufficient balance — if approved, this will be recorded as unpaid leave (salary deduction applies).
             </div>
           )}
           {ifCancelled != null && !insufficientBalance && (
-            <p className="text-zinc-500">If withdrawn/rejected: left would be <strong className="text-zinc-700">{fmtDays(ifCancelled)} d</strong></p>
+            <p className="text-zinc-500 dark:text-zinc-400">If withdrawn/rejected: left would be <strong className="text-zinc-700 dark:text-zinc-300">{fmtDays(ifCancelled)} d</strong></p>
           )}
           {v.credits?.length > 0 && (
-            <LeaveBalanceCreditHistory credits={v.credits} compact maxRows={5} className="mt-2 border-t border-zinc-200/80 pt-2" />
+            <LeaveBalanceCreditHistory credits={v.credits} compact maxRows={5} className="mt-2 border-t border-zinc-200/80 dark:border-zinc-700 pt-2" />
           )}
         </div>
       );
@@ -328,14 +333,14 @@ export function LeaveApprovalsPage() {
     const excuseExhausted = r.status === "PENDING" && (remM <= 0 || remM < mins);
     const countExhausted = r.status === "PENDING" && ex.excusesAllowedInPeriod > 0 && ex.excusesUsedInPeriod >= ex.excusesAllowedInPeriod;
     return (
-      <div className="mt-2 rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2 text-xs text-zinc-600 space-y-0.5">
-        <p className="font-medium text-zinc-700">Excuse balance (monthly cap)</p>
-        <p>Cap {fmtMins(ex.entitlementMinutes)} · used {fmtMins(ex.approvedMinutes)} · pending {fmtMins(ex.pendingMinutes)} · <span className="font-semibold text-zinc-800">left {fmtMins(remM)}</span></p>
+      <div className="mt-2 rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400 space-y-0.5">
+        <p className="font-medium text-zinc-700 dark:text-zinc-300">Excuse balance (monthly cap)</p>
+        <p>Cap {fmtMins(ex.entitlementMinutes)} · used {fmtMins(ex.approvedMinutes)} · pending {fmtMins(ex.pendingMinutes)} · <span className="font-semibold text-zinc-800 dark:text-zinc-200">left {fmtMins(remM)}</span></p>
         {ex.excusesAllowedInPeriod > 0 && (
           <p>Excuses used this period: {ex.excusesUsedInPeriod} / {ex.excusesAllowedInPeriod}</p>
         )}
         {(excuseExhausted || countExhausted) && (
-          <div className="mt-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-amber-800 font-medium">
+          <div className="mt-1.5 rounded-md border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-1.5 text-amber-800 dark:text-amber-300 font-medium">
             Excuse quota exhausted — HR will choose the deduction method (salary or vacation balance) when approving.
           </div>
         )}
@@ -371,14 +376,18 @@ export function LeaveApprovalsPage() {
         key={r._id}
         type="button"
         onClick={() => setSelectedId(r._id)}
-        className={`w-full rounded-xl border px-3 py-3 text-left ${active ? "border-zinc-900 bg-zinc-50" : "border-zinc-200 bg-white"}`}
+        className={`w-full rounded-xl border px-3 py-3 text-left transition-all ${
+          active 
+            ? "border-zinc-900 dark:border-indigo-500 bg-zinc-50 dark:bg-indigo-500/10" 
+            : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 hover:border-zinc-300 dark:hover:border-zinc-700"
+        }`}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-medium text-zinc-900">{r.employeeEmail}</p>
+          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{r.employeeEmail}</p>
           <LeaveStatusPill status={r.status} />
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${ownerBadgeClass}`}>{ownerBadge}</span>
         </div>
-        <p className="mt-1 text-xs text-zinc-600">
+        <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
           {r.kind === "VACATION"
             ? `${fmtDate(r.startDate)} to ${fmtDate(r.endDate)}`
             : `${fmtDate(r.excuseDate)} ${r.startTime}-${r.endTime}`}
@@ -393,12 +402,12 @@ export function LeaveApprovalsPage() {
       description="HR and management decide. If decisions conflict, the request escalates to HR Manager/Admin."
     >
       <div className="leave-ui max-w-6xl space-y-4">
-        <div className="rounded-[20px] bg-zinc-50/90 px-4 py-3 text-xs leading-relaxed text-zinc-800 ring-1 ring-zinc-200/80">
+        <div className="rounded-[20px] bg-zinc-50/90 dark:bg-zinc-800/50 px-4 py-3 text-xs leading-relaxed text-zinc-800 dark:text-zinc-300 ring-1 ring-zinc-200/80 dark:ring-zinc-700/50">
           <strong>How the approval pipeline works:</strong> When an employee submits a leave request it first
-          goes to <span className="font-semibold">HR</span> for review, then to their
-          <span className="font-semibold"> manager or team leader</span> for final approval.
+          goes to <span className="font-semibold text-zinc-900 dark:text-zinc-100">HR</span> for review, then to their
+          <span className="font-semibold text-zinc-900 dark:text-zinc-100"> manager or team leader</span> for final approval.
           {" "}If one side approves and the other rejects, the request is marked
-          <span className="font-semibold"> ESCALATED</span> for final decision by HR Manager/Admin.
+          <span className="font-semibold text-zinc-900 dark:text-zinc-100"> ESCALATED</span> for final decision by HR Manager/Admin.
           {isHr
             ? " As HR, you review the first step. Use the \"All Requests\" tab to see every request across the company."
             : isMgmtApprover
@@ -408,22 +417,22 @@ export function LeaveApprovalsPage() {
         </div>
 
         {(isHr || isMgmtApprover) && (
-          <div className="inline-flex w-full max-w-2xl gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 sm:w-auto overflow-x-auto hidden-scrollbar">
+          <div className="inline-flex w-full max-w-2xl gap-0.5 rounded-2xl bg-zinc-100/90 dark:bg-zinc-800/80 p-1 ring-1 ring-zinc-200/80 dark:ring-zinc-700/50 sm:w-auto overflow-x-auto hidden-scrollbar">
             {canTakeActions && (
               <button type="button" onClick={() => setTab("queue")}
-                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "queue" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
+                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "queue" ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm ring-1 ring-zinc-200/60 dark:ring-zinc-700" : "text-zinc-600 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 dark:hover:text-zinc-300"}`}>
                 Pending queue
               </button>
             )}
             {(isMgmtApprover || isHrAlsoMgmt) && (
               <button type="button" onClick={() => setTab("history")}
-                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "history" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
+                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "history" ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm ring-1 ring-zinc-200/60 dark:ring-zinc-700" : "text-zinc-600 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 dark:hover:text-zinc-300"}`}>
                 Team &amp; department history
               </button>
             )}
             {isHr && (
               <button type="button" onClick={() => setTab("all")}
-                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "all" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
+                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "all" ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm ring-1 ring-zinc-200/60 dark:ring-zinc-700" : "text-zinc-600 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 dark:hover:text-zinc-300"}`}>
                 All requests
               </button>
             )}
@@ -433,7 +442,7 @@ export function LeaveApprovalsPage() {
         {(tab === "all" || tab === "history") && (
           <div className="flex flex-wrap gap-2">
             <select value={allFilter.status} onChange={(e) => setAllFilter((p) => ({ ...p, status: e.target.value }))}
-              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm">
+              className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none">
               <option value="">All statuses</option>
               <option value="PENDING">Pending</option>
               <option value="ESCALATED">Escalated</option>
@@ -442,7 +451,7 @@ export function LeaveApprovalsPage() {
               <option value="CANCELLED">Cancelled</option>
             </select>
             <select value={allFilter.kind} onChange={(e) => setAllFilter((p) => ({ ...p, kind: e.target.value }))}
-              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm">
+              className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none">
               <option value="">All types</option>
               <option value="VACATION">Vacation</option>
               <option value="EXCUSE">Excuse</option>
@@ -453,30 +462,30 @@ export function LeaveApprovalsPage() {
         <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
           <LeaveSurface className="p-3">
             {loading ? (
-              <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-500" /></div>
+              <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-500 dark:text-zinc-400" /></div>
             ) : list.length === 0 ? (
-              <p className="py-12 text-center text-sm text-zinc-500">No requests for current filters.</p>
+              <p className="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">No requests for current filters.</p>
             ) : (
               <div className="space-y-2">{list.map(requestSummaryRow)}</div>
             )}
           </LeaveSurface>
           <LeaveSurface elevated className="p-5">
             {!selectedRequest ? (
-              <p className="text-sm text-zinc-500">Select a request from the left panel.</p>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">Select a request from the left panel.</p>
             ) : (
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base font-semibold text-zinc-900">{selectedRequest.employeeEmail}</h3>
+                  <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{selectedRequest.employeeEmail}</h3>
                   <LeaveStatusPill status={selectedRequest.status} />
                   {selectedRequest.onBehalf ? <LeaveStatusPill status="PENDING" label="On behalf" /> : null}
                 </div>
-                <p className="text-sm text-zinc-600">
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
                   {selectedRequest.kind === "VACATION"
                     ? `${selectedRequest.leaveType || "ANNUAL"} · ${fmtDate(selectedRequest.startDate)} – ${fmtDate(selectedRequest.endDate)}`
                     : `Excuse · ${fmtDate(selectedRequest.excuseDate)} ${selectedRequest.startTime}–${selectedRequest.endTime}`}
                 </p>
                 {(selectedRequest.status === "PENDING" || selectedRequest.status === "ESCALATED") ? (
-                  <p className="text-xs font-medium text-zinc-700">
+                  <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                     <Clock className="mr-1 inline h-3 w-3" />
                     {selectedRequest.status === "ESCALATED"
                       ? "Escalated and waiting for HR Manager/Admin resolution"
@@ -493,7 +502,7 @@ export function LeaveApprovalsPage() {
                         type="button"
                         disabled={acting}
                         onClick={() => approve(selectedRequest._id)}
-                        className="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-full bg-zinc-900 dark:bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90 disabled:opacity-50"
                       >
                         <Check className="h-4 w-4" />
                         {selectedRequest.status === "ESCALATED" ? "Resolve approve" : "Approve"}
@@ -502,7 +511,7 @@ export function LeaveApprovalsPage() {
                         type="button"
                         disabled={acting}
                         onClick={() => { setRejectId(selectedRequest._id); setRejectComment(""); }}
-                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm text-rose-700 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 dark:border-rose-500/30 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 disabled:opacity-50"
                       >
                         <X className="h-4 w-4" />
                         {selectedRequest.status === "ESCALATED" ? "Resolve reject" : "Reject"}
@@ -512,7 +521,7 @@ export function LeaveApprovalsPage() {
                           type="button"
                           disabled={acting}
                           onClick={() => directRecord(selectedRequest._id)}
-                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 disabled:opacity-50"
+                          className="rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-800 disabled:opacity-50"
                         >
                           Record directly
                         </button>
@@ -533,11 +542,11 @@ export function LeaveApprovalsPage() {
             value={rejectComment}
             onChange={(e) => setRejectComment(e.target.value)}
             rows={3}
-            className="w-full rounded-lg border border-rose-200 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-rose-200 dark:border-rose-500/30 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-rose-500"
             placeholder="Reason for rejection"
             required
           />
-          <button type="submit" disabled={acting} className="rounded-lg bg-rose-700 px-3 py-2 text-sm text-white disabled:opacity-50">
+          <button type="submit" disabled={acting} className="w-full rounded-lg bg-rose-700 px-3 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-rose-800 disabled:opacity-50 uppercase tracking-widest">
             Confirm reject
           </button>
         </form>
@@ -561,7 +570,7 @@ export function LeaveApprovalsPage() {
             min="0.01"
             value={excessAmount}
             onChange={(e) => setExcessAmount(e.target.value)}
-            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm"
             required
           />
           <button type="submit" disabled={acting} className="rounded-lg bg-amber-700 px-3 py-2 text-sm text-white disabled:opacity-50">

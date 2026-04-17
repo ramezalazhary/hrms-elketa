@@ -137,7 +137,7 @@ function WelcomeBanner({ employee, attendanceHistory }) {
       <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-             <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-indigo-200 border border-white/5">
+             <span className="px-3 py-1 bg-white dark:bg-zinc-900/10 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-indigo-200 border border-white/5">
                {greeting}
              </span>
              {todayRecord && (
@@ -167,7 +167,7 @@ function WelcomeBanner({ employee, attendanceHistory }) {
            </div>
            
            {todayRecord && (
-             <div className="hidden sm:block px-4 py-3 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
+             <div className="hidden sm:block px-4 py-3 bg-white dark:bg-zinc-900/5 backdrop-blur-xl rounded-2xl border border-white/10">
                <p className="text-[9px] font-bold text-white/40 uppercase mb-1">Today's Check-in</p>
                <p className="text-lg font-black text-white">{todayRecord.checkIn}</p>
              </div>
@@ -268,14 +268,14 @@ const EmployeeDashboard = memo(function EmployeeDashboard({ currentUser, employe
         <div className="grid gap-6 md:grid-cols-2">
           {/* Missing Documents Checklist */}
           <article className="rounded-3xl border border-white/20 glass-premium shadow-premium overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white/40">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white dark:bg-zinc-900/40">
                <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 border-l-4 border-indigo-500 pl-3">Compliance Checklist</h3>
-               <span className="text-[9px] font-bold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full uppercase tracking-widest">Documents</span>
+               <span className="text-[9px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 px-2 py-0.5 rounded-full uppercase tracking-widest">Documents</span>
             </div>
             <div className="p-6">
                {(employee.documentChecklist || []).filter(d => d.status === 'MISSING').length > 0 ? (
                  <div className="space-y-4">
-                   <p className="text-xs text-zinc-500 font-medium mb-4">
+                   <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium mb-4">
                      Please submit the following original documents to HR to finalize your file:
                    </p>
                    {(employee.documentChecklist || []).filter(d => d.status === 'MISSING').map((doc, idx) => (
@@ -295,7 +295,7 @@ const EmployeeDashboard = memo(function EmployeeDashboard({ currentUser, employe
                     <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4 border border-emerald-100">
                        <ShieldCheck className="h-6 w-6 text-emerald-600" />
                     </div>
-                    <p className="text-sm font-bold text-zinc-900">Records Clear</p>
+                    <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Records Clear</p>
                     <p className="text-xs text-zinc-400 mt-1">All required documents have been verified.</p>
                  </div>
                )}
@@ -304,7 +304,7 @@ const EmployeeDashboard = memo(function EmployeeDashboard({ currentUser, employe
 
           {/* Management Hierarchy Section */}
           <article className="rounded-3xl border border-white/20 glass-premium shadow-premium overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 bg-white/40">
+            <div className="px-6 py-4 border-b border-slate-100 bg-white dark:bg-zinc-900/40">
                <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 border-l-4 border-indigo-500 pl-3">Management & Reporting</h3>
             </div>
             <div className="p-6">
@@ -316,12 +316,12 @@ const EmployeeDashboard = memo(function EmployeeDashboard({ currentUser, employe
                       {(employee.effectiveManager?.fullName || employee.managerId?.fullName)?.[0] || '?'}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-zinc-900">{employee.effectiveManager?.fullName || employee.managerId?.fullName || "Not Assigned"}</p>
+                      <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{employee.effectiveManager?.fullName || employee.managerId?.fullName || "Not Assigned"}</p>
                       <p className="text-[10px] text-zinc-400">{employee.effectiveManager?.email || employee.managerId?.email || "No contact info"}</p>
                     </div>
                   </div>
                 </div>
-                <div className="h-px bg-zinc-100" />
+                <div className="h-px bg-zinc-100 dark:bg-zinc-800" />
                 <div>
                   <p className="text-[9px] font-bold text-zinc-400 uppercase mb-2">Team Leader</p>
                   <div className="flex items-center gap-3">
@@ -329,7 +329,7 @@ const EmployeeDashboard = memo(function EmployeeDashboard({ currentUser, employe
                       {(employee.effectiveTeamLeader?.fullName || employee.teamLeaderId?.fullName)?.[0] || '?'}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-zinc-900">{employee.effectiveTeamLeader?.fullName || employee.teamLeaderId?.fullName || "Not Assigned"}</p>
+                      <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{employee.effectiveTeamLeader?.fullName || employee.teamLeaderId?.fullName || "Not Assigned"}</p>
                       <p className="text-[10px] text-zinc-400">{employee.effectiveTeamLeader?.email || employee.teamLeaderId?.email || "Unit support"}</p>
                     </div>
                   </div>
@@ -351,22 +351,22 @@ const EmployeeDashboard = memo(function EmployeeDashboard({ currentUser, employe
             <div className="rounded-2xl border border-white/20 glass-premium shadow-premium overflow-hidden overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="bg-white/40 border-b border-slate-100">
+                  <tr className="bg-white dark:bg-zinc-900/40 border-b border-slate-100">
                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Date</th>
                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Status</th>
                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Log</th>
                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Hours</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100 italic font-medium text-zinc-800">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 italic font-medium text-zinc-800 dark:text-zinc-200">
                   {isLoading ? (
                     <tr><td colSpan="4" className="px-6 py-10 text-center animate-pulse">Syncing...</td></tr>
                   ) : attendanceHistory.length === 0 ? (
                     <tr><td colSpan="4" className="px-6 py-10 text-center text-zinc-400">No attendance logs detected.</td></tr>
                   ) : (
                     attendanceHistory.map(record => (
-                      <tr key={record._id} className="hover:bg-white/50 transition-colors group">
-                        <td className="px-6 py-4 text-xs font-bold text-zinc-900">
+                      <tr key={record._id} className="hover:bg-white dark:hover:bg-zinc-900/50 transition-colors group">
+                        <td className="px-6 py-4 text-xs font-bold text-zinc-900 dark:text-zinc-100">
                           {new Date(record.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
                         </td>
                         <td className="px-6 py-4">
@@ -378,8 +378,8 @@ const EmployeeDashboard = memo(function EmployeeDashboard({ currentUser, employe
                             {record.status}{record.unpaidLeave ? " · UNPAID" : ""}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-xs font-mono text-zinc-500">{record.checkIn || '—'} / {record.checkOut || '—'}</td>
-                        <td className="px-6 py-4 text-right pr-8 text-xs font-black text-zinc-900">{formatTotalHours(record.totalHours)}</td>
+                        <td className="px-6 py-4 text-xs font-mono text-zinc-500 dark:text-zinc-400">{record.checkIn || '—'} / {record.checkOut || '—'}</td>
+                        <td className="px-6 py-4 text-right pr-8 text-xs font-black text-zinc-900 dark:text-zinc-100">{formatTotalHours(record.totalHours)}</td>
                       </tr>
                     ))
                   )}
@@ -414,20 +414,20 @@ const EmployeeDashboard = memo(function EmployeeDashboard({ currentUser, employe
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 backdrop-blur-sm p-4">
           <form 
             onSubmit={handleSubmitRequest}
-            className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-zinc-200 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200"
+            className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200"
           >
-            <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50/50">
-              <h2 className="font-bold text-zinc-900">New Management Request</h2>
-              <p className="text-xs text-zinc-500 mt-1">Submit a formal request for elevated features.</p>
+            <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/50">
+              <h2 className="font-bold text-zinc-900 dark:text-zinc-100">New Management Request</h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Submit a formal request for elevated features.</p>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-[10px] font-bold text-zinc-700 mb-1.5 uppercase tracking-widest">Type of Request</label>
+                <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1.5 uppercase tracking-widest">Type of Request</label>
                 <select
                   required
                   value={requestData.type}
                   onChange={e => setRequestData({ ...requestData, type: e.target.value })}
-                  className="w-full rounded-xl border border-zinc-200 px-4 py-2.5 text-sm bg-zinc-50/50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 px-4 py-2.5 text-sm bg-zinc-50/50 dark:bg-zinc-800/50 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-indigo-500 outline-none transition"
                 >
                   <option value="ANALYTICS">Analytics Access</option>
                   <option value="HR_MODULES">HR Modules</option>
@@ -436,23 +436,23 @@ const EmployeeDashboard = memo(function EmployeeDashboard({ currentUser, employe
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-zinc-700 mb-1.5 uppercase tracking-widest">Context & Reason</label>
+                <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1.5 uppercase tracking-widest">Context & Reason</label>
                 <textarea
                   required
                   value={requestData.message}
                   onChange={e => setRequestData({ ...requestData, message: e.target.value })}
                   rows={4}
                   placeholder="Explain why you need this access..."
-                  className="w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm bg-zinc-50/50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition resize-none"
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 px-4 py-3 text-sm bg-zinc-50/50 dark:bg-zinc-800/50 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-indigo-500 outline-none transition resize-none"
                 />
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-zinc-100 bg-zinc-50/50 flex justify-end gap-3">
+            <div className="px-6 py-4 border-t border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/50 flex justify-end gap-3">
               <button
                 type="button"
                 disabled={submitting}
                 onClick={() => setIsRequestModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 rounded-xl transition disabled:opacity-50"
+                className="px-4 py-2 text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -605,7 +605,7 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({
   if (employeesLoading) {
     return (
       <Layout title="Team Leadership" description={primaryTeam.name || "Operations"}>
-        <section className="rounded-[20px] border border-zinc-200/80 bg-white p-8 text-sm text-zinc-600 shadow-sm ring-1 ring-zinc-950/[0.05]">
+        <section className="rounded-[20px] border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 p-8 text-sm text-zinc-600 dark:text-zinc-400 shadow-sm ring-1 ring-zinc-950/[0.05]">
           Synchronizing team roster...
         </section>
       </Layout>
@@ -614,26 +614,26 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({
 
   return (
     <Layout title="Team Leadership" description={primaryTeam.name || "Operations"}>
-      <div className="space-y-8 text-zinc-900">
+      <div className="space-y-8 text-zinc-900 dark:text-zinc-100">
         {/* Leadership Overview Banner - No Approval Required */}
-        <section className="relative flex flex-col items-start gap-8 overflow-hidden rounded-[20px] bg-white p-8 shadow-sm ring-1 ring-zinc-950/[0.06] lg:flex-row lg:items-center">
+        <section className="relative flex flex-col items-start gap-8 overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 p-8 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 lg:flex-row lg:items-center">
           <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-zinc-200/40 blur-2xl" />
           <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-zinc-700 to-zinc-900 text-3xl font-semibold tracking-tight text-white shadow-md">
             {primaryTeam.name?.[0] || "T"}
           </div>
           <div className="relative flex-1 space-y-3 text-left">
-            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-zinc-50 px-3 py-1">
+            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-1">
                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-500" />
-               <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Active leader</span>
+               <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">Active leader</span>
             </div>
-            <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 md:text-3xl">{primaryTeam.leaderTitle || "Team Leader"} overview</h2>
-            <p className="max-w-3xl text-sm font-medium leading-relaxed text-zinc-500">
+            <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 md:text-3xl">{primaryTeam.leaderTitle || "Team Leader"} overview</h2>
+            <p className="max-w-3xl text-sm font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
               {primaryTeam.leaderResponsibility || "Managing operational excellence and team performance within the unit."}
             </p>
             <div className="flex flex-wrap justify-start gap-3 pt-2">
-               <div className="flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-4 py-2 shadow-sm">
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Commission date</span>
-                  <span className="text-xs font-semibold text-zinc-900">{formattedHireDate}</span>
+               <div className="flex items-center gap-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/80 dark:bg-zinc-800/50 px-4 py-2 shadow-sm">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Commission date</span>
+                  <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{formattedHireDate}</span>
                </div>
             </div>
           </div>
@@ -647,40 +647,40 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({
         {/* Daily Attendance Widget */}
         <section className="space-y-4">
            <div className="flex items-center justify-between px-1">
-              <h3 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
-                <Calendar size={14} className="text-zinc-600" /> Active unit presence
+              <h3 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                <Calendar size={14} className="text-zinc-600 dark:text-zinc-400" /> Active unit presence
               </h3>
               {scopedDailyAttendance.length > 0 && (
-                <span className="rounded-full border border-zinc-200/90 bg-zinc-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-700">
+                <span className="rounded-full border border-zinc-200/90 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 dark:text-zinc-300">
                    Cycle: {new Date(scopedDailyAttendance[0].date).toLocaleDateString()}
                 </span>
               )}
            </div>
            
-           <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+           <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
              <div className="overflow-x-auto">
              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-zinc-100 bg-zinc-50/80">
-                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Employee</th>
-                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Signed in</th>
-                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Status</th>
-                    <th className="px-6 py-4 text-right font-medium uppercase tracking-wide text-zinc-500">Activity</th>
+                  <tr className="border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/80 dark:bg-zinc-800/50">
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Employee</th>
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Signed in</th>
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Status</th>
+                    <th className="px-6 py-4 text-right font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Activity</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {loadingAttendance ? (
                     <tr><td colSpan="4" className="px-6 py-12 text-center text-sm font-medium text-zinc-400 animate-pulse">Synchronizing daily logs…</td></tr>
                   ) : scopedDailyAttendance.length === 0 ? (
-                    <tr><td colSpan="4" className="px-6 py-12 text-center text-sm font-medium italic text-zinc-500">No attendance logs for the current cycle.</td></tr>
+                    <tr><td colSpan="4" className="px-6 py-12 text-center text-sm font-medium italic text-zinc-500 dark:text-zinc-400">No attendance logs for the current cycle.</td></tr>
                   ) : (
                     scopedDailyAttendance.map(record => (
-                      <tr key={record._id} className="hover:bg-white/50 transition-colors group">
+                      <tr key={record._id} className="hover:bg-white dark:hover:bg-zinc-900/50 transition-colors group">
                         <td className="px-6 py-4">
-                           <div className="font-bold text-zinc-900">{(record.employeeId?.fullName || "Staff").split(' ')[0]}</div>
+                           <div className="font-bold text-zinc-900 dark:text-zinc-100">{(record.employeeId?.fullName || "Staff").split(' ')[0]}</div>
                            <div className="text-[10px] text-zinc-400">{record.employeeCode}</div>
                         </td>
-                        <td className="px-6 py-4 font-bold text-zinc-700">{record.checkIn || "—"}</td>
+                        <td className="px-6 py-4 font-bold text-zinc-700 dark:text-zinc-300">{record.checkIn || "—"}</td>
                         <td className="px-6 py-4">
                           <div className="inline-flex items-center gap-1.5">
                             <StatusBadge status={record.status} />
@@ -714,35 +714,35 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({
                 className="space-y-6"
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Headcount</p>
-                    <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{teamMembers.length}</p>
+                  <article className="rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Headcount</p>
+                    <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{teamMembers.length}</p>
                   </article>
-                  <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Active members</p>
-                    <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{activeCount}</p>
+                  <article className="rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Active members</p>
+                    <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{activeCount}</p>
                   </article>
-                  <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Team unit</p>
-                    <p className="mt-1 truncate text-sm font-semibold uppercase tracking-tight text-zinc-900">{team.name}</p>
+                  <article className="rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Team unit</p>
+                    <p className="mt-1 truncate text-sm font-semibold uppercase tracking-tight text-zinc-900 dark:text-zinc-100">{team.name}</p>
                   </article>
                 </div>
 
-                <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
-                  <div className="border-b border-zinc-100 bg-zinc-50/70 px-6 py-4">
-                    <h2 className="border-l-4 border-zinc-900 pl-3 text-xs font-semibold uppercase tracking-wide text-zinc-900">Team roster</h2>
+                <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+                  <div className="border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/70 dark:bg-zinc-800/50 px-6 py-4">
+                    <h2 className="border-l-4 border-zinc-900 pl-3 text-xs font-semibold uppercase tracking-wide text-zinc-900 dark:text-zinc-100">Team roster</h2>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
                       <thead>
-                        <tr className="border-b border-zinc-100 bg-white">
+                        <tr className="border-b border-zinc-100 dark:border-zinc-800/50 bg-white dark:bg-zinc-900">
                           <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Employee</th>
                           <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Information</th>
                           <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Status</th>
                           <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-right">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-zinc-100 text-xs text-zinc-800">
+                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 text-xs text-zinc-800 dark:text-zinc-200">
                         {teamMembers.length === 0 ? (
                           <tr><td colSpan="4" className="px-6 py-8 text-center text-zinc-400 italic">No members assigned to this team yet.</td></tr>
                         ) : (
@@ -760,13 +760,13 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({
                                 currentUserEmployee,
                               );
                             return (
-                            <tr key={emp.id} className="hover:bg-zinc-50/50 transition-colors">
+                            <tr key={emp.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/50 transition-colors">
                               <td className="px-6 py-4">
-                                <div className="font-bold text-zinc-900">{emp.fullName}</div>
+                                <div className="font-bold text-zinc-900 dark:text-zinc-100">{emp.fullName}</div>
                                 <div className="text-[10px] font-mono text-zinc-400">{emp.employeeCode}</div>
                               </td>
                               <td className="px-6 py-4">
-                                <div className="text-zinc-600 font-medium">{emp.position}</div>
+                                <div className="text-zinc-600 dark:text-zinc-400 font-medium">{emp.position}</div>
                                 <div className="text-[10px] text-zinc-400">{emp.email}</div>
                               </td>
                               <td className="px-6 py-4"><StatusBadge status={emp.status} /></td>
@@ -783,7 +783,7 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({
                                   ) : null}
                                   <Link
                                     to={`/employees/${emp.id || emp._id}`}
-                                    className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 transition-colors hover:bg-zinc-50"
+                                    className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/90 dark:border-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 dark:text-zinc-300 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                                   >
                                     View
                                   </Link>
@@ -801,36 +801,36 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({
             );
           })}
           {teams.length === 0 && evaluableFallbackMembers.length === 0 && (
-            <div className="rounded-[20px] border border-dashed border-zinc-200/90 bg-zinc-50/40 p-12 text-center text-sm text-zinc-500 ring-1 ring-zinc-950/[0.04]">
+            <div className="rounded-[20px] border border-dashed border-zinc-200/90 dark:border-zinc-800/80 bg-zinc-50/40 dark:bg-zinc-800/50 p-12 text-center text-sm text-zinc-500 dark:text-zinc-400 ring-1 ring-zinc-950/[0.04]">
               You are not currently assigned as a leader to any active teams.
             </div>
           )}
           {teams.length === 0 && evaluableFallbackMembers.length > 0 && (
-            <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
-              <div className="border-b border-zinc-100 bg-zinc-50/70 px-6 py-4">
-                <h2 className="border-l-4 border-zinc-900 pl-3 text-xs font-semibold uppercase tracking-wide text-zinc-900">
+            <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+              <div className="border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/70 dark:bg-zinc-800/50 px-6 py-4">
+                <h2 className="border-l-4 border-zinc-900 pl-3 text-xs font-semibold uppercase tracking-wide text-zinc-900 dark:text-zinc-100">
                   Team members available for evaluation
                 </h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-100 bg-white">
+                    <tr className="border-b border-zinc-100 dark:border-zinc-800/50 bg-white dark:bg-zinc-900">
                       <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Employee</th>
                       <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Information</th>
                       <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Status</th>
                       <th className="px-6 py-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100 text-xs text-zinc-800">
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 text-xs text-zinc-800 dark:text-zinc-200">
                     {evaluableFallbackMembers.map((emp) => (
-                      <tr key={emp.id || emp._id} className="hover:bg-zinc-50/50 transition-colors">
+                      <tr key={emp.id || emp._id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/50 transition-colors">
                         <td className="px-6 py-4">
-                          <div className="font-bold text-zinc-900">{emp.fullName}</div>
+                          <div className="font-bold text-zinc-900 dark:text-zinc-100">{emp.fullName}</div>
                           <div className="text-[10px] font-mono text-zinc-400">{emp.employeeCode}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-zinc-600 font-medium">{emp.position}</div>
+                          <div className="text-zinc-600 dark:text-zinc-400 font-medium">{emp.position}</div>
                           <div className="text-[10px] text-zinc-400">{emp.email}</div>
                         </td>
                         <td className="px-6 py-4"><StatusBadge status={emp.status} /></td>
@@ -845,7 +845,7 @@ const TeamLeaderDashboard = memo(function TeamLeaderDashboard({
                             </button>
                             <Link
                               to={`/employees/${emp.id || emp._id}`}
-                              className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 transition-colors hover:bg-zinc-50"
+                              className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/90 dark:border-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 dark:text-zinc-300 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                             >
                               View
                             </Link>
@@ -998,7 +998,7 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({
   if (employeesLoading) {
     return (
       <Layout title={`${department.name} Department`} description={department.headTitle}>
-        <section className="rounded-[20px] border border-zinc-200/80 bg-white p-8 text-sm text-zinc-600 shadow-sm ring-1 ring-zinc-950/[0.05]">
+        <section className="rounded-[20px] border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 p-8 text-sm text-zinc-600 dark:text-zinc-400 shadow-sm ring-1 ring-zinc-950/[0.05]">
           Synchronizing department roster...
         </section>
       </Layout>
@@ -1013,28 +1013,28 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({
         <AssessmentReminderWidget />
       </div>
 
-      <section className="relative mb-10 flex flex-col items-center gap-8 overflow-hidden rounded-[20px] bg-white p-8 shadow-sm ring-1 ring-zinc-950/[0.06] md:flex-row">
-        <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-zinc-200/40 blur-2xl" />
+      <section className="relative mb-10 flex flex-col items-center gap-8 overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 p-8 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 md:flex-row">
+        <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-zinc-200/40 dark:bg-zinc-800/40 blur-2xl" />
         <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-zinc-700 to-zinc-900 text-3xl font-semibold tracking-tight text-white shadow-md">
           {department.name[0]}
         </div>
         <div className="relative flex-1 space-y-3 text-center md:text-left">
-          <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-zinc-50 px-3 py-1">
+          <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 dark:border-zinc-700/80 bg-zinc-50 dark:bg-zinc-800/80 px-3 py-1">
              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-500" />
-             <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Department head</span>
+             <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">Department head</span>
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 md:text-3xl">{department.headTitle} overview</h2>
-          <p className="max-w-3xl text-sm font-medium leading-relaxed text-zinc-500">
+          <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 md:text-3xl">{department.headTitle} overview</h2>
+          <p className="max-w-3xl text-sm font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
             {department.headResponsibility || "No specific responsibility defined for this department head position."}
           </p>
           <div className="flex flex-wrap justify-center gap-4 pt-2 md:justify-start">
-             <div className="flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-4 py-2 shadow-sm">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Commission date</span>
-                <span className="text-xs font-semibold text-zinc-900">{formattedHireDate}</span>
+             <div className="flex items-center gap-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 px-4 py-2 shadow-sm">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Commission date</span>
+                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{formattedHireDate}</span>
              </div>
-             <div className="flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-4 py-2 shadow-sm">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Direct report</span>
-                <span className="text-xs font-semibold text-zinc-900">HR Director</span>
+             <div className="flex items-center gap-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 px-4 py-2 shadow-sm">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Direct report</span>
+                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">HR Director</span>
              </div>
           </div>
         </div>
@@ -1042,48 +1042,48 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({
 
       <section className="mb-10 space-y-4">
          <div className="flex items-center justify-between px-1">
-            <h3 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
-              <Calendar size={14} className="text-zinc-600" /> Department presence
+            <h3 className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              <Calendar size={14} className="text-zinc-600 dark:text-zinc-400" /> Department presence
             </h3>
             {scopedDailyAttendance.length > 0 && (
-              <span className="rounded-full border border-zinc-200/90 bg-zinc-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-700">
+              <span className="rounded-full border border-zinc-200/90 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 dark:text-zinc-300">
                  Cycle: {new Date(scopedDailyAttendance[0].date).toLocaleDateString()}
               </span>
             )}
          </div>
          
-         <div className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+         <div className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
            <div className="overflow-x-auto">
              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-zinc-100 bg-zinc-50/80">
-                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Personnel</th>
-                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Role</th>
-                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Arrival</th>
-                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Status</th>
+                  <tr className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50">
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Personnel</th>
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Role</th>
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Arrival</th>
+                    <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100 font-medium text-zinc-800 not-italic">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 font-medium text-zinc-800 dark:text-zinc-200 not-italic">
                   {loadingAttendance ? (
                     <tr><td colSpan="4" className="px-6 py-12 text-center text-sm font-medium text-zinc-400 animate-pulse">Loading presence…</td></tr>
                   ) : scopedDailyAttendance.length === 0 ? (
-                    <tr><td colSpan="4" className="px-6 py-12 text-center text-sm font-medium italic text-zinc-500">No sign-ins for the current cycle.</td></tr>
+                    <tr><td colSpan="4" className="px-6 py-12 text-center text-sm font-medium italic text-zinc-500 dark:text-zinc-400">No sign-ins for the current cycle.</td></tr>
                   ) : (
                     scopedDailyAttendance.map(record => (
-                      <tr key={record._id} className="hover:bg-white/50 transition-colors group">
+                      <tr key={record._id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-800/50 transition-colors group">
                         <td className="px-6 py-4">
-                           <div className="font-bold text-zinc-900">{record.employeeId?.fullName}</div>
+                           <div className="font-bold text-zinc-900 dark:text-zinc-100">{record.employeeId?.fullName}</div>
                            <div className="text-[10px] text-zinc-400">{record.employeeId?.email}</div>
                         </td>
                         <td className="px-6 py-4">
-                           <div className="font-bold text-zinc-600 uppercase tracking-tighter text-[10px]">{record.employeeId?.department}</div>
+                           <div className="font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-tighter text-[10px]">{record.employeeId?.department}</div>
                         </td>
-                        <td className="px-6 py-4 font-black text-zinc-900">{record.checkIn || "—"}</td>
+                        <td className="px-6 py-4 font-black text-zinc-900 dark:text-zinc-100">{record.checkIn || "—"}</td>
                         <td className="px-6 py-4 shrink-0">
                           <div className="inline-flex items-center gap-1.5">
                             <StatusBadge status={record.status} />
                             {record.unpaidLeave && (
-                              <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                              <span className="rounded-full bg-rose-100 dark:bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20">
                                 UNPAID
                               </span>
                             )}
@@ -1099,21 +1099,21 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({
       </section>
 
       {pendingRequests.length > 0 && (
-      <section className="relative mb-10 overflow-hidden rounded-[20px] bg-zinc-50/90 p-4 ring-1 ring-zinc-200/80 sm:p-6 lg:p-8">
-          <h3 className="relative z-10 mb-6 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-800">
-            <ShieldAlert size={14} className="text-zinc-500" /> Pending leave approvals
+      <section className="relative mb-10 overflow-hidden rounded-[20px] bg-zinc-50/90 dark:bg-zinc-800/50 p-4 ring-1 ring-zinc-200/80 dark:ring-zinc-700 sm:p-6 lg:p-8">
+          <h3 className="relative z-10 mb-6 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-800 dark:text-zinc-200">
+            <ShieldAlert size={14} className="text-zinc-500 dark:text-zinc-400" /> Pending leave approvals
           </h3>
           <div className="relative z-10 space-y-4">
             {pendingRequests.map(req => (
-              <div key={req._id} className="flex flex-col gap-4 rounded-[20px] border border-zinc-200/80 bg-white p-6 shadow-sm transition-shadow hover:shadow-md md:flex-row md:items-center md:justify-between">
+              <div key={req._id} className="flex flex-col gap-4 rounded-[20px] border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 p-6 shadow-sm transition-shadow hover:shadow-md md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-zinc-900">
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                     {(req.employeeId?.fullName || req.employeeEmail || "Employee")}{" "}
-                    <span className="ml-2 font-medium text-zinc-500">
+                    <span className="ml-2 font-medium text-zinc-500 dark:text-zinc-400">
                       requested {req.kind === "EXCUSE" ? "excuse" : (req.leaveType || "vacation").toLowerCase()}
                     </span>
                   </p>
-                  <p className="text-xs font-medium italic text-zinc-500">
+                  <p className="text-xs font-medium italic text-zinc-500 dark:text-zinc-400">
                     {req.kind === "EXCUSE"
                       ? `${new Date(req.excuseDate).toLocaleDateString()} ${req.startTime || ""}-${req.endTime || ""}`
                       : `${new Date(req.startDate).toLocaleDateString()} - ${new Date(req.endDate).toLocaleDateString()}`}
@@ -1132,44 +1132,44 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({
       )}
       
       <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Total staff</p>
-          <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{deptEmployees.length}</p>
+        <article className="rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Total staff</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{deptEmployees.length}</p>
         </article>
-        <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Active now</p>
-          <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{activeCount}</p>
+        <article className="rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Active now</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{activeCount}</p>
         </article>
-        <article className="rounded-[20px] bg-white p-5 shadow-sm ring-1 ring-zinc-950/[0.06]">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Sub-units</p>
-          <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{(department.teams || []).length}</p>
+        <article className="rounded-[20px] bg-white dark:bg-zinc-900 p-5 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Sub-units</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{(department.teams || []).length}</p>
         </article>
       </div>
 
       <div className="space-y-10">
         <section>
-          <h3 className="mb-4 flex items-center gap-2 px-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
-            <Briefcase size={14} className="text-zinc-600" /> Organizational units
+          <h3 className="mb-4 flex items-center gap-2 px-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <Briefcase size={14} className="text-zinc-600 dark:text-zinc-400" /> Organizational units
           </h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {(department.teams || []).map(team => (
-              <div key={team.id} className="group relative overflow-hidden rounded-[20px] bg-white p-6 shadow-sm ring-1 ring-zinc-950/[0.06]">
+              <div key={team.id} className="group relative overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 p-6 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
                 <div className="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-zinc-200/30 blur-xl transition-opacity group-hover:opacity-80" />
                 <div className="relative z-10 mb-6 flex items-start justify-between">
                   <div>
-                    <h4 className="text-lg font-semibold tracking-tight text-zinc-900">{team.name}</h4>
-                    <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">{team.leaderTitle}: {team.leaderEmail || "Unassigned"}</p>
+                    <h4 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{team.name}</h4>
+                    <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{team.leaderTitle}: {team.leaderEmail || "Unassigned"}</p>
                   </div>
-                  <span className="rounded-full border border-zinc-200/80 bg-zinc-50 px-3 py-1 text-[10px] font-semibold text-zinc-700 shadow-sm">{(team.members || []).length} members</span>
+                  <span className="rounded-full border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-1 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 shadow-sm">{(team.members || []).length} members</span>
                 </div>
                 <div className="flex -space-x-2 overflow-hidden">
                   {(team.members || []).slice(0, 5).map((m, i) => (
-                    <div key={i} className="inline-block h-6 w-6 rounded-full border-2 border-white bg-zinc-100 flex items-center justify-center text-[10px] font-bold text-zinc-500" title={m}>
+                    <div key={i} className="inline-block h-6 w-6 rounded-full border-2 border-white bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-500 dark:text-zinc-400" title={m}>
                       {m[0].toUpperCase()}
                     </div>
                   ))}
                   {(team.members || []).length > 5 && (
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-zinc-50 text-[8px] font-bold text-zinc-400">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-zinc-50 dark:bg-zinc-800/50 text-[8px] font-bold text-zinc-400">
                       +{(team.members || []).length - 5}
                     </div>
                   )}
@@ -1179,26 +1179,26 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
-          <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/70 px-6 py-5">
-            <h3 className="border-l-4 border-zinc-900 pl-3 text-xs font-semibold uppercase tracking-wide text-zinc-900">Department personnel</h3>
-            <span className="rounded-full border border-zinc-200/80 bg-white px-3 py-1 text-[10px] font-medium text-zinc-500">{deptEmployees.length} records</span>
+        <section className="overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/70 dark:bg-zinc-800/50 px-6 py-5">
+            <h3 className="border-l-4 border-zinc-900 pl-3 text-xs font-semibold uppercase tracking-wide text-zinc-900 dark:text-zinc-100">Department personnel</h3>
+            <span className="rounded-full border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-3 py-1 text-[10px] font-medium text-zinc-500 dark:text-zinc-400">{deptEmployees.length} records</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-zinc-100 bg-zinc-50/80">
-                  <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Employee</th>
-                  <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Role</th>
-                  <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500">Status</th>
-                  <th className="px-6 py-4 text-right font-medium uppercase tracking-wide text-zinc-500">Actions</th>
+                <tr className="border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/80 dark:bg-zinc-800/50">
+                  <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Employee</th>
+                  <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Role</th>
+                  <th className="px-6 py-4 font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Status</th>
+                  <th className="px-6 py-4 text-right font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100 font-medium text-zinc-800 not-italic">
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 font-medium text-zinc-800 dark:text-zinc-200 not-italic">
                 {deptEmployees.map(emp => (
-                  <tr key={emp.id} className="hover:bg-zinc-50/50 transition-colors">
+                  <tr key={emp.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/50 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="font-bold text-zinc-900">{emp.fullName}</div>
+                      <div className="font-bold text-zinc-900 dark:text-zinc-100">{emp.fullName}</div>
                       <div className="text-[10px] text-zinc-400">{emp.email}</div>
                     </td>
                     <td className="px-6 py-4">{emp.position}</td>
@@ -1222,7 +1222,7 @@ const DepartmentManagerDashboard = memo(function DepartmentManagerDashboard({
                         ) : null}
                         <Link
                           to={`/employees/${emp.id || emp._id}`}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 transition-colors hover:bg-zinc-50"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/90 dark:border-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 dark:text-zinc-300 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                         >
                           View
                         </Link>
@@ -1322,7 +1322,7 @@ const AdminDashboard = memo(function AdminDashboard({ employees, departments, em
              ))}
           </div>
         ) : (
-          <div className="p-8 text-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50">
+          <div className="p-8 text-center rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50">
              <p className="text-xs text-zinc-400 italic">No pending leave approvals at this time.</p>
           </div>
         )}
@@ -1416,7 +1416,7 @@ const AdminDashboard = memo(function AdminDashboard({ employees, departments, em
                   content={({ active, payload }) => {
                     if (active && payload && payload.length) {
                       return (
-                        <div className="bg-white/80 backdrop-blur-md border border-white/40 p-3 rounded-2xl shadow-premium">
+                        <div className="bg-white dark:bg-zinc-900/80 backdrop-blur-md border border-white/40 p-3 rounded-2xl shadow-premium">
                           <p className="text-xs font-black text-slate-900 uppercase tracking-widest">{payload[0].name}</p>
                           <p className="text-xl font-black text-indigo-600 tabular-nums">{payload[0].value}</p>
                         </div>
@@ -1457,7 +1457,7 @@ const AdminDashboard = memo(function AdminDashboard({ employees, departments, em
                   content={({ active, payload }) => {
                     if (active && payload && payload.length) {
                       return (
-                        <div className="bg-white/80 backdrop-blur-md border border-white/40 p-3 rounded-2xl shadow-premium">
+                        <div className="bg-white dark:bg-zinc-900/80 backdrop-blur-md border border-white/40 p-3 rounded-2xl shadow-premium">
                           <p className="text-xs font-black text-slate-900 uppercase tracking-widest">{payload[0].payload.name}</p>
                           <p className="text-xl font-black text-indigo-600 tabular-nums">{payload[0].value}</p>
                         </div>
@@ -1497,7 +1497,12 @@ export function DashboardPage() {
   const refreshRequests = async () => {
     try {
       const data = await listLeaveRequestsApi({ queue: "1", limit: "100" });
-      setRequests(Array.isArray(data?.requests) ? data.requests : []);
+      const queueRows = Array.isArray(data?.requests)
+        ? data.requests.filter(
+            (r) => r?.status === "PENDING" || r?.status === "ESCALATED",
+          )
+        : [];
+      setRequests(queueRows);
     } catch (e) {
       console.error("Failed to fetch requests", e);
     }
@@ -1543,7 +1548,14 @@ export function DashboardPage() {
       try {
         if (mayApproveLeaves) {
           const reqs = await listLeaveRequestsApi({ queue: "1", limit: "100" }).catch(() => null);
-          if (!cancelled && reqs != null) setRequests(Array.isArray(reqs?.requests) ? reqs.requests : []);
+          if (!cancelled && reqs != null) {
+            const queueRows = Array.isArray(reqs?.requests)
+              ? reqs.requests.filter(
+                  (r) => r?.status === "PENDING" || r?.status === "ESCALATED",
+                )
+              : [];
+            setRequests(queueRows);
+          }
         } else if (!cancelled) {
           setRequests([]);
         }
@@ -1698,9 +1710,9 @@ export function DashboardPage() {
         title="Management Dashboard"
         description="This space is reserved for management responsibilities."
       >
-        <section className="rounded-3xl border border-zinc-200 bg-white p-8 shadow-sm">
-          <p className="text-sm font-semibold text-zinc-900">No management assignment detected for your account.</p>
-          <p className="mt-2 text-sm text-zinc-500">
+        <section className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 shadow-sm">
+          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">No management assignment detected for your account.</p>
+          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
             Continue from Home for your personal workspace.
           </p>
           <Link
@@ -1757,9 +1769,9 @@ export function DashboardPage() {
       title="Management Dashboard"
       description="Operational dashboard for management roles."
     >
-      <section className="rounded-3xl border border-zinc-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold text-zinc-900">Management dashboard is ready.</p>
-        <p className="mt-2 text-sm text-zinc-500">
+      <section className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 shadow-sm">
+        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Management dashboard is ready.</p>
+        <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
           Your role has access, but there is no active department or team assignment to render detailed modules.
         </p>
       </section>

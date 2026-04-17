@@ -8,10 +8,10 @@ import { usePayrollDecimalPlaces } from "../usePayrollDecimalPlaces";
 
 const fmtInt = (n) => (n != null && !isNaN(n) ? Number(n).toLocaleString("en-EG") : "—");
 
-function Row({ label, value, valueClass = "text-zinc-900" }) {
+function Row({ label, value, valueClass = "text-zinc-900 dark:text-zinc-100" }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 py-1.5 text-xs border-b border-zinc-100 last:border-0">
-      <span className="text-zinc-500 shrink-0">{label}</span>
+    <div className="flex items-baseline justify-between gap-4 py-1.5 text-xs border-b border-zinc-100 dark:border-zinc-800/50 last:border-0">
+      <span className="text-zinc-500 dark:text-zinc-400 shrink-0">{label}</span>
       <span className={`font-mono text-right tabular-nums ${valueClass}`}>{value}</span>
     </div>
   );
@@ -19,8 +19,8 @@ function Row({ label, value, valueClass = "text-zinc-900" }) {
 
 function Section({ title, children }) {
   return (
-    <div className="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3">
-      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+    <div className="rounded-lg border border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/50 p-3">
+      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
         <Calculator size={12} className="text-indigo-500" />
         {title}
       </h3>
@@ -57,8 +57,8 @@ function recordToForm(r) {
 function DeductionDayRow({ label, days, dailyRate, amount, fmt, fmtInt, capped }) {
   if (!days && !amount) return null;
   return (
-    <div className="flex items-baseline justify-between gap-4 py-1.5 text-xs border-b border-zinc-100 last:border-0">
-      <span className="text-zinc-500 shrink-0 flex items-center gap-1">
+    <div className="flex items-baseline justify-between gap-4 py-1.5 text-xs border-b border-zinc-100 dark:border-zinc-800/50 last:border-0">
+      <span className="text-zinc-500 dark:text-zinc-400 shrink-0 flex items-center gap-1">
         <TrendingDown size={10} className="text-red-400 shrink-0" />
         {label}
         {capped && <span className="text-[9px] text-red-500 font-semibold">(capped)</span>}
@@ -113,8 +113,8 @@ function DeductionsSection({ record, fmt, fmtInt }) {
     advReq > advAct + 1e-6;
 
   return (
-    <div className="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3">
-      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+    <div className="rounded-lg border border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/50 p-3">
+      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
         <Calculator size={12} className="text-indigo-500" />
         Deductions (before tax)
       </h3>
@@ -152,14 +152,14 @@ function DeductionsSection({ record, fmt, fmtInt }) {
         )}
 
         {hasFixed && (
-          <div className="flex items-baseline justify-between gap-4 py-1.5 text-xs border-b border-zinc-100">
-            <span className="text-zinc-500">Fixed deduction</span>
+          <div className="flex items-baseline justify-between gap-4 py-1.5 text-xs border-b border-zinc-100 dark:border-zinc-800/50">
+            <span className="text-zinc-500 dark:text-zinc-400">Fixed deduction</span>
             <span className="text-right text-red-600 font-mono tabular-nums">− EGP {fmt(record.fixedDeduction)}</span>
           </div>
         )}
         {hasAdvance && (
-          <div className="flex items-baseline justify-between gap-4 py-1.5 text-xs border-b border-zinc-100">
-            <span className="text-zinc-500 flex items-center gap-1">
+          <div className="flex items-baseline justify-between gap-4 py-1.5 text-xs border-b border-zinc-100 dark:border-zinc-800/50">
+            <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
               Salary advances
               {advanceCapped && (
                 <span className="text-[9px] text-amber-700 font-semibold">(capped)</span>
@@ -177,7 +177,7 @@ function DeductionsSection({ record, fmt, fmtInt }) {
         )}
 
         <div className="flex items-baseline justify-between gap-4 pt-2 text-xs">
-          <span className="font-semibold text-zinc-700">Total deductions</span>
+          <span className="font-semibold text-zinc-700 dark:text-zinc-300">Total deductions</span>
           <span className="font-bold font-mono text-red-700 tabular-nums">EGP {fmt(record.totalDeductions)}</span>
         </div>
       </div>
@@ -189,11 +189,11 @@ function StatusRow({ label, count, dot, fmtInt }) {
   if (!count) return null;
   return (
     <div className="flex items-center justify-between gap-4 py-1 text-xs">
-      <span className="flex items-center gap-1.5 text-zinc-600">
+      <span className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
         <span className={`inline-block h-2 w-2 rounded-full ${dot}`} />
         {label}
       </span>
-      <span className="font-mono tabular-nums text-zinc-900">{fmtInt(count)}</span>
+      <span className="font-mono tabular-nums text-zinc-900 dark:text-zinc-100">{fmtInt(count)}</span>
     </div>
   );
 }
@@ -219,15 +219,15 @@ function AttendanceBreakdownSection({ record, fmtInt }) {
   const showUnrecordedWarning = unrecorded > 0;
 
   return (
-    <div className="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3">
-      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+    <div className="rounded-lg border border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/50 p-3">
+      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
         <Calculator size={12} className="text-indigo-500" />
         Attendance breakdown
       </h3>
 
-      <div className="flex items-center justify-between gap-4 py-1 text-xs border-b border-zinc-200 mb-1">
-        <span className="font-semibold text-zinc-700">Working days (in period)</span>
-        <span className="font-bold font-mono tabular-nums text-zinc-900">{fmtInt(wd)}</span>
+      <div className="flex items-center justify-between gap-4 py-1 text-xs border-b border-zinc-200 dark:border-zinc-800 mb-1">
+        <span className="font-semibold text-zinc-700 dark:text-zinc-300">Working days (in period)</span>
+        <span className="font-bold font-mono tabular-nums text-zinc-900 dark:text-zinc-100">{fmtInt(wd)}</span>
       </div>
 
       <div className="space-y-0">
@@ -289,8 +289,8 @@ function AttendanceBreakdownSection({ record, fmtInt }) {
 function AssessmentRow({ icon, label, detail, amount, fmt, isDeduction = false }) {
   const Icon = icon;
   return (
-    <div className="flex items-start justify-between gap-4 py-1.5 text-xs border-b border-zinc-100 last:border-0">
-      <span className="flex items-start gap-1.5 text-zinc-600 shrink-0 min-w-0">
+    <div className="flex items-start justify-between gap-4 py-1.5 text-xs border-b border-zinc-100 dark:border-zinc-800/50 last:border-0">
+      <span className="flex items-start gap-1.5 text-zinc-600 dark:text-zinc-400 shrink-0 min-w-0">
         <Icon size={11} className={`mt-0.5 shrink-0 ${isDeduction ? "text-red-400" : "text-emerald-500"}`} />
         <span>
           <span className="font-medium">{label}</span>
@@ -319,7 +319,7 @@ function AssessmentBreakdownSection({ record, fmt }) {
 
   if (!hasAnything) {
     return (
-      <div className="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3">
+      <div className="rounded-lg border border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/50 p-3">
         <h3 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-400">
           <Calculator size={12} className="text-zinc-300" />
           Assessment breakdown
@@ -378,7 +378,7 @@ function AssessmentBreakdownSection({ record, fmt }) {
         )}
 
         <div className="flex items-center justify-between gap-4 pt-2 text-xs">
-          <span className="flex items-center gap-1 font-semibold text-zinc-700">
+          <span className="flex items-center gap-1 font-semibold text-zinc-700 dark:text-zinc-300">
             <ChevronRight size={12} className="text-indigo-400" />
             Net assessment
           </span>
@@ -403,8 +403,8 @@ function AdvancesBreakdownSection({ record, fmt }) {
   if (total === 0 && items.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3">
-      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+    <div className="rounded-lg border border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/50 p-3">
+      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
         <Banknote size={12} className="text-orange-500" />
         Salary advances
         {items.length > 0 && (
@@ -424,8 +424,8 @@ function AdvancesBreakdownSection({ record, fmt }) {
       {items.length > 0 ? (
         <div className="space-y-0">
           {items.map((adv, i) => (
-            <div key={adv.advanceId || i} className="flex items-start justify-between gap-4 py-1.5 text-xs border-b border-zinc-100 last:border-0">
-              <span className="text-zinc-600 min-w-0">
+            <div key={adv.advanceId || i} className="flex items-start justify-between gap-4 py-1.5 text-xs border-b border-zinc-100 dark:border-zinc-800/50 last:border-0">
+              <span className="text-zinc-600 dark:text-zinc-400 min-w-0">
                 <span className="font-medium">{adv.reason || "Advance"}</span>
                 <span className="block text-[10px] text-zinc-400 leading-tight">
                   {adv.paymentType === "INSTALLMENTS" ? "Installment" : "One-time"}
@@ -439,13 +439,13 @@ function AdvancesBreakdownSection({ record, fmt }) {
           ))}
         </div>
       ) : (
-        <div className="py-1.5 text-xs text-zinc-500">
+        <div className="py-1.5 text-xs text-zinc-500 dark:text-zinc-400">
           Total advance deduction: <span className="font-mono font-semibold text-red-600">EGP {fmt(total)}</span>
         </div>
       )}
 
       <div className="flex items-center justify-between gap-4 pt-2 text-xs">
-        <span className="font-semibold text-zinc-700">Total advances deducted</span>
+        <span className="font-semibold text-zinc-700 dark:text-zinc-300">Total advances deducted</span>
         <span className="font-bold font-mono text-red-700 tabular-nums">EGP {fmt(total)}</span>
       </div>
     </div>
@@ -516,15 +516,15 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
 
   const title = (
     <span className="block">
-      <span className="block text-base font-semibold text-zinc-900">{record.fullName}</span>
-      {periodLabel && <span className="mt-0.5 block text-xs font-normal text-zinc-500">{periodLabel}</span>}
+      <span className="block text-base font-semibold text-zinc-900 dark:text-zinc-100">{record.fullName}</span>
+      {periodLabel && <span className="mt-0.5 block text-xs font-normal text-zinc-500 dark:text-zinc-400">{periodLabel}</span>}
     </span>
   );
 
   const insured = editing ? Boolean(form.isInsured) : Boolean(record.isInsured);
 
   const inputCls =
-    "mt-0.5 w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
+    "mt-0.5 w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm text-zinc-900 dark:text-zinc-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
 
   return (
     <Modal open title={title} onClose={onClose} maxWidth="max-w-2xl" closeDisabled={saving}>
@@ -543,12 +543,12 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
           </div>
         ) : null}
         {canEdit && (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-b border-zinc-100 pb-3">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-b border-zinc-100 dark:border-zinc-800/50 pb-3">
             {!editing ? (
               <button
                 type="button"
                 onClick={() => setEditing(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
               >
                 <Pencil size={14} />
                 Edit
@@ -561,7 +561,7 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
                     setEditing(false);
                     setForm(recordToForm(record));
                   }}
-                  className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+                  className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                   disabled={saving}
                 >
                   Cancel
@@ -582,7 +582,7 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
 
         {editing ? (
           <div className="space-y-4 rounded-lg border border-indigo-100 bg-indigo-50/30 p-4">
-            <p className="text-xs text-zinc-600">
+            <p className="text-xs text-zinc-600 dark:text-zinc-400">
               Adjust inputs below. Net pay, tax, and insurance are recalculated using the same rules as Compute.
             </p>
             <p className="text-xs text-amber-700">
@@ -603,7 +603,7 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
                 ["advanceAmount", "Advances (EGP)"],
               ].map(([key, label]) => (
                 <label key={key} className="block text-xs">
-                  <span className="font-medium text-zinc-600">{label}</span>
+                  <span className="font-medium text-zinc-600 dark:text-zinc-400">{label}</span>
                   <input
                     type="number"
                     step="any"
@@ -614,7 +614,7 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
                 </label>
               ))}
             </div>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
               <input
                 type="checkbox"
                 checked={form.isInsured}
@@ -625,7 +625,7 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
             </label>
             {insured && (
               <label className="block text-xs">
-                <span className="font-medium text-zinc-600">
+                <span className="font-medium text-zinc-600 dark:text-zinc-400">
                   Insurance subscription wage (EGP) — optional; leave empty to use employee profile
                 </span>
                 <input
@@ -653,7 +653,7 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
             <Section title="Gross & rates">
               <Row label="Base salary" value={`EGP ${fmt(record.baseSalary)}`} />
               <Row label="Allowances" value={`EGP ${fmt(record.allowances)}`} />
-              <Row label="Gross salary (monthly)" value={`EGP ${fmt(record.grossSalary)}`} valueClass="font-semibold text-zinc-900" />
+              <Row label="Gross salary (monthly)" value={`EGP ${fmt(record.grossSalary)}`} valueClass="font-semibold text-zinc-900 dark:text-zinc-100" />
               {record.isPartialPeriod && (
                 <>
                   <Row
@@ -707,7 +707,7 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
                 <Section title="Social insurance">
                   <Row label="Insured wage (capped)" value={`EGP ${fmt(record.insuredWage)}`} />
                   <Row label="Employee share (11%)" value={`− EGP ${fmt(record.employeeInsurance)}`} valueClass="text-red-600" />
-                  <Row label="Company share (reference)" value={`EGP ${fmt(record.companyInsurance)}`} valueClass="text-zinc-600" />
+                  <Row label="Company share (reference)" value={`EGP ${fmt(record.companyInsurance)}`} valueClass="text-zinc-600 dark:text-zinc-400" />
                 </Section>
 
                 <Section title="Income tax">

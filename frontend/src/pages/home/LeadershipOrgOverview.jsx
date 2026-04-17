@@ -363,7 +363,7 @@ export function LeadershipOrgOverview({
         <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-10">
           <div className="space-y-4 max-w-2xl">
             <div className="flex items-center gap-3 mb-2">
-               <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-indigo-300 border border-white/5">
+               <span className="px-3 py-1 bg-white dark:bg-zinc-900/10 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-indigo-300 border border-white/5">
                  Strategic Intelligence
                </span>
                <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-emerald-400 border border-emerald-500/10">
@@ -383,14 +383,14 @@ export function LeadershipOrgOverview({
           <div className="flex flex-wrap items-center gap-4 lg:border-l lg:border-white/10 lg:pl-10">
             <Link
               to="/employees"
-              className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-white text-slate-950 text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95 shadow-xl shadow-white/5 group/btn"
+              className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-white dark:bg-zinc-900 text-slate-950 text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95 shadow-xl shadow-white/5 group/btn"
             >
               Personnel Roster <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
             </Link>
             <div className="flex flex-col gap-4">
               <Link
                 to="/organizations"
-                className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-white/5 text-white text-xs font-black uppercase tracking-widest border border-white/10 hover:bg-white/10 transition-all active:scale-95 whitespace-nowrap"
+                className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-white dark:bg-zinc-900/5 text-white text-xs font-black uppercase tracking-widest border border-white/10 hover:bg-white dark:hover:bg-zinc-900/10 transition-all active:scale-95 whitespace-nowrap"
               >
                 Structure Map <ArrowRight className="h-4 w-4 opacity-50" />
               </Link>
@@ -399,7 +399,7 @@ export function LeadershipOrgOverview({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleDownloadTemplate}
-                    className="p-3.5 rounded-2xl bg-white/5 text-white border border-white/10 hover:bg-white/10 transition-all active:scale-95"
+                    className="p-3.5 rounded-2xl bg-white dark:bg-zinc-900/5 text-white border border-white/10 hover:bg-white dark:hover:bg-zinc-900/10 transition-all active:scale-95"
                     title="Download Template"
                   >
                     <Download className="h-4 w-4" />
@@ -431,7 +431,7 @@ export function LeadershipOrgOverview({
         </div>
       </div>:null}
       {isLoading ? (
-        <div className="rounded-lg border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-500">
+        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-12 text-center text-sm text-zinc-500 dark:text-zinc-400">
           Loading organization data…
         </div>
       ) : (
@@ -443,7 +443,7 @@ export function LeadershipOrgOverview({
               <button
                 type="button"
                 onClick={() => setAlertsExpanded((p) => !p)}
-                className="w-full flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4 sm:py-5 hover:bg-white/40 transition-colors"
+                className="w-full flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4 sm:py-5 hover:bg-white dark:hover:bg-zinc-900/40 transition-colors"
               >
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 rounded-2xl bg-amber-500 flex items-center justify-center text-white shadow-lg shadow-amber-200">
@@ -466,16 +466,16 @@ export function LeadershipOrgOverview({
                 {alertsExpanded ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}
               </button>
               {alertsExpanded && (
-                <div className="border-t border-white/20 divide-y divide-slate-100 bg-white/20">
+                <div className="border-t border-white/20 divide-y divide-slate-100 bg-white dark:bg-zinc-900/20">
                   {alerts.map((alert, idx) => (
-                    <div key={idx} className={`flex flex-wrap items-center gap-3 sm:gap-6 px-4 sm:px-6 lg:px-10 py-3 sm:py-4 group hover:bg-white/40 transition-colors`}>
+                    <div key={idx} className={`flex flex-wrap items-center gap-3 sm:gap-6 px-4 sm:px-6 lg:px-10 py-3 sm:py-4 group hover:bg-white dark:hover:bg-zinc-900/40 transition-colors`}>
                       <div className={`h-2 w-2 rounded-full shrink-0 ${alert.severity === "critical" ? "bg-rose-500 animate-pulse" : "bg-amber-400"}`} />
                       <span className="flex-1 text-xs font-bold text-slate-800 leading-relaxed">
                         {alert.message}
                       </span>
                       <div className="flex items-center gap-3 shrink-0">
                         {alert.department && (
-                          <span className="hidden md:inline-block text-[9px] font-black uppercase tracking-widest text-slate-400 bg-white px-3 py-1 rounded-full border border-slate-100">
+                          <span className="hidden md:inline-block text-[9px] font-black uppercase tracking-widest text-slate-400 bg-white dark:bg-zinc-900 px-3 py-1 rounded-full border border-slate-100">
                             {alert.department}
                           </span>
                         )}
@@ -500,7 +500,7 @@ export function LeadershipOrgOverview({
               <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-500 mb-4">HR Quick Actions</h3>
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {canApproveLeaves(currentUser) && (
-                <Link to="/employees/time-off/approvals" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
+                <Link to="/employees/time-off/approvals" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
                   <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center"><CalendarCheck className="h-4 w-4 text-amber-600" /></div>
                   <div>
                     <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">Leave Approvals</p>
@@ -509,7 +509,7 @@ export function LeadershipOrgOverview({
                 </Link>
                 )}
                 {canAccessOnboardingApprovals(currentUser) && (
-                  <Link to="/employees/onboarding" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
+                  <Link to="/employees/onboarding" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
                     <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center"><ClipboardList className="h-4 w-4 text-emerald-600" /></div>
                     <div>
                       <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">Onboarding</p>
@@ -518,7 +518,7 @@ export function LeadershipOrgOverview({
                   </Link>
                 )}
                 {canAccessAttendance(currentUser) && (
-                  <Link to="/attendance" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
+                  <Link to="/attendance" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
                     <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center"><BarChart3 className="h-4 w-4 text-indigo-600" /></div>
                     <div>
                       <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">Attendance</p>
@@ -527,7 +527,7 @@ export function LeadershipOrgOverview({
                   </Link>
                 )}
                 {canManageBonusApprovals(currentUser) && (
-                  <Link to="/employees/bonus-approvals" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
+                  <Link to="/employees/bonus-approvals" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
                     <div className="h-9 w-9 rounded-lg bg-violet-50 flex items-center justify-center"><Gift className="h-4 w-4 text-violet-600" /></div>
                     <div>
                       <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">Bonus Approvals</p>
@@ -536,7 +536,7 @@ export function LeadershipOrgOverview({
                   </Link>
                 )}
                 {canManagePayroll(currentUser) && (
-                <Link to="/payroll" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
+                <Link to="/payroll" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
                   <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center"><Wallet className="h-4 w-4 text-indigo-600" /></div>
                   <div>
                     <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">Payroll</p>
@@ -545,7 +545,7 @@ export function LeadershipOrgOverview({
                 </Link>
                 )}
                 {canViewReports(currentUser) && (
-                <Link to="/reports" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
+                <Link to="/reports" className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
                   <div className="h-9 w-9 rounded-lg bg-slate-50 flex items-center justify-center"><FileKey className="h-4 w-4 text-slate-600" /></div>
                   <div>
                     <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">Reports</p>
@@ -602,7 +602,7 @@ export function LeadershipOrgOverview({
                 {locationData.length === 0
                   ? <span className="text-xs text-slate-400 font-bold italic">No geographic data synchronized.</span>
                   : locationData.slice(0, 4).map((l, i) => (
-                      <div key={i} className="px-4 py-2 bg-white rounded-xl border border-slate-100 shadow-sm flex items-center gap-3">
+                      <div key={i} className="px-4 py-2 bg-white dark:bg-zinc-900 rounded-xl border border-slate-100 shadow-sm flex items-center gap-3">
                          <span className="text-xs font-black text-slate-800">{l.name}</span>
                          <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">{l.value}</span>
                       </div>
@@ -635,7 +635,7 @@ export function LeadershipOrgOverview({
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
                           return (
-                            <div className="bg-white/80 backdrop-blur-md border border-white/40 p-4 rounded-2xl shadow-premium">
+                            <div className="bg-white dark:bg-zinc-900/80 backdrop-blur-md border border-white/40 p-4 rounded-2xl shadow-premium">
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{payload[0].name}</p>
                               <p className="text-2xl font-black text-indigo-600 tabular-nums">{payload[0].value}</p>
                             </div>
@@ -677,7 +677,7 @@ export function LeadershipOrgOverview({
                         content={({ active, payload }) => {
                           if (active && payload && payload.length) {
                             return (
-                              <div className="bg-white/80 backdrop-blur-md border border-white/40 p-4 rounded-2xl shadow-premium">
+                              <div className="bg-white dark:bg-zinc-900/80 backdrop-blur-md border border-white/40 p-4 rounded-2xl shadow-premium">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{payload[0].payload.name}</p>
                                 <p className="text-2xl font-black text-indigo-600 tabular-nums">{payload[0].value}</p>
                               </div>
@@ -714,7 +714,7 @@ export function LeadershipOrgOverview({
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         return (
-                          <div className="bg-white/80 backdrop-blur-md border border-white/40 p-4 rounded-2xl shadow-premium">
+                          <div className="bg-white dark:bg-zinc-900/80 backdrop-blur-md border border-white/40 p-4 rounded-2xl shadow-premium">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{payload[0].payload.fullName}</p>
                             <p className="text-2xl font-black text-indigo-600 tabular-nums">{payload[0].value} <span className="text-xs text-slate-400">Personnel</span></p>
                           </div>
@@ -747,7 +747,7 @@ export function LeadershipOrgOverview({
             <ChartCard title="Gender (self-reported)">
               <div className="h-[220px] sm:h-[240px] w-full">
                 {genderData.length === 0 ? (
-                  <p className="text-sm text-zinc-500 flex items-center justify-center h-full">No gender data</p>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 flex items-center justify-center h-full">No gender data</p>
                 ) : (
                   <ResponsiveContainer>
                     <PieChart>
@@ -772,62 +772,62 @@ export function LeadershipOrgOverview({
             </ChartCard>
           </div>
 
-          <div className="rounded-lg border border-zinc-200 bg-white shadow-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-zinc-100 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-zinc-900">Department breakdown</h3>
-              <span className="text-xs text-zinc-500">{departmentRows.length} departments</span>
+          <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-card overflow-hidden">
+            <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/50 flex items-center justify-between">
+              <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Department breakdown</h3>
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">{departmentRows.length} departments</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-100 bg-zinc-50/80">
-                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 uppercase tracking-wide">
+                  <tr className="border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/80 dark:bg-zinc-800/50">
+                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
                       Department
                     </th>
-                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
                       Head
                     </th>
-                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 uppercase tracking-wide text-right">
+                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide text-right">
                       People
                     </th>
-                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 uppercase tracking-wide text-right">
+                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide text-right">
                       Active
                     </th>
-                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 uppercase tracking-wide text-right">
+                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide text-right">
                       Leave
                     </th>
-                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 uppercase tracking-wide text-right">
+                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide text-right">
                       % workforce
                     </th>
-                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 uppercase tracking-wide text-right">
+                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide text-right">
                       Payroll Σ
                     </th>
-                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 uppercase tracking-wide text-right">
+                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide text-right">
                       Teams
                     </th>
-                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 uppercase tracking-wide text-right">
+                    <th className="px-4 py-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide text-right">
                       Roles def.
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {departmentRows.map((row) => (
-                    <tr key={row.name} className="hover:bg-zinc-50/80">
+                    <tr key={row.name} className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50">
                       <td className="px-4 py-2.5">
                         <DepartmentBadge name={row.name} />
                       </td>
-                      <td className="px-4 py-2.5 text-zinc-600 text-xs max-w-[140px] truncate" title={row.head}>
+                      <td className="px-4 py-2.5 text-zinc-600 dark:text-zinc-400 text-xs max-w-[140px] truncate" title={row.head}>
                         {row.head}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums font-medium">{row.headcount}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600">{row.active}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600">{row.onLeave}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-500">{row.share}%</td>
-                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-zinc-700">
+                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600 dark:text-zinc-400">{row.active}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600 dark:text-zinc-400">{row.onLeave}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-500 dark:text-zinc-400">{row.share}%</td>
+                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-zinc-700 dark:text-zinc-300">
                         {row.payroll > 0 ? formatMoney(row.payroll) : "—"}
                       </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600">{row.teamCount}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600">{row.positionsDefined}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600 dark:text-zinc-400">{row.teamCount}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600 dark:text-zinc-400">{row.positionsDefined}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -835,29 +835,29 @@ export function LeadershipOrgOverview({
             </div>
           </div>
 
-          <div className="rounded-lg border border-zinc-200 bg-white shadow-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-zinc-100">
-              <h3 className="text-sm font-medium text-zinc-900">Top job titles (headcount)</h3>
-              <p className="text-xs text-zinc-500 mt-0.5">Most common position titles in the directory</p>
+          <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-card overflow-hidden">
+            <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/50">
+              <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Top job titles (headcount)</h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Most common position titles in the directory</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-100 bg-zinc-50/80">
-                    <th className="px-4 py-2.5 text-[11px] font-medium text-zinc-500 uppercase tracking-wide">#</th>
-                    <th className="px-4 py-2.5 text-[11px] font-medium text-zinc-500 uppercase tracking-wide">
+                  <tr className="border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/80 dark:bg-zinc-800/50">
+                    <th className="px-4 py-2.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">#</th>
+                    <th className="px-4 py-2.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
                       Title
                     </th>
-                    <th className="px-4 py-2.5 text-[11px] font-medium text-zinc-500 uppercase tracking-wide text-right">
+                    <th className="px-4 py-2.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide text-right">
                       People
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {positionMix.map((row, idx) => (
-                    <tr key={row.title} className="hover:bg-zinc-50/80">
+                    <tr key={row.title} className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50">
                       <td className="px-4 py-2 text-zinc-400 tabular-nums">{idx + 1}</td>
-                      <td className="px-4 py-2 text-zinc-800">{row.title}</td>
+                      <td className="px-4 py-2 text-zinc-800 dark:text-zinc-200">{row.title}</td>
                       <td className="px-4 py-2 text-right tabular-nums font-medium">{row.count}</td>
                     </tr>
                   ))}
@@ -866,8 +866,8 @@ export function LeadershipOrgOverview({
             </div>
           </div>
 
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-4 text-xs text-zinc-600">
-            <p className="font-medium text-zinc-800 mb-1">Reading this dashboard</p>
+          <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 p-4 text-xs text-zinc-600 dark:text-zinc-400">
+            <p className="font-medium text-zinc-800 dark:text-zinc-200 mb-1">Reading this dashboard</p>
             <ul className="list-disc list-inside space-y-1">
               <li>Counts and payroll use employee records you are allowed to see (API may scope by role).</li>
               <li>Payroll sums only include employees with a numeric base salary on file.</li>
@@ -903,7 +903,7 @@ const Kpi = memo(function Kpi({ icon: Icon, label, value, sub, theme = "indigo" 
         {label}
       </div>
       <p className="text-3xl font-black tabular-nums text-slate-900 tracking-tighter relative z-10 leading-none">{value}</p>
-      {sub ? <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-3 bg-white/50 px-2 py-1 rounded-full border border-white/50 inline-block relative z-10">{sub}</p> : <div className="h-6" />}
+      {sub ? <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-3 bg-white dark:bg-zinc-900/50 px-2 py-1 rounded-full border border-white/50 inline-block relative z-10">{sub}</p> : <div className="h-6" />}
     </div>
   );
 });

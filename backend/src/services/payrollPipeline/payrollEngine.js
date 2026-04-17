@@ -29,6 +29,7 @@ import { EmployeeAdvance } from "../../models/EmployeeAdvance.js";
 import { OrganizationPolicy } from "../../models/OrganizationPolicy.js";
 import { Attendance } from "../../models/Attendance.js";
 import { Assessment } from "../../models/Assessment.js";
+import { PerformanceReview } from "../../models/PerformanceReview.js";
 import { LeaveRequest } from "../../models/LeaveRequest.js";
 import { CompanyHoliday } from "../../models/CompanyHoliday.js";
 import { createAuditLog } from "../auditService.js";
@@ -285,14 +286,27 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
     "assessment.bonusStatus": "APPROVED",
   });
 
+  // Also check new PerformanceReview model
+  const prAssessmentIds = await PerformanceReview.distinct("employeeId", {
+    "period.year": year,
+    "period.month": month,
+    bonusStatus: "APPROVED",
+  });
+
   const activityIds = [...new Set([
     ...attendanceIds.map((id) => String(id)),
     ...leaveIds.map((id) => String(id)),
     ...assessmentIds.map((id) => String(id)),
+    ...prAssessmentIds.map((id) => String(id)),
   ])];
 
   const empFilter = {
-    $or: [{ isActive: true }, { _id: { $in: activityIds } }],
+    $or: [
+      // Active employees: both flags must agree to avoid desync edge-cases
+      { isActive: true, status: { $nin: ["TERMINATED", "RESIGNED"] } },
+      // Include separated employees that have activity in this period
+      { _id: { $in: activityIds } },
+    ],
   };
   if (departmentId) empFilter.departmentId = departmentId;
   const employees = await Employee.find(empFilter)
@@ -302,6 +316,8 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
   const empIds = employees.map((e) => e._id);
 
   const assessmentPayrollRules = orgPolicy?.assessmentPayrollRules || {};
+
+  // Legacy Assessment model
   const assessmentDocs = await Assessment.find({
     employeeId: { $in: empIds },
     "assessment.period.year": year,
@@ -322,6 +338,30 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
         assessmentByEmp.get(eid).push(a);
       }
     }
+  }
+
+  // New PerformanceReview model — merge into same map
+  const prDocs = await PerformanceReview.find({
+    employeeId: { $in: empIds },
+    "period.year": year,
+    "period.month": month,
+    bonusStatus: "APPROVED",
+  }).lean();
+
+  for (const pr of prDocs) {
+    const eid = String(pr.employeeId);
+    if (!assessmentByEmp.has(eid)) assessmentByEmp.set(eid, []);
+    assessmentByEmp.get(eid).push({
+      _id: pr._id,
+      _sourceModel: "PerformanceReview",
+      daysBonus: pr.daysBonus || 0,
+      overtime: pr.overtime || 0,
+      deduction: pr.deduction || 0,
+      deductionType: pr.deductionType || "AMOUNT",
+      bonusStatus: pr.bonusStatus,
+      period: pr.period,
+      evaluatorId: pr.evaluatorId,
+    });
   }
 
   const attendanceRecords = await Attendance.find({
@@ -747,10 +787,28 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
       }
       if (assessmentPayrollRules.deductionEnabled && a.deduction > 0) {
         const mult = assessmentPayrollRules.deductionDayMultiplier ?? 1;
-        assessmentDeductionAmount += rnd(a.deduction * mult);
+        // deductionType="DAYS": convert to EGP using dailyRate (mirrors daysBonus logic)
+        // deductionType="AMOUNT" (default/legacy): use value directly as EGP
+        const isInDays = a.deductionType === "DAYS";
+        assessmentDeductionAmount += isInDays
+          ? rnd(a.deduction * mult * rawDailyRate)
+          : rnd(a.deduction * mult);
         assessmentRawDeductionEgp += Number(a.deduction) || 0;
       }
     }
+    // Build snapshot list for PayrollRecord (preserves data even if assessment is later deleted)
+    const assessmentSnapshotList = empAssessments.map(a => ({
+      assessmentId: a._id,
+      sourceModel: a._sourceModel || "PerformanceReview",
+      evaluatorId: a.evaluatorId,
+      period: a.period,
+      daysBonus: a.daysBonus || 0,
+      overtime: a.overtime || 0,
+      deduction: a.deduction || 0,
+      deductionType: a.deductionType || "AMOUNT",
+      bonusStatus: a.bonusStatus,
+      snapshotAt: new Date(),
+    }));
     const assessmentNetAmount = rnd(assessmentBonusAmount + assessmentOvertimeAmount - assessmentDeductionAmount);
 
     const netSalary = rnd(Math.max(0, grossSalary - totalDeductionAmount + assessmentNetAmount));
@@ -813,6 +871,7 @@ export async function computeMonthlyAnalysis(year, month, departmentId, options 
       assessmentRawOvertimeUnits: rnd(assessmentRawOvertimeUnits),
       assessmentRawDeductionEgp: rnd(assessmentRawDeductionEgp),
       assessmentCount: empAssessments.length,
+      assessmentSnapshotList,   // ← carries per-assessment details to payroll engine
       netSalary,
       assessmentApprovedOvertimeUnits: rnd(assessmentApprovedOvertimeUnits),
     };
@@ -1151,7 +1210,13 @@ async function getActiveAdvanceTotal(employeeId, runYear, runMonth) {
   const advances = await EmployeeAdvance.find({
     employeeId,
     status: { $in: ["APPROVED", "ACTIVE"] },
-    remainingAmount: { $gt: 0 }
+    remainingAmount: { $gt: 0 },
+    // Idempotency standard: exclude if already deducted in this EXACT period
+    $or: [
+      { lastDeductedPeriod: { $exists: false } }, // fallback for old records
+      { "lastDeductedPeriod.year": { $ne: runYear } },
+      { "lastDeductedPeriod.month": { $ne: runMonth } },
+    ],
   }).lean();
 
   let total = 0;
@@ -1235,7 +1300,7 @@ function allocateAdvanceBreakdown(breakdown, cappedTotal, decimalPlaces) {
  */
 export async function markAdvancesDeducted(actualDeductions, runId, options = {}) {
   if (!actualDeductions?.length) return;
-  const { session = null, decimalPlaces = DEFAULT_PAYROLL_CONFIG.decimalPlaces } = options;
+  const { session = null, decimalPlaces = DEFAULT_PAYROLL_CONFIG.decimalPlaces, period } = options;
   const dp = clampDecimalPlaces(decimalPlaces);
   const tolerance = 1 / 10 ** dp;
 
@@ -1261,6 +1326,9 @@ export async function markAdvancesDeducted(actualDeductions, runId, options = {}
     }
 
     record.deductedInRunId = runId;
+    if (period && period.year && period.month) {
+      record.lastDeductedPeriod = { year: period.year, month: period.month };
+    }
     record.deductionHistory.push({
       runId,
       amountDeducted: deductedAmount,
@@ -1460,10 +1528,36 @@ async function recalculateRunTotals(runId, session = null, extraRunSet = {}) {
   const pc = await resolvePayrollConfig();
   const dp = clampDecimalPlaces(pc.decimalPlaces);
 
-  let q = PayrollRecord.find({ runId });
+  const pipeline = [
+    { $match: { runId: new mongoose.Types.ObjectId(String(runId)) } },
+    {
+      $group: {
+        _id: null,
+        totalGross: { $sum: "$grossSalary" },
+        totalAdditions: { $sum: "$totalAdditions" },
+        totalDeductions: { $sum: "$totalDeductions" },
+        totalNet: { $sum: "$netSalary" },
+        totalEmployeeInsurance: { $sum: "$employeeInsurance" },
+        totalCompanyInsurance: { $sum: "$companyInsurance" },
+        totalTax: { $sum: "$monthlyTax" },
+        totalMartyrsFund: { $sum: "$martyrsFundDeduction" },
+        employeeCount: { $sum: 1 },
+        insuredCount: { $sum: { $cond: ["$isInsured", 1, 0] } },
+        uninsuredCount: { $sum: { $cond: ["$isInsured", 0, 1] } },
+        cashCount: { $sum: { $cond: [{ $eq: ["$paymentMethod", "CASH"] }, 1, 0] } },
+        visaCount: { $sum: { $cond: [{ $ne: ["$paymentMethod", "CASH"] }, 1, 0] } },
+        cashTotal: { $sum: { $cond: [{ $eq: ["$paymentMethod", "CASH"] }, "$netSalary", 0] } },
+        visaTotal: { $sum: { $cond: [{ $ne: ["$paymentMethod", "CASH"] }, "$netSalary", 0] } },
+      },
+    },
+    { $project: { _id: 0 } },
+  ];
+
+  let q = PayrollRecord.aggregate(pipeline);
   if (session) q = q.session(session);
-  const records = await q.lean();
-  const totals = {
+  const [agg] = await q;
+
+  let totals = {
     totalGross: 0, totalAdditions: 0, totalDeductions: 0, totalNet: 0,
     totalEmployeeInsurance: 0, totalCompanyInsurance: 0,
     totalTax: 0, totalMartyrsFund: 0,
@@ -1471,31 +1565,11 @@ async function recalculateRunTotals(runId, session = null, extraRunSet = {}) {
     cashCount: 0, visaCount: 0, cashTotal: 0, visaTotal: 0,
   };
 
-  for (const rec of records) {
-    totals.totalGross += rec.grossSalary || 0;
-    totals.totalAdditions += rec.totalAdditions || 0;
-    totals.totalDeductions += rec.totalDeductions || 0;
-    totals.totalNet += rec.netSalary || 0;
-    totals.totalEmployeeInsurance += rec.employeeInsurance || 0;
-    totals.totalCompanyInsurance += rec.companyInsurance || 0;
-    totals.totalTax += rec.monthlyTax || 0;
-    totals.totalMartyrsFund += rec.martyrsFundDeduction || 0;
-    totals.employeeCount++;
-    if (rec.isInsured) totals.insuredCount++;
-    else totals.uninsuredCount++;
-    const isCash = rec.paymentMethod === "CASH";
-    if (isCash) {
-      totals.cashCount++;
-      totals.cashTotal += rec.netSalary || 0;
-    } else {
-      totals.visaCount++;
-      totals.visaTotal += rec.netSalary || 0;
-    }
+  if (agg) {
+    Object.keys(agg).forEach((k) => {
+      totals[k] = typeof agg[k] === "number" ? roundMoney(agg[k], dp) : agg[k];
+    });
   }
-
-  Object.keys(totals).forEach((k) => {
-    if (typeof totals[k] === "number") totals[k] = roundMoney(totals[k], dp);
-  });
 
   const updatePayload = { totals, ...extraRunSet };
   const opts = session ? { session } : {};
@@ -2038,7 +2112,7 @@ export async function finalizePayrollRun(runId, userEmail) {
         }
 
         const actualDeductions = buildDeterministicAdvanceDeductions(records, dp);
-        await markAdvancesDeducted(actualDeductions, runId, { session, decimalPlaces: dp });
+        await markAdvancesDeducted(actualDeductions, runId, { session, decimalPlaces: dp, period: { year: liveRun.period.year, month: liveRun.period.month } });
 
         liveRun.status = "FINALIZED";
         liveRun.finalizedAt = new Date();
@@ -2075,7 +2149,7 @@ export async function finalizePayrollRun(runId, userEmail) {
         validatePartialExcusedRows(partialRows);
       }
       const actualDeductions = buildDeterministicAdvanceDeductions(records, dp);
-      await markAdvancesDeducted(actualDeductions, runId, { decimalPlaces: dp });
+      await markAdvancesDeducted(actualDeductions, runId, { decimalPlaces: dp, period: { year: run.period.year, month: run.period.month } });
 
       await PayrollRun.updateOne(
         { _id: runId },

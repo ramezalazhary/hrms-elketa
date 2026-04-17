@@ -12,7 +12,7 @@ import {
   getLeaveRequestHistoryApi,
 } from "../api";
 import { normaliseRoleKey } from "@/shared/components/EntityBadges";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, ShieldCheck, Eye, Inbox, CheckCircle2, XCircle } from "lucide-react";
 import { fmtDate, fmtDateTime, fmtDays, fmtMins } from "../utils/leaveFormatters";
 import { LeaveSurface } from "../components/leave/LeaveSurface";
 import { LeaveSectionHeader } from "../components/leave/LeaveSectionHeader";
@@ -84,6 +84,8 @@ export function PersonalTimeOffSection() {
 
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [showApproved, setShowApproved] = useState(false);
+  const [leaveTab, setLeaveTab] = useState("pending"); // pending, approved, closed
 
   useEffect(() => {
     if (isHr && onBehalf && !employees.length) {
@@ -161,44 +163,56 @@ export function PersonalTimeOffSection() {
     return { pending, approved, closed };
   }, [list]);
 
-  const requestRow = (r, { showCancel }) => (
-    <li key={r._id} className="px-5 py-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="leave-title text-sm font-semibold">
-            {r.kind === "VACATION"
-              ? `${r.leaveType || "ANNUAL"} · ${fmtDate(r.startDate)} – ${fmtDate(r.endDate)}`
-              : `Excuse · ${fmtDate(r.excuseDate)} ${r.startTime}–${r.endTime}`}
-          </p>
-          <div className="mt-1 flex items-center gap-2 text-xs flex-wrap">
-            <p>
-              {r.computed?.days != null && r.kind === "VACATION" && `${r.computed.days} day(s) · `}
-              {r.computed?.minutes != null && r.kind === "EXCUSE" && `${r.computed.minutes} min · `}
-              Status:
-            </p>
-            <LeaveStatusPill status={r.status} />
-            {r.status === "APPROVED" && r.effectivePaymentType ? <LeaveStatusPill status={r.effectivePaymentType} /> : null}
-            {r.status === "APPROVED" && r.quotaExceeded ? <LeaveStatusPill status="ESCALATED" label="Quota exceeded" /> : null}
+  const requestRow = (r, opts) => (
+    <li key={r._id} className="flex flex-col gap-5 px-5 py-6 transition-all hover:bg-zinc-50/50 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-800/30">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 shadow-inner">
+            <Inbox size={22} />
           </div>
-          {r.onBehalf && <p className="mt-1 text-xs text-blue-700 font-medium">Submitted on behalf by {r.createdBy}</p>}
-          {r.cancellationReason && <p className="mt-1 text-xs text-rose-700">Cancel reason: {r.cancellationReason}</p>}
-          {r.approvals?.some((a) => a.status === "REJECTED" && a.comment) && (
-            <p className="mt-1 text-xs text-rose-600">
-              Rejection: {r.approvals.find((a) => a.status === "REJECTED")?.comment}
+          <div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-black text-zinc-900 dark:text-zinc-100 tabular-nums">#{r.id?.slice(-6).toUpperCase()}</span>
+              <LeaveStatusPill status={r.status} />
+            </div>
+            <p className="mt-1 text-xs font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400">
+              {r.kind === "VACATION" ? `${r.leaveType} Leave` : "Excuse"}
             </p>
-          )}
-          <ApprovalTimeline approvals={r.approvals} />
-          <RequestAuditTrail requestId={r._id} />
+          </div>
         </div>
-        {showCancel && r.status === "PENDING" ? (
-          <button type="button" onClick={() => onCancel(r._id)}
-            className="text-xs font-medium text-rose-600 hover:underline shrink-0">Cancel</button>
-        ) : null}
-        {showCancel && r.status === "APPROVED" && canCancelApproved ? (
-          <button type="button" onClick={() => { setCancelTarget(r._id); setCancelReason(""); }}
-            className="text-xs font-medium text-rose-600 hover:underline shrink-0">Cancel (HR)</button>
-        ) : null}
+
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="text-right">
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 mb-1">Duration</p>
+            <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">
+              {r.kind === "VACATION" ? `${fmtDays(r.days)} Days` : `${fmtMins(r.mins)} Mins`}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 mb-1">Period</p>
+            <p className="text-sm font-bold text-zinc-600 dark:text-zinc-300">
+              {r.kind === "VACATION" ? `${fmtDate(r.startDate)} → ${fmtDate(r.endDate)}` : `${fmtDate(r.excuseDate)}`}
+            </p>
+          </div>
+          {opts.showCancel && r.status === "PENDING" && (
+            <button
+              onClick={() => onCancel(r._id)}
+              className="rounded-full bg-rose-50 dark:bg-rose-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400 transition-all hover:bg-rose-100 dark:hover:bg-rose-500/20 active:scale-95"
+            >
+              Cancel
+            </button>
+          )}
+          {opts.showCancel && r.status === "APPROVED" && (
+            <button
+              onClick={() => { setCancelTarget(r._id); setCancelReason(""); }}
+              className="rounded-full bg-rose-50 dark:bg-rose-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400 transition-all hover:bg-rose-100 dark:hover:bg-rose-500/20 active:scale-95"
+            >
+              Cancel Approved
+            </button>
+          )}
+        </div>
       </div>
+      <RequestAuditTrail requestId={r._id} />
     </li>
   );
 
@@ -225,7 +239,7 @@ export function PersonalTimeOffSection() {
         <LeaveSurface className="p-5">
           <h2 className="leave-title text-base font-semibold">Balance snapshot</h2>
           <div className="mt-3 grid gap-4 sm:grid-cols-2 text-sm">
-            <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-3">
+            <div className="rounded-xl border border-zinc-100 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-800/50 p-3">
               <p className="leave-meta text-xs font-semibold uppercase tracking-wide">Vacation</p>
               <p className="mt-1 leave-title">
                 <span className="text-2xl font-semibold">{fmtDays(balance.vacation?.remainingDays)}</span> d left
@@ -234,7 +248,7 @@ export function PersonalTimeOffSection() {
                 entitlement {fmtDays(balance.vacation?.entitlementDays)} · approved {fmtDays(balance.vacation?.approvedDays)} · pending {fmtDays(balance.vacation?.pendingDays)}
               </p>
             </div>
-            <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-3">
+            <div className="rounded-xl border border-zinc-100 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-800/50 p-3">
               <p className="leave-meta text-xs font-semibold uppercase tracking-wide">Excuse quota</p>
               <p className="mt-1 leave-title">
                 <span className="text-2xl font-semibold">{fmtMins(balance.excuse?.remainingMinutes)}</span> left
@@ -253,7 +267,7 @@ export function PersonalTimeOffSection() {
             <LeaveSectionHeader title="Request composer" subtitle="Choose leave type, dates, and optional on-behalf submission." />
 
             {isHr && (
-              <label className="flex items-center gap-2 text-sm text-zinc-700 cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
                 <input type="checkbox" checked={onBehalf} onChange={(e) => { setOnBehalf(e.target.checked); setSelectedEmployeeId(""); }}
                   className="rounded border-zinc-300" />
                 Submit on behalf of another employee
@@ -262,34 +276,34 @@ export function PersonalTimeOffSection() {
 
             {onBehalf && (
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Select employee</label>
+                <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Select employee</label>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
                   <input type="text" value={empSearch} onChange={(e) => setEmpSearch(e.target.value)}
                     placeholder="Search by name or email..."
-                    className="w-full rounded-lg border border-zinc-200 pl-8 pr-3 py-2 text-sm" />
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 pl-8 pr-3 py-2 text-sm" />
                 </div>
                 {empSearch && (
-                  <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-sm">
+                  <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
                     {filteredEmployees.map((emp) => (
                       <button key={emp.id || emp._id} type="button"
                         onClick={() => { setSelectedEmployeeId(emp.id || emp._id); setEmpSearch(emp.fullName || emp.email); }}
-                        className={`w-full text-left px-3 py-1.5 text-sm hover:bg-zinc-50 ${selectedEmployeeId === (emp.id || emp._id) ? "bg-zinc-50 font-medium" : ""}`}>
+                        className={`w-full text-left px-3 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${selectedEmployeeId === (emp.id || emp._id) ? "bg-zinc-50 dark:bg-zinc-800/50 font-medium" : ""}`}>
                         {emp.fullName} <span className="text-zinc-400 text-xs">{emp.email}</span>
                       </button>
                     ))}
                     {filteredEmployees.length === 0 && <p className="px-3 py-2 text-xs text-zinc-400">No match</p>}
                   </div>
                 )}
-                {selectedEmployeeId && <p className="text-xs text-zinc-700 mt-1 font-medium">Selected: {empSearch}</p>}
-                <p className="mt-2 text-xs text-zinc-500">On-behalf requests appear in Leave Approvals.</p>
+                {selectedEmployeeId && <p className="text-xs text-zinc-700 dark:text-zinc-300 mt-1 font-medium">Selected: {empSearch}</p>}
+                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">On-behalf requests appear in Leave Approvals.</p>
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-medium text-zinc-500 mb-1">Type</label>
+              <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Type</label>
               <select value={kind} onChange={(e) => setKind(e.target.value)}
-                className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm">
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm">
                 <option value="VACATION">Vacation (dates)</option>
                 <option value="EXCUSE">Excuse (time range)</option>
               </select>
@@ -298,42 +312,42 @@ export function PersonalTimeOffSection() {
             {kind === "VACATION" ? (
               <>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Leave type</label>
+                  <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Leave type</label>
                   <select value={leaveType} onChange={(e) => setLeaveType(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm">
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm">
                     {LEAVE_TYPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Start date</label>
+                    <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Start date</label>
                     <input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">End date</label>
+                    <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">End date</label>
                     <input type="date" required value={endDate} onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm" />
                   </div>
                 </div>
               </>
             ) : (
               <>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Date</label>
+                  <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Date</label>
                   <input type="date" required value={excuseDate} onChange={(e) => setExcuseDate(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm" />
                 </div>
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">From (HH:mm)</label>
+                    <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">From (HH:mm)</label>
                     <input type="time" required value={startTime} onChange={(e) => setStartTime(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">To (HH:mm)</label>
+                    <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">To (HH:mm)</label>
                     <input type="time" required value={endTime} onChange={(e) => setEndTime(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm" />
                   </div>
                 </div>
               </>
@@ -347,34 +361,123 @@ export function PersonalTimeOffSection() {
         </LeaveSurface>
       ) : null}
 
-      <LeaveSurface>
-        <LeaveSectionHeader title="Pending requests" />
-          {loading ? (
-            <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-600" /></div>
-          ) : segmented.pending.length === 0 ? (
-            <p className="py-8 text-center text-sm text-zinc-500">No pending requests.</p>
-          ) : (
-            <ul className="divide-y divide-zinc-100">{segmented.pending.map((r) => requestRow(r, { showCancel: true }))}</ul>
-          )}
-      </LeaveSurface>
+      <div className="space-y-4">
+        <div className="flex border-b border-zinc-200 dark:border-zinc-800">
+           <button
+             onClick={() => setLeaveTab("pending")}
+             className={`px-4 py-2 text-sm font-bold transition-colors ${
+               leaveTab === "pending"
+                 ? "border-b-2 border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
+                 : "text-zinc-500 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
+             }`}
+           >
+             Pending ({pendingList.length})
+           </button>
+           <button
+             onClick={() => setLeaveTab("approved")}
+             className={`px-4 py-2 text-sm font-bold transition-colors ${
+               leaveTab === "approved"
+                 ? "border-b-2 border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
+                 : "text-zinc-500 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
+             }`}
+           >
+             Approved ({approvedHistory.length})
+           </button>
+           <button
+             onClick={() => setLeaveTab("closed")}
+             className={`px-4 py-2 text-sm font-bold transition-colors ${
+               leaveTab === "closed"
+                 ? "border-b-2 border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
+                 : "text-zinc-500 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
+             }`}
+           >
+             Closed
+           </button>
+        </div>
 
-      <LeaveSurface>
-        <LeaveSectionHeader title="Approved history" />
-          {loading ? (
-            <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-600" /></div>
-          ) : segmented.approved.length === 0 ? (
-            <p className="py-8 text-center text-sm text-zinc-500">No approved leave yet.</p>
-          ) : (
-            <ul className="divide-y divide-zinc-100">{segmented.approved.map((r) => requestRow(r, { showCancel: true }))}</ul>
+        <div>
+          {leaveTab === "pending" && (
+            <LeaveSurface>
+               <LeaveSectionHeader title="Pending requests" subtitle="Currently in review." />
+               {loading ? (
+                 <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600 dark:text-zinc-400" /></div>
+               ) : pendingList.length === 0 ? (
+                 <p className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 italic">No pending requests.</p>
+               ) : (
+                 <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">{pendingList.map((r) => requestRow(r, { showCancel: true }))}</ul>
+               )}
+            </LeaveSurface>
           )}
-      </LeaveSurface>
 
-      {!loading && segmented.closed.length > 0 ? (
-        <LeaveSurface>
-          <LeaveSectionHeader title="Closed requests" subtitle="Rejected and cancelled records." />
-          <ul className="divide-y divide-zinc-100">{segmented.closed.map((r) => requestRow(r, { showCancel: false }))}</ul>
-        </LeaveSurface>
-      ) : null}
+          {leaveTab === "approved" && (
+            <div className="space-y-4">
+              {!showApproved ? (
+                <article className="relative overflow-hidden rounded-[32px] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 sm:p-16 text-center shadow-[0_20px_50px_rgba(0,0,0,0.04)] dark:shadow-none">
+                  {/* Background Glow */}
+                  <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-indigo-500/5 blur-[100px]" />
+                  <div className="absolute -bottom-24 -right-24 h-64 w-64 rounded-full bg-purple-500/5 blur-[100px]" />
+                  
+                  <div className="relative z-10">
+                    <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-[24px] bg-zinc-50 dark:bg-zinc-800 text-indigo-500 dark:text-indigo-400 shadow-inner ring-1 ring-zinc-200/50 dark:ring-zinc-700/50">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-200/50 dark:ring-zinc-700/50">
+                        <ShieldCheck size={24} />
+                      </div>
+                    </div>
+                    <h4 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-2xl">Leave Records</h4>
+                    <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+                      Historical approved records are shielded for privacy. Review your past vacation and excuse data.
+                    </p>
+                    <div className="mt-8">
+                      <button
+                        onClick={() => setShowApproved(true)}
+                        className="inline-flex h-12 items-center justify-center rounded-full bg-zinc-950 dark:bg-indigo-600 px-8 text-sm font-bold text-white shadow-[0_10px_20px_rgba(0,0,0,0.15)] transition-all hover:scale-[1.02] hover:bg-zinc-800 dark:hover:bg-indigo-500 active:scale-[0.98]"
+                      >
+                        Show Approved History
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ) : (
+                <LeaveSurface>
+                   <LeaveSectionHeader 
+                     title="Approved history" 
+                     subtitle="Your valid upcoming and past records."
+                     actions={
+                       <button
+                         onClick={() => setShowApproved(false)}
+                         className="flex items-center gap-2 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400 dark:hover:text-zinc-300"
+                       >
+                         <Eye size={12} />
+                         Hide
+                       </button>
+                     }
+                   />
+                   {loading ? (
+                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600 dark:text-zinc-400" /></div>
+                   ) : approvedHistory.length === 0 ? (
+                     <p className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 italic">No approved records.</p>
+                   ) : (
+                     <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">{approvedHistory.map((r) => requestRow(r, { showCancel: canCancelApproved }))}</ul>
+                   )}
+                </LeaveSurface>
+              )}
+            </div>
+          )}
+
+          {leaveTab === "closed" && (
+            <LeaveSurface>
+               <LeaveSectionHeader title="Closed history" subtitle="Rejected and cancelled records." />
+               {loading ? (
+                 <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600 dark:text-zinc-400" /></div>
+               ) : otherList.length === 0 ? (
+                 <p className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 italic">No closed records.</p>
+               ) : (
+                 <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">{otherList.map((r) => requestRow(r, { showCancel: false }))}</ul>
+               )}
+            </LeaveSurface>
+          )}
+        </div>
+      </div>
 
       <Modal
         open={Boolean(cancelTarget)}
@@ -382,7 +485,7 @@ export function PersonalTimeOffSection() {
         onClose={() => setCancelTarget(null)}
       >
         <div className="space-y-3">
-          <p className="text-sm text-zinc-700">A reason is required for approved request cancellation.</p>
+          <p className="text-sm text-zinc-700 dark:text-zinc-300">A reason is required for approved request cancellation.</p>
           <textarea
             value={cancelReason}
             onChange={(e) => setCancelReason(e.target.value)}

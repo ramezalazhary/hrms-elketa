@@ -25,11 +25,11 @@ export function FormBuilder({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const inputClass =
-    "w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 transition-colors hover:border-zinc-300 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400";
+    "w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 transition-colors hover:border-zinc-300 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400";
 
   return (
     <form
-      className="space-y-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-card"
+      className="space-y-6 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-card"
       onSubmit={(event) => {
         event.preventDefault();
         setIsSubmitting(true);
@@ -43,7 +43,7 @@ export function FormBuilder({
           </span>
           <button
             type="button"
-            className="rounded-md border border-amber-400/80 bg-white px-3 py-1.5 text-xs font-medium text-amber-950 shadow-sm hover:bg-amber-100/80"
+            className="rounded-md border border-amber-400/80 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-medium text-amber-950 shadow-sm hover:bg-amber-100/80"
             onClick={() => {
               const patch = devDemoFill.getValues();
               setValues((prev) => ({ ...prev, ...patch }));
@@ -59,15 +59,15 @@ export function FormBuilder({
         {fields.map((field) => {
           if (field.type === "section") {
             return (
-              <div key={field.label} className="col-span-full mt-4 border-b border-zinc-100 pb-2">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">{field.label}</h3>
+              <div key={field.label} className="col-span-full mt-4 border-b border-zinc-100 dark:border-zinc-800/50 pb-2">
+                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{field.label}</h3>
               </div>
             );
           }
 
           return (
             <label className={`block text-sm ${field.fullWidth ? "col-span-full" : ""}`} key={field.name}>
-              <span className="mb-1.5 block text-xs font-medium text-zinc-600">
+              <span className="mb-1.5 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 {field.label} {field.required && <span className="text-red-600">*</span>}
               </span>
               {field.type === "select" ? (
@@ -124,10 +124,10 @@ export function FormBuilder({
                           setValues((prev) => ({ ...prev, [field.name]: v }));
                           onChange?.(field.name, v, setValues);
                         }}
-                        className="h-4 w-4 border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                        className="h-4 w-4 border-zinc-300 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-900"
                         disabled={disabled || field.disabled}
                       />
-                      <span className="text-sm font-medium text-zinc-700">{option.label}</span>
+                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{option.label}</span>
                     </label>
                   ))}
                 </div>
@@ -163,14 +163,14 @@ export function FormBuilder({
         })}
       </div>
       {error ? (
-        <p className="text-sm rounded-md bg-zinc-50 p-3 text-zinc-700 border border-zinc-200">{error}</p>
+        <p className="text-sm rounded-md bg-zinc-50 dark:bg-zinc-800/50 p-3 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800">{error}</p>
       ) : null}
 
       <div className="flex items-center gap-3 pt-2">
         {onCancel && (
           <button
             type="button"
-            className="flex-1 rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-zinc-300"
+            className="flex-1 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 focus:outline-none focus:ring-1 focus:ring-zinc-300"
             onClick={onCancel}
             disabled={isSubmitting || disabled}
           >

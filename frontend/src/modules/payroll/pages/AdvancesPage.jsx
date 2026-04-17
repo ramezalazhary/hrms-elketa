@@ -41,7 +41,7 @@ const STATUS_CONFIG = {
   ACTIVE:    { label: "قيد الخصم",    bg: "bg-indigo-50 text-indigo-700 ring-indigo-200", icon: Repeat },
   COMPLETED: { label: "مكتملة",       bg: "bg-emerald-50 text-emerald-700 ring-emerald-200", icon: CheckCircle2 },
   REJECTED:  { label: "مرفوضة",       bg: "bg-red-50 text-red-700 ring-red-200",          icon: XCircle },
-  CANCELLED: { label: "ملغية",        bg: "bg-zinc-100 text-zinc-500 ring-zinc-200",      icon: XCircle },
+  CANCELLED: { label: "ملغية",        bg: "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 ring-zinc-200",      icon: XCircle },
 };
 
 const PAYMENT_TYPE_LABELS = {
@@ -72,7 +72,7 @@ function AdvanceCard({ adv, isHrUser, onApprove, onReject, onCancel }) {
   const progress = adv.amount > 0 ? Math.round((paid / adv.amount) * 100) : 0;
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md">
+    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm transition hover:shadow-md">
       {/* Header */}
       <div
         className="flex cursor-pointer items-center gap-4 px-5 py-4"
@@ -83,16 +83,16 @@ function AdvanceCard({ adv, isHrUser, onApprove, onReject, onCancel }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-zinc-900">{empName}</span>
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">{empName}</span>
             {empCode && <span className="text-xs text-zinc-400">({empCode})</span>}
             <StatusBadge status={adv.status} />
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset ${adv.paymentType === "INSTALLMENTS" ? "bg-violet-50 text-violet-700 ring-violet-200" : "bg-zinc-50 text-zinc-600 ring-zinc-200"}`}>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset ${adv.paymentType === "INSTALLMENTS" ? "bg-violet-50 text-violet-700 ring-violet-200" : "bg-zinc-50 dark:bg-zinc-800/50 text-zinc-600 dark:text-zinc-400 ring-zinc-200"}`}>
               {adv.paymentType === "INSTALLMENTS" ? <Repeat size={10} /> : <CreditCard size={10} />}
               {PAYMENT_TYPE_LABELS[adv.paymentType] || "مرة واحدة"}
             </span>
           </div>
-          <div className="mt-1 flex flex-wrap gap-4 text-xs text-zinc-500">
-            <span className="font-medium text-zinc-700">{adv.amount?.toLocaleString("en-EG")} ج.م</span>
+          <div className="mt-1 flex flex-wrap gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">{adv.amount?.toLocaleString("en-EG")} ج.م</span>
             {empDept && <span>{empDept}</span>}
             {adv.reason && <span className="truncate max-w-[200px]">السبب: {adv.reason}</span>}
           </div>
@@ -104,15 +104,15 @@ function AdvanceCard({ adv, isHrUser, onApprove, onReject, onCancel }) {
 
       {/* Expanded details */}
       {expanded && (
-        <div className="border-t border-zinc-100 px-5 py-4 space-y-4">
+        <div className="border-t border-zinc-100 dark:border-zinc-800/50 px-5 py-4 space-y-4">
           {/* Progress bar for installments */}
           {(adv.paymentType === "INSTALLMENTS" || paid > 0) && (
             <div>
-              <div className="flex justify-between text-xs text-zinc-500 mb-1">
+              <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-1">
                 <span>تم سداد {paid.toLocaleString("en-EG")} ج.م من {adv.amount.toLocaleString("en-EG")} ج.م</span>
                 <span className="font-semibold text-indigo-600">{progress}%</span>
               </div>
-              <div className="h-2 w-full rounded-full bg-zinc-100 overflow-hidden">
+              <div className="h-2 w-full rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-500"
                   style={{ width: `${progress}%` }}
@@ -123,34 +123,34 @@ function AdvanceCard({ adv, isHrUser, onApprove, onReject, onCancel }) {
 
           {/* Details grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-            <div className="rounded-lg bg-zinc-50 p-3">
+            <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800/50 p-3">
               <p className="text-[11px] text-zinc-400 mb-0.5">المبلغ الكلي</p>
-              <p className="font-semibold text-zinc-800">{adv.amount?.toLocaleString("en-EG")} ج.م</p>
+              <p className="font-semibold text-zinc-800 dark:text-zinc-200">{adv.amount?.toLocaleString("en-EG")} ج.م</p>
             </div>
-            <div className="rounded-lg bg-zinc-50 p-3">
+            <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800/50 p-3">
               <p className="text-[11px] text-zinc-400 mb-0.5">المتبقي</p>
-              <p className="font-semibold text-zinc-800">{remaining.toLocaleString("en-EG")} ج.م</p>
+              <p className="font-semibold text-zinc-800 dark:text-zinc-200">{remaining.toLocaleString("en-EG")} ج.م</p>
             </div>
             {adv.paymentType === "INSTALLMENTS" && (
-              <div className="rounded-lg bg-zinc-50 p-3">
+              <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800/50 p-3">
                 <p className="text-[11px] text-zinc-400 mb-0.5">القسط الشهري</p>
-                <p className="font-semibold text-zinc-800">{(adv.monthlyDeduction || 0).toLocaleString("en-EG")} ج.م</p>
+                <p className="font-semibold text-zinc-800 dark:text-zinc-200">{(adv.monthlyDeduction || 0).toLocaleString("en-EG")} ج.م</p>
               </div>
             )}
             {adv.startYear && adv.startMonth && (
-              <div className="rounded-lg bg-zinc-50 p-3">
+              <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800/50 p-3">
                 <p className="text-[11px] text-zinc-400 mb-0.5">بداية الخصم</p>
-                <p className="font-semibold text-zinc-800">{MONTHS[adv.startMonth - 1]} {adv.startYear}</p>
+                <p className="font-semibold text-zinc-800 dark:text-zinc-200">{MONTHS[adv.startMonth - 1]} {adv.startYear}</p>
               </div>
             )}
-            <div className="rounded-lg bg-zinc-50 p-3">
+            <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800/50 p-3">
               <p className="text-[11px] text-zinc-400 mb-0.5">سُجلت بواسطة</p>
-              <p className="font-semibold text-zinc-800 truncate">{adv.recordedBy || "—"}</p>
+              <p className="font-semibold text-zinc-800 dark:text-zinc-200 truncate">{adv.recordedBy || "—"}</p>
             </div>
             {adv.approvedBy && (
-              <div className="rounded-lg bg-zinc-50 p-3">
+              <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800/50 p-3">
                 <p className="text-[11px] text-zinc-400 mb-0.5">اُعتمدت بواسطة</p>
-                <p className="font-semibold text-zinc-800 truncate">{adv.approvedBy}</p>
+                <p className="font-semibold text-zinc-800 dark:text-zinc-200 truncate">{adv.approvedBy}</p>
               </div>
             )}
           </div>
@@ -158,11 +158,11 @@ function AdvanceCard({ adv, isHrUser, onApprove, onReject, onCancel }) {
           {/* Deduction history */}
           {adv.deductionHistory?.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-zinc-600 mb-2">سجل الخصومات</p>
-              <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-100 bg-zinc-50/50">
+              <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-2">سجل الخصومات</p>
+              <div className="divide-y divide-zinc-100 dark:divide-zinc-800 rounded-lg border border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/50">
                 {adv.deductionHistory.map((h, i) => (
                   <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
-                    <span className="text-zinc-500">{new Date(h.date).toLocaleDateString("ar-EG")}</span>
+                    <span className="text-zinc-500 dark:text-zinc-400">{new Date(h.date).toLocaleDateString("ar-EG")}</span>
                     <span className="font-medium text-red-600">-{h.amountDeducted?.toLocaleString("en-EG")} ج.م</span>
                   </div>
                 ))}
@@ -191,7 +191,7 @@ function AdvanceCard({ adv, isHrUser, onApprove, onReject, onCancel }) {
               )}
               {["PENDING", "APPROVED"].includes(adv.status) && (
                 <button
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-xs font-medium text-zinc-600 shadow-sm hover:bg-zinc-50 transition"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition"
                   onClick={() => onCancel(adv)}
                 >
                   <XCircle size={14} /> إلغاء
@@ -233,29 +233,29 @@ function ApproveModal({ advance, onClose, onConfirm }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-5">
-        <h3 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 p-6 shadow-2xl space-y-5">
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
           <CheckCircle2 size={20} className="text-emerald-600" />
           اعتماد السلفة
         </h3>
-        <p className="text-sm text-zinc-500">
-          سلفة بمبلغ <span className="font-bold text-zinc-800">{advance.amount?.toLocaleString("en-EG")} ج.م</span>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          سلفة بمبلغ <span className="font-bold text-zinc-800 dark:text-zinc-200">{advance.amount?.toLocaleString("en-EG")} ج.م</span>
         </p>
 
         {/* Payment type */}
         <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-2">طريقة السداد</label>
+          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">طريقة السداد</label>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition ${paymentType === "ONE_TIME" ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"}`}
+              className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition ${paymentType === "ONE_TIME" ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"}`}
               onClick={() => setPaymentType("ONE_TIME")}
             >
               <CreditCard size={16} /> مرة واحدة
             </button>
             <button
               type="button"
-              className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition ${paymentType === "INSTALLMENTS" ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"}`}
+              className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition ${paymentType === "INSTALLMENTS" ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"}`}
               onClick={() => setPaymentType("INSTALLMENTS")}
             >
               <Repeat size={16} /> تقسيط
@@ -267,12 +267,12 @@ function ApproveModal({ advance, onClose, onConfirm }) {
         {paymentType === "INSTALLMENTS" && (
           <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-4 space-y-3">
             <div>
-              <label className="block text-xs font-medium text-zinc-600 mb-1">القسط الشهري (ج.م)</label>
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">القسط الشهري (ج.م)</label>
               <input
                 type="number"
                 min="1"
                 max={advance.amount}
-                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
                 placeholder="مثال: 1000"
                 value={monthlyDeduction}
                 onChange={(e) => setMonthlyDeduction(e.target.value)}
@@ -288,12 +288,12 @@ function ApproveModal({ advance, onClose, onConfirm }) {
 
         {/* Start period */}
         <div>
-          <label className="block text-xs font-medium text-zinc-600 mb-1 flex items-center gap-1">
+          <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1 flex items-center gap-1">
             <CalendarClock size={14} /> بداية الخصم من مرتب شهر
           </label>
           <div className="flex gap-2">
             <select
-              className="flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+              className="flex-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
               value={startMonth}
               onChange={(e) => setStartMonth(Number(e.target.value))}
             >
@@ -303,7 +303,7 @@ function ApproveModal({ advance, onClose, onConfirm }) {
             </select>
             <input
               type="number"
-              className="w-24 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+              className="w-24 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
               value={startYear}
               onChange={(e) => setStartYear(Number(e.target.value))}
             />
@@ -321,7 +321,7 @@ function ApproveModal({ advance, onClose, onConfirm }) {
             تأكيد الاعتماد
           </button>
           <button
-            className="rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition"
+            className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition"
             onClick={onClose}
           >
             إلغاء
@@ -398,18 +398,18 @@ function CreateAdvanceModal({ onClose, onCreated }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl space-y-5">
-        <h3 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-zinc-900 p-6 shadow-2xl space-y-5">
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
           <CircleDollarSign size={20} className="text-indigo-600" />
           إنشاء سلفة جديدة
         </h3>
 
         {/* Employee search */}
         <div className="relative">
-          <label className="block text-sm font-medium text-zinc-700 mb-1">الموظف</label>
+          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">الموظف</label>
           {selectedEmployee ? (
             <div className="flex items-center justify-between rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
-              <span className="text-sm font-medium text-zinc-800">
+              <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                 {selectedEmployee.fullName} ({selectedEmployee.employeeCode})
               </span>
               <button className="text-xs text-indigo-600 hover:underline" onClick={() => { setEmployeeId(""); setSearchTerm(""); }}>
@@ -422,7 +422,7 @@ function CreateAdvanceModal({ onClose, onCreated }) {
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input
                   type="text"
-                  className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
+                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2 pl-9 pr-3 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
                   placeholder="ابحث بالاسم أو الكود..."
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setShowDropdown(true); }}
@@ -430,7 +430,7 @@ function CreateAdvanceModal({ onClose, onCreated }) {
                 />
               </div>
               {showDropdown && (
-                <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg">
+                <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
                   {filteredEmployees.length === 0 ? (
                     <p className="px-3 py-2 text-sm text-zinc-400">لا توجد نتائج</p>
                   ) : (
@@ -445,7 +445,7 @@ function CreateAdvanceModal({ onClose, onCreated }) {
                           setShowDropdown(false);
                         }}
                       >
-                        <span className="font-medium text-zinc-800">{emp.fullName}</span>
+                        <span className="font-medium text-zinc-800 dark:text-zinc-200">{emp.fullName}</span>
                         <span className="text-xs text-zinc-400">({emp.employeeCode})</span>
                       </button>
                     ))
@@ -459,21 +459,21 @@ function CreateAdvanceModal({ onClose, onCreated }) {
         {/* Amount & Reason */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-zinc-600 mb-1">المبلغ (ج.م)</label>
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">المبلغ (ج.م)</label>
             <input
               type="number"
               min="1"
-              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
+              className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
               placeholder="5000"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-zinc-600 mb-1">السبب</label>
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">السبب</label>
             <input
               type="text"
-              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
+              className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
               placeholder="اختياري"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -483,18 +483,18 @@ function CreateAdvanceModal({ onClose, onCreated }) {
 
         {/* Payment type */}
         <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-2">طريقة السداد</label>
+          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">طريقة السداد</label>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition ${paymentType === "ONE_TIME" ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"}`}
+              className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition ${paymentType === "ONE_TIME" ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"}`}
               onClick={() => setPaymentType("ONE_TIME")}
             >
               <CreditCard size={16} /> مرة واحدة
             </button>
             <button
               type="button"
-              className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition ${paymentType === "INSTALLMENTS" ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"}`}
+              className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition ${paymentType === "INSTALLMENTS" ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"}`}
               onClick={() => setPaymentType("INSTALLMENTS")}
             >
               <Repeat size={16} /> تقسيط
@@ -506,11 +506,11 @@ function CreateAdvanceModal({ onClose, onCreated }) {
         {paymentType === "INSTALLMENTS" && (
           <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-4 space-y-3">
             <div>
-              <label className="block text-xs font-medium text-zinc-600 mb-1">القسط الشهري (ج.م)</label>
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">القسط الشهري (ج.م)</label>
               <input
                 type="number"
                 min="1"
-                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
                 placeholder="مثال: 1000"
                 value={monthlyDeduction}
                 onChange={(e) => setMonthlyDeduction(e.target.value)}
@@ -526,12 +526,12 @@ function CreateAdvanceModal({ onClose, onCreated }) {
 
         {/* Start period */}
         <div>
-          <label className="block text-xs font-medium text-zinc-600 mb-1 flex items-center gap-1">
+          <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1 flex items-center gap-1">
             <CalendarClock size={14} /> بداية الخصم من مرتب شهر
           </label>
           <div className="flex gap-2">
             <select
-              className="flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+              className="flex-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
               value={startMonth}
               onChange={(e) => setStartMonth(Number(e.target.value))}
             >
@@ -541,7 +541,7 @@ function CreateAdvanceModal({ onClose, onCreated }) {
             </select>
             <input
               type="number"
-              className="w-24 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+              className="w-24 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
               value={startYear}
               onChange={(e) => setStartYear(Number(e.target.value))}
             />
@@ -559,7 +559,7 @@ function CreateAdvanceModal({ onClose, onCreated }) {
             إنشاء السلفة
           </button>
           <button
-            className="rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition"
+            className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition"
             onClick={onClose}
           >
             إلغاء
@@ -655,8 +655,8 @@ export function AdvancesPage() {
               <CircleDollarSign size={20} />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-zinc-900">إدارة السلف</h1>
-              <p className="text-sm text-zinc-500">إنشاء واعتماد وتتبع سلف الموظفين</p>
+              <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">إدارة السلف</h1>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">إنشاء واعتماد وتتبع سلف الموظفين</p>
             </div>
           </div>
           {canManageAdvances && (
@@ -689,7 +689,7 @@ export function AdvancesPage() {
         <div className="flex items-center gap-2">
           <Filter size={14} className="text-zinc-400" />
           <select
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm"
+            className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -709,9 +709,9 @@ export function AdvancesPage() {
             <Loader2 className="animate-spin text-zinc-400" size={28} />
           </div>
         ) : advances.length === 0 ? (
-          <div className="rounded-xl border border-zinc-200 bg-white px-6 py-16 text-center">
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-6 py-16 text-center">
             <Banknote className="mx-auto mb-3 text-zinc-300" size={36} />
-            <p className="text-sm font-medium text-zinc-600">لا توجد سلف</p>
+            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">لا توجد سلف</p>
             <p className="mt-1 text-xs text-zinc-400">أنشئ سلفة جديدة للبدء</p>
           </div>
         ) : (

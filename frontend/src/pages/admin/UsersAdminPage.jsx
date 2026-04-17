@@ -61,6 +61,7 @@ function Avatar({ email }) {
 const ROLE_OPTIONS = ["EMPLOYEE", "TEAM_LEADER", "MANAGER", "HR", "HR_STAFF", "HR_MANAGER", "ADMIN"];
 const POLICY_ASSIGNABLE_ROLE_KEYS = new Set(["ADMIN", "HR", "HR_STAFF", "HR_MANAGER"]);
 const HR_MANAGER_ONLY_TEMPLATES = new Set(["PERMISSIONS_MANAGER"]);
+const HR_ROLE_KEYS = new Set(["HR", "HR_STAFF", "HR_MANAGER"]);
 const ACCESS_LEVEL_OPTIONS = [
   { value: "NONE", label: "No access" },
   { value: "VIEW", label: "Viewer" },
@@ -240,15 +241,36 @@ export function UsersAdminPage() {
     for (const u of users) map.set(u.email, u.id);
     return map;
   }, [users]);
+  const employeeByEmail = useMemo(() => {
+    const map = new Map();
+    for (const emp of employees) {
+      const emailKey = String(emp?.email || "").trim().toLowerCase();
+      if (!emailKey) continue;
+      map.set(emailKey, emp);
+    }
+    return map;
+  }, [employees]);
+
+  function canAssignRoleToUser(userEmail, roleValue) {
+    const roleKey = normaliseRoleKey(roleValue || "EMPLOYEE");
+    if (!HR_ROLE_KEYS.has(roleKey)) return true;
+    const employee = employeeByEmail.get(String(userEmail || "").trim().toLowerCase());
+    const departmentKey = String(employee?.department || "").trim().toUpperCase();
+    return departmentKey === "HR";
+  }
 
   /* ── handlers ── */
   async function handleSaveRole(row) {
+    if (!canAssignRoleToUser(row.email, row.effectiveRole)) {
+      showToast("Cannot assign HR role to an employee outside HR department", "error");
+      return;
+    }
     try {
       const resp = await updateUserRoleApi(row.id, row.effectiveRole);
       setUsers(prev => prev.map(u => u.id === resp.user.id ? resp.user : u));
       setPendingRoles(prev => { const n = { ...prev }; delete n[row.id]; return n; });
       showToast(`Role updated to ${ROLE_CONFIG[normaliseRoleKey(resp.user.role)]?.label}`, "success");
-    } catch(err) { console.error(err); showToast("Failed to update role","error"); }
+    } catch(err) { console.error(err); showToast(err?.message || "Failed to update role","error"); }
   }
 
   async function handleOpenPermissions(userId) {
@@ -490,7 +512,7 @@ export function UsersAdminPage() {
       {/* ── Tabs + Search ── */}
       {showAdminNav && (
         <div className="flex flex-wrap items-center gap-3 mb-5">
-          <div className="flex w-full sm:w-auto rounded-md border border-zinc-200 bg-zinc-50/80 p-0.5 gap-0.5">
+          <div className="flex w-full sm:w-auto rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 p-0.5 gap-0.5">
             {[
               ...(showAccountsTab ? [["users", "Accounts"]] : []),
               ["directory", "Directory"],
@@ -501,8 +523,8 @@ export function UsersAdminPage() {
                 onClick={() => setTab(id)}
                 className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
                   tab === id
-                    ? "bg-white text-zinc-900 shadow-sm border border-zinc-200"
-                    : "text-zinc-600 hover:text-zinc-900"
+                    ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200 dark:border-zinc-800"
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
                 }`}
               >
                 {label}
@@ -520,7 +542,7 @@ export function UsersAdminPage() {
               placeholder={tab === "users" ? "Search by email…" : "Search by name or email…"}
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full rounded-md border border-zinc-200 bg-white py-2 pl-9 pr-4 text-sm text-zinc-900 placeholder-zinc-400 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
+              className="w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2 pl-9 pr-4 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
             />
           </div>
 
@@ -529,7 +551,7 @@ export function UsersAdminPage() {
             <select
               value={filterRole}
               onChange={e => setFilterRole(e.target.value)}
-              className="w-full sm:w-auto rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
+              className="w-full sm:w-auto rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
             >
               <option value="ALL">All Roles</option>
               {Object.entries(ROLE_CONFIG).map(([key, m]) => (
@@ -543,7 +565,7 @@ export function UsersAdminPage() {
             <select
               value={filterDept}
               onChange={e => setFilterDept(e.target.value)}
-              className="w-full sm:w-auto rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
+              className="w-full sm:w-auto rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
             >
               <option value="all">{deptLoading ? "Loading…" : "All Departments"}</option>
               {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
@@ -554,17 +576,17 @@ export function UsersAdminPage() {
 
       {/* ── ACCOUNTS TAB ── */}
       {showAccountsTab && tab === "users" && (
-        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-card">
+        <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-card">
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <div className="flex flex-col items-center gap-3">
-                <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
-                <p className="text-sm text-zinc-500">Loading accounts…</p>
+                <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-800" />
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading accounts…</p>
               </div>
             </div>
           ) : filteredUsers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <p className="font-medium text-zinc-800">No users match</p>
+              <p className="font-medium text-zinc-800 dark:text-zinc-200">No users match</p>
               <p className="text-sm text-slate-500 mt-1">Try a different search or filter.</p>
             </div>
           ) : (
@@ -583,8 +605,9 @@ export function UsersAdminPage() {
                   const isDirty = row.effectiveRole !== row.role;
                   const targetRoleKey = normaliseRoleKey(row.role);
                   const canOpenPolicyForRow = POLICY_ASSIGNABLE_ROLE_KEYS.has(targetRoleKey);
+                  const selectedRoleAllowed = canAssignRoleToUser(row.email, row.effectiveRole);
                   return (
-                    <tr key={row.id} className="group transition-colors hover:bg-zinc-50/80">
+                    <tr key={row.id} className="group transition-colors hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50">
                       {/* Account */}
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
@@ -607,18 +630,27 @@ export function UsersAdminPage() {
                       {!hideRoleControls && (
                         <td className="px-5 py-3.5">
                           <select
-                            className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 shadow-card focus:outline-none focus:ring-1 focus:ring-zinc-400"
                             value={row.effectiveRole}
                             onChange={e => setPendingRoles(prev => ({ ...prev, [row.id]: e.target.value }))}
                           >
                             {ROLE_OPTIONS.map((role) => (
-                              <option key={role} value={role}>
+                              <option
+                                key={role}
+                                value={role}
+                                disabled={!canAssignRoleToUser(row.email, role)}
+                              >
                                 {ROLE_CONFIG[normaliseRoleKey(role)]?.label || role}
                               </option>
                             ))}
                           </select>
+                          {!selectedRoleAllowed && (
+                            <p className="mt-1 text-xs text-rose-600">
+                              HR roles are allowed only for employees inside HR department.
+                            </p>
+                          )}
                           {isDirty && (
-                            <p className="mt-1 text-xs text-zinc-500">
+                            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                               {ROLE_IMPACT[normaliseRoleKey(row.effectiveRole)]}
                             </p>
                           )}
@@ -631,7 +663,7 @@ export function UsersAdminPage() {
                           {!hideRoleControls && (
                             <button
                               type="button"
-                              disabled={!isDirty}
+                              disabled={!isDirty || !selectedRoleAllowed}
                               onClick={() => handleSaveRole(row)}
                               className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
                             >
@@ -642,7 +674,7 @@ export function UsersAdminPage() {
                             type="button"
                             onClick={() => handleOpenPermissions(row.id)}
                             disabled={!canOpenPolicyForRow}
-                            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:border-zinc-300"
+                            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:border-zinc-300"
                             title={
                               canOpenPolicyForRow
                                 ? "Manage access policy"
@@ -665,7 +697,7 @@ export function UsersAdminPage() {
           <div className="border-t border-slate-100 px-5 py-3 text-xs text-slate-400 flex flex-col sm:flex-row items-start sm:items-center gap-2 justify-between">
               <span>Showing <strong className="text-slate-600">{filteredUsers.length}</strong> of <strong className="text-slate-600">{users.length}</strong> accounts</span>
               {filterRole !== "ALL" && (
-                <button type="button" onClick={() => setFilterRole("ALL")} className="text-zinc-600 hover:underline text-xs font-medium">
+                <button type="button" onClick={() => setFilterRole("ALL")} className="text-zinc-600 dark:text-zinc-400 hover:underline text-xs font-medium">
                   Clear filter
                 </button>
               )}
@@ -676,17 +708,17 @@ export function UsersAdminPage() {
 
       {/* ── DIRECTORY TAB ── */}
       {tab === "directory" && (
-        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-card">
+        <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-card">
           {empLoading ? (
             <div className="flex items-center justify-center py-20">
               <div className="flex flex-col items-center gap-3">
-                <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
-                <p className="text-sm text-zinc-500">Loading directory…</p>
+                <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-800" />
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading directory…</p>
               </div>
             </div>
           ) : filteredEmployees.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <p className="font-medium text-zinc-800">No employees found</p>
+              <p className="font-medium text-zinc-800 dark:text-zinc-200">No employees found</p>
               <p className="text-sm text-slate-500 mt-1">Try a different search or department.</p>
             </div>
           ) : (
@@ -709,7 +741,7 @@ export function UsersAdminPage() {
                   const linkedRoleKey = normaliseRoleKey(linkedUser?.role || "EMPLOYEE");
                   const canOpenPolicyForLinkedUser = POLICY_ASSIGNABLE_ROLE_KEYS.has(linkedRoleKey);
                   return (
-                    <tr key={emp.id} className="group transition-colors hover:bg-zinc-50/80">
+                    <tr key={emp.id} className="group transition-colors hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <Avatar email={emp.email} />
@@ -730,7 +762,7 @@ export function UsersAdminPage() {
                               type="button"
                               disabled={!userId || !canOpenPolicyForLinkedUser}
                               onClick={() => userId && handleOpenPermissions(userId)}
-                              className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-card transition hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 shadow-card transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 disabled:opacity-40 disabled:cursor-not-allowed"
                               title={
                                 !userId
                                   ? "Create login first"
@@ -802,7 +834,7 @@ export function UsersAdminPage() {
                 className={`w-full sm:w-auto rounded-xl border px-4 py-2 text-sm font-semibold transition ${
                   showGuide
                     ? "border-indigo-200 bg-indigo-50 text-indigo-700"
-                    : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                 }`}
               >
                 {showGuide ? "Hide Guide" : "Help Guide"}
@@ -810,9 +842,9 @@ export function UsersAdminPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-semibold text-zinc-900">
+              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                 Page-level overrides (primary access control)
               </p>
               <button
@@ -823,11 +855,11 @@ export function UsersAdminPage() {
                 Save Page Overrides
               </button>
             </div>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
               Set exact page access per user: Viewer = read only, Editor = read + edit, Admin = read + edit + advanced actions.
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700">No access: <span className="font-semibold">{overrideCounts.NONE}</span></div>
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300">No access: <span className="font-semibold">{overrideCounts.NONE}</span></div>
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">Viewer: <span className="font-semibold">{overrideCounts.VIEW}</span></div>
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">Editor: <span className="font-semibold">{overrideCounts.EDIT}</span></div>
               <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700">Admin: <span className="font-semibold">{overrideCounts.ADMIN}</span></div>
@@ -838,12 +870,12 @@ export function UsersAdminPage() {
                 value={overrideSearch}
                 onChange={(e) => setOverrideSearch(e.target.value)}
                 placeholder="Search page by name or path..."
-                className="min-w-[230px] flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+                className="min-w-[230px] flex-1 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200"
               />
               <select
                 value={overrideLevelFilter}
                 onChange={(e) => setOverrideLevelFilter(e.target.value)}
-                className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+                className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-200"
               >
                 <option value="ALL">All levels</option>
                 <option value="NONE">No access</option>
@@ -862,15 +894,15 @@ export function UsersAdminPage() {
                       ? "border-amber-200 bg-amber-50/40"
                       : current === "VIEW"
                         ? "border-emerald-200 bg-emerald-50/40"
-                        : "border-zinc-200 bg-white";
+                        : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900";
                 return (
                   <div
                     key={page.pageId}
                     className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${levelTone}`}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-semibold text-zinc-800">{page.label}</p>
-                      <p className="truncate text-[10px] text-zinc-500">{page.path}</p>
+                      <p className="truncate text-xs font-semibold text-zinc-800 dark:text-zinc-200">{page.label}</p>
+                      <p className="truncate text-[10px] text-zinc-500 dark:text-zinc-400">{page.path}</p>
                     </div>
                     <select
                       value={current}
@@ -880,7 +912,7 @@ export function UsersAdminPage() {
                           [page.pageId]: String(e.target.value || "NONE").toUpperCase(),
                         }))
                       }
-                      className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700"
+                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300"
                     >
                       {ACCESS_LEVEL_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -908,7 +940,7 @@ export function UsersAdminPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-xl bg-white border border-indigo-100 p-4">
+                <div className="rounded-xl bg-white dark:bg-zinc-900 border border-indigo-100 p-4">
                   <h5 className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-2">Scope</h5>
                   <p className="text-[11px] text-slate-500 mb-3">What each access range means.</p>
                   <ul className="space-y-2">
@@ -935,7 +967,7 @@ export function UsersAdminPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl bg-white border border-indigo-100 p-4">
+              <div className="rounded-xl bg-white dark:bg-zinc-900 border border-indigo-100 p-4">
                 <h5 className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-2">Role defaults (what each role gets automatically)</h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {ROLE_OPTIONS.map(r => (
@@ -949,7 +981,7 @@ export function UsersAdminPage() {
             </div>
           )}
 
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-3 text-xs text-zinc-600">
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/50 px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
             Source of truth: Page-level overrides. Templates are optional presets only.
           </div>
         </div>

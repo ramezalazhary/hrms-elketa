@@ -303,7 +303,7 @@ export function EmployeesListPage() {
       actions={
         canModify ? (
           <div className="flex flex-wrap gap-2">
-            <Link className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50" to="/employees/onboarding">
+            <Link className="inline-flex items-center gap-2 rounded-full border border-zinc-200/90 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-800 dark:text-zinc-200 shadow-sm transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50" to="/employees/onboarding">
               <Users className="h-4 w-4 opacity-70" /> Onboarding
             </Link>
             <Link className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800" to="/employees/create">
@@ -323,14 +323,14 @@ export function EmployeesListPage() {
         ].map((stat) => (
           <div
             key={stat.label}
-            className="flex items-center gap-3 rounded-[20px] bg-white p-4 shadow-sm ring-1 ring-zinc-950/[0.06] transition hover:shadow-md"
+            className="flex items-center gap-3 rounded-[20px] bg-white dark:bg-zinc-900 p-4 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 transition hover:shadow-md"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/80">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
               <stat.icon className="h-5 w-5" strokeWidth={1.75} />
             </div>
             <div>
-              <p className="text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">{stat.value}</p>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{stat.label}</p>
+              <p className="text-2xl font-semibold tabular-nums tracking-tight text-zinc-900 dark:text-zinc-100">{stat.value}</p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{stat.label}</p>
             </div>
           </div>
         ))}
@@ -341,17 +341,17 @@ export function EmployeesListPage() {
         {/* ─── TABS + SEARCH BAR ─── */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Tabs */}
-          <div className="inline-flex w-full max-w-md gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 sm:w-auto">
+          <div className="inline-flex w-full max-w-md gap-0.5 rounded-2xl bg-zinc-100/90 dark:bg-zinc-800/80 p-1 ring-1 ring-zinc-200/80 dark:ring-zinc-700 sm:w-auto overflow-x-auto hidden-scrollbar">
             <button type="button" onClick={() => { setViewTab("active"); setPage(1); }}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${viewTab === "active" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${viewTab === "active" ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm ring-1 ring-zinc-200/60 dark:ring-zinc-700" : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 dark:hover:text-zinc-200"}`}>
               <UserCheck className="h-3.5 w-3.5" /> Active
-              <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${viewTab === "active" ? "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/70" : "bg-zinc-200/60 text-zinc-500"}`}>{activeEmployees.length}</span>
+              <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${viewTab === "active" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 ring-1 ring-zinc-200/70 dark:ring-zinc-700" : "bg-zinc-200/60 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400"}`}>{activeEmployees.length}</span>
             </button>
             <button type="button" onClick={() => { setViewTab("terminated"); setPage(1); }}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${viewTab === "terminated" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${viewTab === "terminated" ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm ring-1 ring-zinc-200/60 dark:ring-zinc-700" : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 dark:hover:text-zinc-200"}`}>
               <UserX className="h-3.5 w-3.5" /> Separated
               {terminatedEmployees.length > 0 && (
-                <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${viewTab === "terminated" ? "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/70" : "bg-zinc-200/60 text-zinc-500"}`}>{terminatedEmployees.length}</span>
+                <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${viewTab === "terminated" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 ring-1 ring-zinc-200/70 dark:ring-zinc-700" : "bg-zinc-200/60 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400"}`}>{terminatedEmployees.length}</span>
               )}
             </button>
           </div>
@@ -359,25 +359,25 @@ export function EmployeesListPage() {
           {/* Search + Filter toggle */}
           <div className="flex items-center gap-2 flex-1 max-w-lg">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500 dark:text-zinc-400" />
               <input
                 type="text" placeholder="Search name or code…"
-                className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 py-2.5 pl-10 pr-10 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900 py-2.5 pl-10 pr-10 text-sm text-zinc-900 dark:text-zinc-100 shadow-sm outline-none transition focus:border-zinc-400 dark:focus:border-zinc-600 focus:bg-white dark:focus:bg-zinc-900 dark:focus:bg-zinc-800 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700 dark:focus:ring-zinc-700"
                 value={search}
                 onChange={(e) => setFilter("search", e.target.value)}
               />
               {search && (
-                <button type="button" onClick={() => setFilter("search", "")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 transition hover:text-zinc-700">
+                <button type="button" onClick={() => setFilter("search", "")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 transition hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300">
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
             <button type="button" onClick={() => setShowFilters(!showFilters)}
-              className={`relative flex items-center gap-1.5 rounded-full border px-3.5 py-2.5 text-sm font-medium shadow-sm transition ${showFilters ? "border-zinc-300 bg-zinc-100 text-zinc-900 ring-1 ring-zinc-200/80" : "border-zinc-200/90 bg-white text-zinc-700 hover:bg-zinc-50"}`}>
+              className={`relative flex items-center gap-1.5 rounded-full border px-3.5 py-2.5 text-sm font-medium shadow-sm transition ${showFilters ? "border-zinc-300 dark:border-zinc-600 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 ring-1 ring-zinc-200/80 dark:ring-zinc-700" : "border-zinc-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-800"}`}>
               <Filter className="h-4 w-4" />
               Filters
               {activeFiltersCount > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 text-[10px] font-semibold text-white">{activeFiltersCount}</span>
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 dark:bg-indigo-600 text-[10px] font-semibold text-white">{activeFiltersCount}</span>
               )}
             </button>
           </div>
@@ -385,9 +385,9 @@ export function EmployeesListPage() {
 
         {/* ─── FILTER BAR (collapsible) ─── */}
         {showFilters && (
-          <div className="mt-1 animate-in slide-in-from-top-2 rounded-[20px] bg-white p-4 shadow-sm ring-1 ring-zinc-950/[0.06]">
+          <div className="mt-1 animate-in slide-in-from-top-2 rounded-[20px] bg-white dark:bg-zinc-900 p-4 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Refine results</span>
+              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Refine results</span>
               {activeFiltersCount > 0 && (
                 <button type="button" onClick={() => {
                   const next = new URLSearchParams();
@@ -400,9 +400,9 @@ export function EmployeesListPage() {
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-zinc-500">Department</label>
+                <label className="mb-1.5 block text-xs font-medium text-zinc-500 dark:text-zinc-400">Department</label>
                 <select value={departmentFilter} onChange={(e) => setFilter("department", e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80">
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700">
                   <option value="all">All departments</option>
                   {departmentOptions.map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
@@ -410,20 +410,20 @@ export function EmployeesListPage() {
               {viewTab === "active" && (
                 <>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-zinc-500">Quick flags</label>
+                    <label className="mb-1.5 block text-xs font-medium text-zinc-500 dark:text-zinc-400">Quick flags</label>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => setFilter("idExpiringSoon", idExpiringSoon ? "" : "true")}
-                        className={`flex-1 rounded-xl border px-3 py-2 text-center text-[11px] font-semibold transition ${idExpiringSoon ? "border-amber-200 bg-amber-50/90 text-amber-900 ring-1 ring-amber-200/70" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50"}`}>
+                        className={`flex-1 rounded-xl border px-3 py-2 text-center text-[11px] font-semibold transition ${idExpiringSoon ? "border-amber-200 bg-amber-50/90 text-amber-900 ring-1 ring-amber-200/70" : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                         ID expiry
                       </button>
                       <button type="button" onClick={() => setFilter("recentTransfers", recentTransfers ? "" : "true")}
-                        className={`flex-1 rounded-xl border px-3 py-2 text-center text-[11px] font-semibold transition ${recentTransfers ? "border-zinc-300 bg-zinc-100 text-zinc-900 ring-1 ring-zinc-200/80" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50"}`}>
+                        className={`flex-1 rounded-xl border px-3 py-2 text-center text-[11px] font-semibold transition ${recentTransfers ? "border-zinc-300 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 ring-1 ring-zinc-200/80 dark:ring-zinc-700" : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                         Transfers
                       </button>
                     </div>
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-zinc-500">Salary period</label>
+                    <label className="mb-1.5 block text-xs font-medium text-zinc-500 dark:text-zinc-400">Salary period</label>
                     <div className="relative flex items-center gap-1.5">
                       <input
                         type="month"
@@ -444,7 +444,7 @@ export function EmployeesListPage() {
                           setSearchParams(next);
                           setPage(1);
                         }}
-                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80"
+                        className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700"
                         placeholder="Any time"
                       />
                       {increasePeriod !== "all" && (
@@ -458,7 +458,7 @@ export function EmployeesListPage() {
                             setSearchParams(next);
                             setPage(1);
                           }}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
                           title="Clear month filter"
                         >
                           <X className="h-3.5 w-3.5" />
@@ -469,9 +469,9 @@ export function EmployeesListPage() {
                 </>
               )}
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-zinc-500">Sort by</label>
+                <label className="mb-1.5 block text-xs font-medium text-zinc-500 dark:text-zinc-400">Sort by</label>
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200/80">
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700">
                   <option value="name-asc">Name (A → Z)</option>
                   <option value="name-desc">Name (Z → A)</option>
                   {viewTab === "active" && <>
@@ -488,7 +488,7 @@ export function EmployeesListPage() {
 
       {/* ─── LOADING ─── */}
       {isLoading && (
-        <div className="mt-4 flex items-center justify-center gap-2 py-8 text-sm text-zinc-500">
+        <div className="mt-4 flex items-center justify-center gap-2 py-8 text-sm text-zinc-500 dark:text-zinc-400">
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
           Loading employees…
         </div>
@@ -496,23 +496,23 @@ export function EmployeesListPage() {
 
       {/* ─── EMPLOYEE CARDS / ROWS ─── */}
       {!isLoading && paged.length === 0 && (
-        <div className="mt-4 flex flex-col items-center justify-center rounded-[20px] bg-zinc-50/40 py-16 text-center ring-1 ring-zinc-950/[0.04]">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 ring-1 ring-zinc-200/80">
+        <div className="mt-4 flex flex-col items-center justify-center rounded-[20px] bg-zinc-50/40 dark:bg-zinc-800/50 py-16 text-center ring-1 ring-zinc-950/[0.04]">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-400 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
             <Users className="h-7 w-7" />
           </div>
-          <p className="mb-1 text-sm font-medium text-zinc-800">
+          <p className="mb-1 text-sm font-medium text-zinc-800 dark:text-zinc-200">
             {viewTab === "active" ? "No active employees found" : "No separated employees"}
           </p>
-          <p className="max-w-sm text-xs text-zinc-500">
+          <p className="max-w-sm text-xs text-zinc-500 dark:text-zinc-400">
             {viewTab === "active" ? "Try adjusting your search or filters, or add a new employee." : "No employees have been terminated or resigned."}
           </p>
         </div>
       )}
 
       {!isLoading && paged.length > 0 && (
-        <div className="mt-6 overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-zinc-950/[0.06]">
+        <div className="mt-6 overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
           {/* Table header */}
-          <div className="hidden items-center gap-4 border-b border-zinc-100 bg-zinc-50/70 px-6 py-4 text-[11px] font-medium uppercase tracking-wide text-zinc-500 md:grid md:grid-cols-12">
+          <div className="hidden items-center gap-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/50 px-6 py-4 text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400 md:grid md:grid-cols-12">
             <div className="col-span-4">Employee</div>
             <div className="col-span-2">Department</div>
             <div className="col-span-1">Status</div>
@@ -543,22 +543,22 @@ export function EmployeesListPage() {
             const isIdExpiringSoon = idExpiryDate && !isIdExpired && idExpiryDate.getTime() < Date.now() + 60 * 86400000;
 
             return (
-              <div key={emp.id}
-                className={`group grid grid-cols-1 items-center gap-3 px-6 py-4 transition hover:bg-zinc-50/70 md:grid-cols-12 md:gap-4 ${!isLast ? "border-b border-zinc-100" : ""}`}>
+              <div key={emp._id || emp.id || idx}
+                className={`group grid grid-cols-1 items-center gap-3 px-6 py-4 transition hover:bg-zinc-50/70 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-800/50 md:grid-cols-12 md:gap-4 ${!isLast ? "border-b border-zinc-100 dark:border-zinc-800/80" : ""}`}>
 
                 {/* Employee */}
                 <div className="col-span-4 flex items-center gap-4 min-w-0">
-                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${getAvatarColor(emp.fullName)} text-sm font-semibold text-white shadow-sm ring-2 ring-white`}>
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${getAvatarColor(emp.fullName)} text-sm font-semibold text-white shadow-sm ring-2 ring-white dark:ring-zinc-900`}>
                     {getInitials(emp.fullName)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <Link to={`/employees/${emp.id}`}
-                      className="block truncate text-[15px] font-semibold tracking-tight text-zinc-900 transition hover:text-zinc-600">
+                    <Link to={`/employees/${emp._id || emp.id}`}
+                      className="block truncate text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 transition hover:text-zinc-600 dark:hover:text-zinc-400 dark:hover:text-zinc-300">
                       {emp.fullName}
                     </Link>
                     <div className="mt-1 flex items-center gap-2">
-                      <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-600 ring-1 ring-zinc-200/70">{emp.employeeCode || "—"}</span>
-                      <span className="truncate text-xs font-medium text-zinc-500">{emp.email}</span>
+                      <span className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 ring-1 ring-zinc-200/70 dark:ring-zinc-700">{emp.employeeCode || "—"}</span>
+                      <span className="truncate text-xs font-medium text-zinc-500 dark:text-zinc-400">{emp.email}</span>
                     </div>
                   </div>
                 </div>
@@ -602,7 +602,7 @@ export function EmployeesListPage() {
                     <div className="col-span-3 flex items-center justify-end gap-1.5">
                       {isIncreaseDue && canModify && (
                         <button type="button" onClick={() => setIncreaseModalTarget(emp)}
-                          className="flex items-center gap-1 rounded-full bg-zinc-900 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.97]">
+                          className="flex items-center gap-1 rounded-full bg-zinc-900 dark:bg-indigo-600 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-zinc-800 dark:hover:bg-indigo-500 active:scale-[0.97]">
                           <TrendingUp className="h-3 w-3" /> Increase
                         </button>
                       )}
@@ -618,37 +618,37 @@ export function EmployeesListPage() {
                         <button
                           type="button"
                           onClick={() => { setEvaluateTarget(emp); setOpenActions(null); }}
-                          className="flex items-center gap-1 rounded-full border border-amber-200/90 bg-amber-50/90 px-2.5 py-1.5 text-[11px] font-semibold text-amber-950 transition hover:bg-amber-100"
+                          className="flex items-center gap-1 rounded-full border border-amber-200/90 dark:border-amber-500/30 bg-amber-50/90 dark:bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-amber-950 dark:text-amber-300 transition hover:bg-amber-100 dark:hover:bg-amber-500/20"
                         >
                           <Star className="h-3 w-3 text-amber-600" /> Evaluate
                         </button>
                       )}
-                      <Link to={`/employees/${emp.id}`}
-                        className="flex items-center gap-1 rounded-full border border-zinc-200/90 bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
+                      <Link to={`/employees/${emp._id || emp.id}`}
+                        className="flex items-center gap-1 rounded-full border border-zinc-200/90 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-700">
                         <Eye className="h-3 w-3" /> View
                       </Link>
                       {canModify && (
                         <div className="relative">
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenActions(openActions === emp.id ? null : emp.id); }}
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200/90 bg-white text-zinc-400 transition hover:bg-zinc-50 hover:text-zinc-700">
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenActions(openActions === (emp._id || emp.id) ? null : (emp._id || emp.id)); }}
+                            className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200/90 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300">
                             <MoreHorizontal className="h-4 w-4" />
                           </button>
-                          {openActions === emp.id && (
-                            <div className="absolute right-0 top-full z-50 mt-1 w-44 animate-in fade-in zoom-in-95 rounded-2xl bg-white p-1 shadow-xl ring-1 ring-zinc-950/[0.08] duration-150"
+                          {openActions === (emp._id || emp.id) && (
+                            <div className="absolute right-0 top-full z-50 mt-1 w-44 animate-in fade-in zoom-in-95 rounded-2xl bg-white dark:bg-zinc-800 p-1 shadow-xl ring-1 ring-zinc-950/[0.08] dark:ring-white/10 duration-150"
                               onClick={(e) => e.stopPropagation()}>
-                              <Link to={`/employees/${emp.id}/edit`}
-                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50">
-                                <Pencil className="h-3.5 w-3.5 text-zinc-500" /> Edit profile
+                              <Link to={`/employees/${emp._id || emp.id}/edit`}
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-700">
+                                <Pencil className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" /> Edit profile
                               </Link>
                               <button type="button" onClick={() => { setTerminateModalTarget(emp); setOpenActions(null); }}
-                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50">
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10">
                                 <UserX className="h-3.5 w-3.5" /> Terminate
                               </button>
                               {isDevMode && canDeleteEmployeeRecord && (
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteEmployee(emp)}
-                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
+                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-red-700 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" /> Delete (Dev only)
                                 </button>
@@ -670,19 +670,19 @@ export function EmployeesListPage() {
                     </div>
                     {/* Reason */}
                     <div className="col-span-1">
-                      <span className="block max-w-[10rem] truncate text-xs text-zinc-500" title={emp.terminationReason || ""}>
+                      <span className="block max-w-[10rem] truncate text-xs text-zinc-500 dark:text-zinc-400" title={emp.terminationReason || ""}>
                         {emp.terminationReason || "—"}
                       </span>
                     </div>
                     {/* Actions */}
                     <div className="col-span-2 flex items-center justify-end gap-1.5">
-                      <Link to={`/employees/${emp.id}`}
-                        className="flex items-center gap-1 rounded-full border border-zinc-200/90 bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50">
+                      <Link to={`/employees/${emp._id || emp.id}`}
+                        className="flex items-center gap-1 rounded-full border border-zinc-200/90 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
                         <Eye className="h-3 w-3" /> View
                       </Link>
                       {canModify && (
                         <button type="button" onClick={() => handleReactivate(emp)}
-                          className="flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-800 transition hover:bg-zinc-100">
+                          className="flex items-center gap-1 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-100 dark:hover:bg-zinc-800">
                           <RotateCcw className="h-3 w-3" /> Reactivate
                         </button>
                       )}

@@ -2,6 +2,11 @@ import { Employee } from "../models/Employee.js";
 import { Department } from "../models/Department.js";
 import { hashPassword } from "../middleware/auth.js";
 import { syncEmployeeOrgCaches } from "./employeeOrgCaches.js";
+import {
+  ensureEmployeeCodeAvailableForOwner,
+  generateDepartmentScopedCode,
+  recordEmployeeCodeOwnership,
+} from "./employeeLifecycleService.js";
 
 /** Empty strings from JSON must not be cast to Date (Mongoose CastError). */
 function optionalDate(value) {
@@ -64,9 +69,14 @@ export async function createEmployee(data) {
 
   let finalEmployeeCode = employeeCode;
   if (!finalEmployeeCode) {
-    const deptCount = await Employee.countDocuments({ department });
-    const serial = (deptCount + 1).toString().padStart(3, '0');
-    finalEmployeeCode = `#${deptDoc.code}-${serial}`;
+    finalEmployeeCode = await generateDepartmentScopedCode({
+      departmentDoc: deptDoc,
+    });
+  } else {
+    await ensureEmployeeCodeAvailableForOwner({
+      code: finalEmployeeCode,
+      ownerEmployeeId: null,
+    });
   }
 
   let finalRole = requestedRole || (department === "HR" ? "HR_STAFF" : "EMPLOYEE");
@@ -108,6 +118,12 @@ export async function createEmployee(data) {
     isActive: true,
   });
 
+  await newEmployee.save();
+  recordEmployeeCodeOwnership(newEmployee, {
+    code: finalEmployeeCode,
+    departmentDoc: deptDoc,
+    at: new Date(),
+  });
   await newEmployee.save();
   await syncEmployeeOrgCaches(newEmployee);
   if (newEmployee.isModified()) await newEmployee.save();

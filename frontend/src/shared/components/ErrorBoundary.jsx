@@ -65,7 +65,7 @@ export class ErrorBoundary extends Component {
           <div className="flex gap-3">
             <button
               onClick={this.handleReset}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
             >
               <RotateCcw className="h-4 w-4" /> Try Again
             </button>

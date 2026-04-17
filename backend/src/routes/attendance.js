@@ -704,7 +704,6 @@ router.get("/", requireAuth, enforcePolicy("read", "attendance"), async (req, re
 router.get(
   "/me",
   requireAuth,
-  enforcePolicy("read", "attendance"),
   async (req, res) => {
     try {
       const lastMonthCutoff = new Date();

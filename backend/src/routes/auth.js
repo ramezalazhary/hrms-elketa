@@ -42,7 +42,9 @@ router.use(authLimiter);
 router.post("/login", validateLogin, async (req, res) => {
   try {
     const { email, password } = req.body;
-    const employee = await Employee.findOne({ email });
+    const employee = await Employee.findOne({ email }).select(
+      "email passwordHash role isActive department departmentId teamId authzVersion hrTemplates hrLevel requirePasswordChange"
+    );
     if (!employee) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -441,11 +443,7 @@ router.put(
         { head: targetUser.email },
         { $set: { head: null } },
       );
-      await Department.updateMany(
-        { "teams.leaderEmail": targetUser.email },
-        { $set: { "teams.$[t].leaderEmail": null } },
-        { arrayFilters: [{ "t.leaderEmail": targetUser.email }] },
-      );
+      // FROZEN: legacy Department.teams[] cleanup removed
       await Team.updateMany(
         { leaderEmail: targetUser.email },
         { $set: { leaderEmail: null } },

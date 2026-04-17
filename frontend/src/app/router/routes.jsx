@@ -23,6 +23,8 @@ import { RequireOrganizationRulesManage } from "@/shared/routing/RequireOrganiza
 import { RequireOrganizationsAccess } from "@/shared/routing/RequireOrganizationsAccess";
 import { RequireLeaveOperationsAccess } from "@/shared/routing/RequireLeaveOperationsAccess";
 
+import { AssessmentTemplatesPage } from "@/modules/organization/pages/AssessmentTemplatesPage";
+
 export const appRoutes = [
   {
     element: <AuthLayout />,
@@ -91,6 +93,14 @@ export const appRoutes = [
         element: (
           <RequireOrganizationRulesManage>
             <OrganizationRulesPage />
+          </RequireOrganizationRulesManage>
+        ),
+      },
+      {
+        path: "/admin/assessment-templates",
+        element: (
+          <RequireOrganizationRulesManage>
+            <AssessmentTemplatesPage />
           </RequireOrganizationRulesManage>
         ),
       },

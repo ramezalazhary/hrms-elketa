@@ -217,7 +217,7 @@ export function HolidaysPage({ embedded = false }) {
         <select
           value={filterYear}
           onChange={(e) => setFilterYear(e.target.value)}
-          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-300"
+          className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-700 dark:text-zinc-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-300"
         >
           {YEARS.map((y) => (
             <option key={y} value={String(y)}>{y}</option>
@@ -226,7 +226,7 @@ export function HolidaysPage({ embedded = false }) {
         <select
           value={filterMonth}
           onChange={(e) => setFilterMonth(e.target.value)}
-          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-300"
+          className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-700 dark:text-zinc-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-300"
         >
           {MONTHS.map((m) => (
             <option key={m.value} value={m.value}>{m.label}</option>
@@ -235,7 +235,7 @@ export function HolidaysPage({ embedded = false }) {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 shadow-sm">
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-16 text-zinc-400">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -249,7 +249,7 @@ export function HolidaysPage({ embedded = false }) {
               <button
                 type="button"
                 onClick={openCreate}
-                className="mt-1 text-sm font-semibold text-zinc-700 underline underline-offset-2 hover:text-zinc-900"
+                className="mt-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300 underline underline-offset-2 hover:text-zinc-900 dark:hover:text-zinc-100"
               >
                 Declare one now
               </button>
@@ -257,8 +257,8 @@ export function HolidaysPage({ embedded = false }) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-zinc-100 text-sm">
-              <thead className="bg-zinc-50/80 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <table className="min-w-full divide-y divide-zinc-100 dark:divide-zinc-800 text-sm">
+              <thead className="bg-zinc-50/80 dark:bg-zinc-800/50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                 <tr>
                   <th className="px-4 py-3">Title</th>
                   <th className="px-4 py-3">Start</th>
@@ -269,7 +269,7 @@ export function HolidaysPage({ embedded = false }) {
                   {canManage && <th className="w-20 px-4 py-3" />}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {holidays.map((h) => {
                   const start = new Date(h.startDate);
                   const end = new Date(h.endDate);
@@ -282,24 +282,24 @@ export function HolidaysPage({ embedded = false }) {
                       : "All employees";
 
                   return (
-                    <tr key={h._id} className="group hover:bg-zinc-50/60 transition-colors">
-                      <td className="px-4 py-3 font-medium text-zinc-900">{h.title}</td>
-                      <td className="px-4 py-3 font-mono text-zinc-600">{formatDate(h.startDate)}</td>
-                      <td className="px-4 py-3 font-mono text-zinc-600">{formatDate(h.endDate)}</td>
+                    <tr key={h._id} className="group hover:bg-zinc-50/60 dark:hover:bg-zinc-800/50 transition-colors">
+                      <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{h.title}</td>
+                      <td className="px-4 py-3 font-mono text-zinc-600 dark:text-zinc-400">{formatDate(h.startDate)}</td>
+                      <td className="px-4 py-3 font-mono text-zinc-600 dark:text-zinc-400">{formatDate(h.endDate)}</td>
                       <td className="px-4 py-3 text-center">
-                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-zinc-100 text-xs font-bold text-zinc-700">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-xs font-bold text-zinc-700 dark:text-zinc-300">
                           {days}
                         </span>
                       </td>
                       <td className="px-4 py-3"><ScopeBadge scope={h.scope} /></td>
-                      <td className="px-4 py-3 text-zinc-600">{target}</td>
+                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{target}</td>
                       {canManage && (
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
                             <button
                               type="button"
                               onClick={() => openEdit(h)}
-                              className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+                              className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-300"
                               title="Edit"
                             >
                               <Pencil className="h-3.5 w-3.5" />
@@ -337,12 +337,12 @@ export function HolidaysPage({ embedded = false }) {
       {/* Create / Edit modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200/80">
-            <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
-              <h2 className="text-base font-semibold text-zinc-900">
+          <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl ring-1 ring-zinc-200/80 dark:ring-zinc-700">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800/50 px-6 py-4">
+              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
                 {editingId ? "Edit Holiday" : "Declare Holiday"}
               </h2>
-              <button type="button" onClick={closeModal} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600">
+              <button type="button" onClick={closeModal} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-600 dark:hover:text-zinc-400">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -350,13 +350,13 @@ export function HolidaysPage({ embedded = false }) {
             <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
               {/* Title */}
               <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Title</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Title</label>
                 <input
                   type="text"
                   value={form.title}
                   onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
                   placeholder="e.g. National Day, Eid Al-Fitr"
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:bg-white focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none"
                   required
                 />
               </div>
@@ -364,23 +364,23 @@ export function HolidaysPage({ embedded = false }) {
               {/* Date range */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">Start date</label>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Start date</label>
                   <input
                     type="date"
                     value={form.startDate}
                     onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:bg-white focus:outline-none"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none"
                     required
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">End date</label>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">End date</label>
                   <input
                     type="date"
                     value={form.endDate}
                     min={form.startDate}
                     onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:bg-white focus:outline-none"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none"
                     required
                   />
                 </div>
@@ -388,7 +388,7 @@ export function HolidaysPage({ embedded = false }) {
 
               {/* Scope */}
               <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Applies to</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Applies to</label>
                 <div className="grid grid-cols-3 gap-2">
                   {Object.entries(SCOPE_CONFIG).map(([key, cfg]) => {
                     const Icon = cfg.icon;
@@ -401,7 +401,7 @@ export function HolidaysPage({ embedded = false }) {
                         className={`flex flex-col items-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${
                           active
                             ? "border-zinc-900 bg-zinc-900 text-white"
-                            : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50"
+                            : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                         }`}
                       >
                         <Icon className="h-4 w-4" />
@@ -415,11 +415,11 @@ export function HolidaysPage({ embedded = false }) {
               {/* Department picker */}
               {form.scope === "DEPARTMENT" && (
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">Department</label>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Department</label>
                   <select
                     value={form.targetDepartmentId}
                     onChange={(e) => setForm((p) => ({ ...p, targetDepartmentId: e.target.value }))}
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:bg-white focus:outline-none"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none"
                     required
                   >
                     <option value="">Select department…</option>
@@ -433,11 +433,11 @@ export function HolidaysPage({ embedded = false }) {
               {/* Employee picker */}
               {form.scope === "EMPLOYEE" && (
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-zinc-600">Employee</label>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Employee</label>
                   <select
                     value={form.targetEmployeeId}
                     onChange={(e) => setForm((p) => ({ ...p, targetEmployeeId: e.target.value }))}
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:bg-white focus:outline-none"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:outline-none"
                     required
                   >
                     <option value="">Select employee…</option>
@@ -455,7 +455,7 @@ export function HolidaysPage({ embedded = false }) {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition"
+                  className="rounded-xl border border-zinc-200 dark:border-zinc-800 px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition"
                 >
                   Cancel
                 </button>
@@ -476,17 +476,17 @@ export function HolidaysPage({ embedded = false }) {
       {/* Delete confirmation */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-zinc-200/80">
+          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-zinc-900 p-6 shadow-2xl ring-1 ring-zinc-200/80 dark:ring-zinc-700">
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50">
                 <AlertTriangle className="h-5 w-5 text-red-500" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-zinc-900">Remove holiday?</h3>
-                <p className="mt-0.5 text-xs text-zinc-500">This will affect future attendance analysis runs.</p>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Remove holiday?</h3>
+                <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">This will affect future attendance analysis runs.</p>
               </div>
             </div>
-            <p className="mb-5 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+            <p className="mb-5 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-sm text-zinc-700 dark:text-zinc-300">
               <strong>{deleteTarget.title}</strong>
               <span className="ml-2 text-zinc-400">
                 {formatDate(deleteTarget.startDate)}
@@ -497,7 +497,7 @@ export function HolidaysPage({ embedded = false }) {
               <button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
-                className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition"
+                className="rounded-xl border border-zinc-200 dark:border-zinc-800 px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition"
               >
                 Cancel
               </button>
@@ -520,10 +520,10 @@ export function HolidaysPage({ embedded = false }) {
   if (embedded) {
     return (
       <section className="space-y-4">
-        <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200/80 bg-zinc-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-800/50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-900">Company holidays</h2>
-            <p className="mt-1 text-xs text-zinc-500">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Company holidays</h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
               Access: {getAccessLevelLabel(holidaysAccessLevel)}. Declared holidays are not counted as absence.
             </p>
           </div>

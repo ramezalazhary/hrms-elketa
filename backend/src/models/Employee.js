@@ -118,7 +118,8 @@ const EmployeeSchema = new Schema(
       },
     ],
 
-    // ******************************************************* Insurance Information (multiple records) *******************************************************
+    // ⚠️ DEPRECATED: Use `insurances[]` array below instead.
+    // This singular field is legacy — kept for backward compatibility until frontend migrates.
     insurance: {
       provider: { type: String },
       policyNumber: { type: String },
@@ -129,6 +130,7 @@ const EmployeeSchema = new Schema(
       },
       validUntil: { type: Date },
     },
+    // ✅ Current format — use this for all new insurance entries
     insurances: [
       {
         providerName: { type: String },
@@ -189,6 +191,31 @@ const EmployeeSchema = new Schema(
         processedBy: { type: String }, // Admin email
       },
     ],
+
+    /** Immutable ownership history for employee codes (prevents cross-user reuse). */
+    employeeCodeHistory: [
+      {
+        code: { type: String, required: true },
+        departmentId: { type: Schema.Types.ObjectId, ref: "Department" },
+        departmentName: { type: String },
+        reservedAt: { type: Date, default: Date.now },
+        lastUsedAt: { type: Date, default: Date.now },
+      },
+    ],
+    /** Snapshot used to restore assignment and code on reactivation. */
+    lastAssignmentBeforeTermination: {
+      departmentId: { type: Schema.Types.ObjectId, ref: "Department" },
+      departmentName: { type: String },
+      teamId: { type: Schema.Types.ObjectId, ref: "Team" },
+      teamName: { type: String },
+      positionId: { type: Schema.Types.ObjectId, ref: "Position" },
+      positionName: { type: String },
+      managerId: { type: Schema.Types.ObjectId, ref: "Employee" },
+      teamLeaderId: { type: Schema.Types.ObjectId, ref: "Employee" },
+      employeeCode: { type: String },
+      capturedAt: { type: Date },
+      previousStatus: { type: String },
+    },
 
     // ******************************************************* Vacation / leave records (HR-managed from employee profile) *******************************************************
     vacationRecords: [
@@ -293,5 +320,43 @@ const EmployeeSchema = new Schema(
     },
   },
 );
+
+// ─── Hooks: sync isActive ↔ status ──────────────────────────────────────────
+// isActive=false blocks login (auth concern).
+// status=TERMINATED/RESIGNED ends employment (HR workflow).
+// Rule: terminated/resigned employees MUST have isActive=false.
+// isActive can still be false for ACTIVE employees (admin-blocked accounts).
+
+function _applyStatusToIsActive(doc) {
+  if (["TERMINATED", "RESIGNED"].includes(doc.status)) {
+    doc.isActive = false;
+  }
+}
+
+EmployeeSchema.pre("save", function (next) {
+  _applyStatusToIsActive(this);
+  next();
+});
+
+function _syncIsActiveInUpdate(next) {
+  const update = this.getUpdate?.();
+  const status = update?.$set?.status ?? update?.status;
+  if (status === "TERMINATED" || status === "RESIGNED") {
+    if (!update.$set) update.$set = {};
+    update.$set.isActive = false;
+  }
+  next();
+}
+
+EmployeeSchema.pre("findOneAndUpdate", _syncIsActiveInUpdate);
+EmployeeSchema.pre("updateOne", _syncIsActiveInUpdate);
+EmployeeSchema.pre("updateMany", _syncIsActiveInUpdate);
+
+// Compound indexes for common filter patterns
+EmployeeSchema.index({ departmentId: 1, status: 1 });
+EmployeeSchema.index({ departmentId: 1, isActive: 1 });
+EmployeeSchema.index({ status: 1 });
+EmployeeSchema.index({ isActive: 1, status: 1 });
+EmployeeSchema.index({ teamId: 1, status: 1 });
 
 export const Employee = model("Employee", EmployeeSchema);

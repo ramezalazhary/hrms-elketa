@@ -10,6 +10,8 @@ import {
   getBonusApprovals,
   approveBonus,
   rejectBonus,
+  updateAssessment,
+  deleteAssessment,
 } from "../controllers/assessmentController.js";
 
 const router = Router();
@@ -62,6 +64,19 @@ router.get(
   "/employee/:id",
   enforcePolicy("read", "assessments"),
   getEmployeeAssessments
+);
+
+// HR / Admin — edit or delete an assessment
+router.put(
+  "/:id",
+  enforcePolicy("manage", "assessments"),
+  updateAssessment
+);
+
+router.delete(
+  "/:id",
+  enforcePolicy("manage", "assessments"),
+  deleteAssessment
 );
 
 export default router;

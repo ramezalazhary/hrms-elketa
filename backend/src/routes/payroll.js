@@ -416,6 +416,8 @@ router.get("/advances/:employeeId", enforcePolicy("view", "payroll"), async (req
 });
 
 router.post("/advances", enforcePolicy("manage", "payroll"), async (req, res) => {
+  res.setHeader("Deprecation", "true");
+  res.setHeader("Link", `</api/advances>; rel="successor-version"`);
   try {
     const { employeeId, amount, reason, paymentType, monthlyDeduction, startYear, startMonth } = req.body;
     if (!employeeId || !amount || amount <= 0) {
@@ -446,9 +448,14 @@ router.post("/advances", enforcePolicy("manage", "payroll"), async (req, res) =>
 });
 
 router.delete("/advances/:id", enforcePolicy("manage", "payroll"), async (req, res) => {
+  res.setHeader("Deprecation", "true");
+  res.setHeader("Link", `</api/advances>; rel="successor-version"`);
   try {
     const adv = await EmployeeAdvance.findById(req.params.id);
     if (!adv) return res.status(404).json({ error: "Advance not found" });
+    if (!isAdminRole(req.user?.role) && String(adv.employeeId) !== req.user.id) {
+      return res.status(403).json({ error: "Forbidden: Cannot cancel another employee's advance" });
+    }
     if (adv.status === "COMPLETED") return res.status(400).json({ error: "Cannot cancel a fully deducted advance" });
     if (adv.status === "ACTIVE" && adv.deductionHistory?.length > 0) {
       return res.status(400).json({ error: "Cannot cancel an advance with existing deductions. Contact admin." });

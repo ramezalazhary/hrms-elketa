@@ -62,16 +62,16 @@ export function PasswordRequestsPage() {
       title="Password reset requests"
       description="Employees who used “Forgot password” on the sign-in page. Set a temporary password and share it securely; they will change it after login."
     >
-      <div className="mb-8 rounded-lg border border-zinc-200 bg-zinc-50/80 p-4 text-sm text-zinc-700 space-y-3">
-        <p className="font-medium text-zinc-900">How this works</p>
-        <ol className="list-decimal list-inside space-y-2 text-zinc-600">
+      <div className="mb-8 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 p-4 text-sm text-zinc-700 dark:text-zinc-300 space-y-3">
+        <p className="font-medium text-zinc-900 dark:text-zinc-100">How this works</p>
+        <ol className="list-decimal list-inside space-y-2 text-zinc-600 dark:text-zinc-400">
           <li>
-            User opens <Link className="text-zinc-900 underline font-medium" to="/forgot-password">Forgot password</Link>{" "}
+            User opens <Link className="text-zinc-900 dark:text-zinc-100 underline font-medium" to="/forgot-password">Forgot password</Link>{" "}
             and enters their work email.
           </li>
           <li>Their request appears below (same message is shown even if the email is unknown — for privacy).</li>
           <li>
-            You set a temporary password here. They sign in at <Link className="text-zinc-900 underline font-medium" to="/login">Sign in</Link>, then
+            You set a temporary password here. They sign in at <Link className="text-zinc-900 dark:text-zinc-100 underline font-medium" to="/login">Sign in</Link>, then
             are required to replace it with their own password.
           </li>
         </ol>
@@ -79,17 +79,17 @@ export function PasswordRequestsPage() {
 
       <div className="space-y-4">
         {isLoading && (
-          <div className="flex items-center justify-center p-10 rounded-lg border border-zinc-200 bg-white shadow-card">
+          <div className="flex items-center justify-center p-10 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-card">
             <RefreshCw className="h-5 w-5 text-zinc-400 animate-spin" aria-hidden />
-            <span className="ml-2 text-sm text-zinc-500">Loading…</span>
+            <span className="ml-2 text-sm text-zinc-500 dark:text-zinc-400">Loading…</span>
           </div>
         )}
 
         {!isLoading && requests.length === 0 && (
-          <div className="flex flex-col items-center justify-center p-12 rounded-lg border border-dashed border-zinc-200 bg-white text-center">
+          <div className="flex flex-col items-center justify-center p-12 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-center">
             <Inbox className="h-10 w-10 text-zinc-300 mb-3" aria-hidden />
-            <p className="text-sm font-medium text-zinc-800">No pending requests</p>
-            <p className="text-sm text-zinc-500 mt-1 max-w-sm">
+            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">No pending requests</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 max-w-sm">
               When someone submits the forgot-password form, their email will show up here until you set a new
               temporary password.
             </p>
@@ -100,15 +100,15 @@ export function PasswordRequestsPage() {
           {requests.map((req) => (
             <article
               key={req._id}
-              className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-white p-4 shadow-card"
+              className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 shadow-card"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="h-10 w-10 rounded-md border border-zinc-200 bg-zinc-50 text-zinc-700 flex items-center justify-center text-sm font-medium shrink-0">
+                <div className="h-10 w-10 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-700 dark:text-zinc-300 flex items-center justify-center text-sm font-medium shrink-0">
                   {req.email[0].toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-medium text-zinc-900 truncate">{req.email}</h4>
-                  <p className="text-xs text-zinc-500 mt-0.5">
+                  <h4 className="font-medium text-zinc-900 dark:text-zinc-100 truncate">{req.email}</h4>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                     Requested {new Date(req.createdAt).toLocaleString()}
                   </p>
                 </div>
@@ -135,15 +135,15 @@ export function PasswordRequestsPage() {
       >
         {activeRequest ? (
           <div className="space-y-4">
-            <p className="text-sm text-zinc-600">
-              Account: <span className="font-mono text-zinc-900">{activeRequest.email}</span>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Account: <span className="font-mono text-zinc-900 dark:text-zinc-100">{activeRequest.email}</span>
             </p>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
               Share this password with the user through a secure channel. They must use uppercase, lowercase, and a
               number in their own password later — this temporary value already meets the server rules.
             </p>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-600 flex items-center gap-2">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400 flex items-center gap-2">
                 <KeyRound className="h-3.5 w-3.5" />
                 Temporary password
               </label>
@@ -152,12 +152,12 @@ export function PasswordRequestsPage() {
                   type="text"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="flex-1 rounded-md border border-zinc-200 px-3 py-2 text-sm font-mono text-zinc-900"
+                  className="flex-1 rounded-md border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm font-mono text-zinc-900 dark:text-zinc-100"
                   autoComplete="off"
                 />
                 <button
                   type="button"
-                  className="shrink-0 rounded-md border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                  className="shrink-0 rounded-md border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                   onClick={() => setNewPassword(generateCompliantTemporaryPassword())}
                 >
                   Regenerate
@@ -168,7 +168,7 @@ export function PasswordRequestsPage() {
               <button
                 type="button"
                 disabled={submitting}
-                className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
+                className="rounded-md border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                 onClick={() => setActiveRequest(null)}
               >
                 Cancel
