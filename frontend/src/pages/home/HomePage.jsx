@@ -197,7 +197,7 @@ export function HomePage() {
       ) : null}
       <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-4 mb-4 sm:mb-6">
         <article className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm transition-colors duration-300">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 flex items-center gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
             <Clock3 size={12} className="text-indigo-500" /> Attendance
           </p>
           <p className="mt-2 text-2xl font-black text-zinc-900 dark:text-zinc-50 tabular-nums">
@@ -209,7 +209,7 @@ export function HomePage() {
           </p>
         </article>
         <article className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm transition-colors duration-300">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 flex items-center gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
             <Wallet size={12} className="text-emerald-500" /> Payroll
           </p>
           <p className="mt-2 text-2xl font-black text-zinc-900 dark:text-zinc-50 tabular-nums">
@@ -218,7 +218,7 @@ export function HomePage() {
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Latest net salary (last month)</p>
         </article>
         <article className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm transition-colors duration-300">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 flex items-center gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
             <CircleDollarSign size={12} className="text-indigo-500" /> Advances
           </p>
           <p className="mt-2 text-2xl font-black text-zinc-900 dark:text-zinc-50 tabular-nums">
@@ -227,7 +227,7 @@ export function HomePage() {
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Pending requests in last month</p>
         </article>
         <article className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm transition-colors duration-300">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 flex items-center gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
             <CalendarRange size={12} className="text-violet-500" /> Leave
           </p>
           <p className="mt-2 text-2xl font-black text-zinc-900 dark:text-zinc-50 tabular-nums">
@@ -243,7 +243,7 @@ export function HomePage() {
             onClick={() => setActiveTab("overview")}
             className={`whitespace-nowrap border-b-2 py-3 px-1 text-[13px] font-semibold transition-colors duration-200 flex items-center gap-2 ${activeTab === "overview"
               ? "border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
-              : "border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300"
+              : "border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
               }`}
           >
             <UserRound size={14} /> Profile Overview
@@ -252,7 +252,7 @@ export function HomePage() {
             onClick={() => setActiveTab("attendance")}
             className={`whitespace-nowrap border-b-2 py-3 px-1 text-[13px] font-semibold transition-colors duration-200 flex items-center gap-2 ${activeTab === "attendance"
               ? "border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
-              : "border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300"
+              : "border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
               }`}
           >
             <Clock3 size={14} /> Attendance History
@@ -261,7 +261,7 @@ export function HomePage() {
             onClick={() => setActiveTab("timeoff")}
             className={`whitespace-nowrap border-b-2 py-3 px-1 text-[13px] font-semibold transition-colors duration-200 flex items-center gap-2 ${activeTab === "timeoff"
               ? "border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
-              : "border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300"
+              : "border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
               }`}
           >
             <CalendarRange size={14} /> Time Off Workspace
@@ -270,7 +270,7 @@ export function HomePage() {
             onClick={() => setActiveTab("performance")}
             className={`whitespace-nowrap border-b-2 py-3 px-1 text-[13px] font-semibold transition-colors duration-200 flex items-center gap-2 ${activeTab === "performance"
               ? "border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
-              : "border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300"
+              : "border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
               }`}
           >
             <Star size={14} /> Performance
@@ -284,7 +284,7 @@ export function HomePage() {
             <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-400 flex items-center gap-2">
               <UserRound size={13} className="text-indigo-500" /> Personal Identity
             </h3>
-            <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest border ${personalInfo.status === "ACTIVE" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20" : "bg-zinc-50 dark:bg-zinc-800 text-zinc-500 border-zinc-100 dark:border-zinc-700"
+            <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest border ${personalInfo.status === "ACTIVE" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20" : "bg-zinc-50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-100 dark:border-zinc-700"
               }`}>
               {personalInfo.status}
             </span>
@@ -300,8 +300,8 @@ export function HomePage() {
               { label: "Hire Date", value: personalInfo.hireDate },
               { label: "Work Email", value: currentUser?.email || "—" },
             ].map((field) => (
-              <div key={field.label} className="rounded-[20px] border border-zinc-50 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30 px-5 py-4 transition-colors hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 whitespace-nowrap">{field.label}</p>
+              <div key={field.label} className="rounded-[20px] border border-zinc-50 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30 px-5 py-4 transition-colors hover:bg-zinc-100/50 dark:hover:bg-zinc-800/80 dark:hover:bg-zinc-800/50">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{field.label}</p>
                 <p className="mt-1 text-sm font-black text-zinc-900 dark:text-zinc-100 truncate">{isLoadingPulse ? "..." : field.value}</p>
               </div>
             ))}
@@ -350,7 +350,7 @@ export function HomePage() {
                 </div>
                 <button
                   onClick={() => setShowAttendanceHistory(false)}
-                  className="group flex items-center gap-2 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500 transition-all hover:border-zinc-300 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300"
+                  className="group flex items-center gap-2 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 transition-all hover:border-zinc-300 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-400 dark:hover:text-zinc-300"
                 >
                   <Eye size={12} className="transition-transform group-hover:scale-110" />
                   Hide
@@ -360,16 +360,16 @@ export function HomePage() {
                 <table className="w-full text-left">
                   <thead className="sticky top-0 z-10">
                     <tr className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 backdrop-blur">
-                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">Date</th>
-                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">Check In</th>
-                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">Check Out</th>
-                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500 text-right">Status</th>
+                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500 dark:text-zinc-400">Date</th>
+                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500 dark:text-zinc-400">Check In</th>
+                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500 dark:text-zinc-400">Check Out</th>
+                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 text-right">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100/90 dark:divide-zinc-800/50 text-sm">
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/90 dark:divide-zinc-800/50 text-sm">
                     {isLoadingPulse ? (
                       <tr>
-                        <td colSpan="4" className="px-6 py-20 text-zinc-400 dark:text-zinc-500 text-center">
+                        <td colSpan="4" className="px-6 py-20 text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 text-center">
                           <div className="flex flex-col items-center gap-2">
                             <div className="h-5 w-5 border-2 border-zinc-200 dark:border-zinc-700 border-t-zinc-900 dark:border-t-indigo-500 rounded-full animate-spin" />
                             Loading records...
@@ -378,11 +378,11 @@ export function HomePage() {
                       </tr>
                     ) : recentAttendance.length === 0 ? (
                       <tr>
-                        <td colSpan="4" className="px-6 py-20 text-xs text-zinc-400 dark:text-zinc-500 text-center uppercase tracking-widest font-black">No records found.</td>
+                        <td colSpan="4" className="px-6 py-20 text-xs text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 text-center uppercase tracking-widest font-black">No records found.</td>
                       </tr>
                     ) : (
                       visibleAttendance.map((row) => (
-                        <tr key={row?._id || `${row?.date}-${row?.checkIn}`} className="transition-colors hover:bg-zinc-50/40 dark:hover:bg-zinc-800/30">
+                        <tr key={row?._id || `${row?.date}-${row?.checkIn}`} className="transition-colors hover:bg-zinc-50/40 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-800/30">
                           <td className="px-6 py-4 text-xs font-black text-zinc-900 dark:text-zinc-100 whitespace-nowrap">{fmtDate(row?.date)}</td>
                           <td className="px-6 py-4 text-xs text-zinc-600 dark:text-zinc-400 font-bold tabular-nums">{row?.checkIn || "—"}</td>
                           <td className="px-6 py-4 text-xs text-zinc-600 dark:text-zinc-400 font-bold tabular-nums">{row?.checkOut || "—"}</td>
@@ -403,7 +403,7 @@ export function HomePage() {
                   <button
                     type="button"
                     onClick={() => setAttendanceVisibleCount((prev) => Math.min(prev + 10, recentAttendance.length))}
-                    className="w-full rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-zinc-600 dark:text-zinc-400 shadow-sm transition-all hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800 active:scale-[0.99]"
+                    className="w-full rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-zinc-600 dark:text-zinc-400 shadow-sm transition-all hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-800 active:scale-[0.99]"
                   >
                     Load More
                   </button>
@@ -416,7 +416,7 @@ export function HomePage() {
 
       {activeTab === "timeoff" && (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <article className="mt-4 sm:mt-6 rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6 shadow-sm">
+          <article className="mt-4 sm:mt-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-sm">
             <PersonalTimeOffSection />
           </article>
         </div>
@@ -474,8 +474,8 @@ export function HomePage() {
 
               {assessmentsData.length === 0 ? (
                 <div className="py-20 text-center border-2 border-dashed border-zinc-100 dark:border-zinc-800 rounded-[24px]">
-                  <Star className="h-10 w-10 text-zinc-200 dark:text-zinc-800 mx-auto mb-3" />
-                  <p className="text-zinc-400 dark:text-zinc-600 italic text-sm">No assessments on record for you yet.</p>
+                  <Star className="h-10 w-10 text-zinc-200 dark:text-zinc-800 dark:text-zinc-200 mx-auto mb-3" />
+                  <p className="text-zinc-400 dark:text-zinc-600 dark:text-zinc-400 italic text-sm">No assessments on record for you yet.</p>
                 </div>
               ) : (
                 <div className="space-y-12 relative">
@@ -539,21 +539,21 @@ export function HomePage() {
                                   </div>
                                   <div className="text-right">
                                     <span className="text-xs font-bold text-zinc-400 block mb-1">DATE</span>
-                                    <span className="text-xs font-black text-zinc-900 tracking-tight">{record.date}</span>
+                                    <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 tracking-tight">{record.date}</span>
                                     {bonusBadge && <span className={`mt-2 block text-[8px] font-black px-2 py-0.5 rounded-md border uppercase tracking-widest ${bonusBadge.bg}`}>{bonusBadge.text}</span>}
                                   </div>
                                 </div>
 
                                 {displayScores.length > 0 && (
-                                  <div className="mb-8 p-4 rounded-2xl bg-zinc-50/50 border border-zinc-100">
+                                  <div className="mb-8 p-4 rounded-2xl bg-zinc-50/50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800/50">
                                     <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400 mb-4">Competency Scores</p>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                       {displayScores.map((s, si) => (
-                                        <div key={si} className="bg-white rounded-xl p-3 border border-zinc-100 shadow-sm flex items-center justify-between">
-                                          <span className="text-[10px] font-bold text-zinc-600 uppercase truncate pr-2">{s.title}</span>
+                                        <div key={si} className="bg-white dark:bg-zinc-900 rounded-xl p-3 border border-zinc-100 dark:border-zinc-800/50 shadow-sm flex items-center justify-between">
+                                          <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase truncate pr-2">{s.title}</span>
                                           <div className="flex items-center gap-0.5">
                                             <Star size={11} className="text-amber-500 fill-current" />
-                                            <span className="text-[10px] font-black text-zinc-900 border-l border-zinc-100 ml-1.5 pl-1.5">{s.score}</span>
+                                            <span className="text-[10px] font-black text-zinc-900 dark:text-zinc-100 border-l border-zinc-100 dark:border-zinc-800/50 ml-1.5 pl-1.5">{s.score}</span>
                                           </div>
                                         </div>
                                       ))}
@@ -567,10 +567,10 @@ export function HomePage() {
                                     { l: "Total Overtime", v: record.overtime ?? 0, unit: "Hours" },
                                     { l: "Salary Deduction", v: record.deduction ?? 0, unit: "EGP" }
                                   ].map((item) => (
-                                    <div key={item.l} className="rounded-2xl border border-zinc-100 bg-white p-4 flex items-center justify-between transition-colors hover:border-amber-200">
+                                    <div key={item.l} className="rounded-2xl border border-zinc-100 dark:border-zinc-800/50 bg-white dark:bg-zinc-900 p-4 flex items-center justify-between transition-colors hover:border-amber-200">
                                       <div>
                                         <span className="font-bold text-[9px] text-zinc-400 uppercase tracking-widest block mb-0.5">{item.l}</span>
-                                        <span className="font-black text-lg text-zinc-900">{item.v}</span>
+                                        <span className="font-black text-lg text-zinc-900 dark:text-zinc-100">{item.v}</span>
                                       </div>
                                       <span className="text-[9px] font-black text-amber-500/50 uppercase tracking-tighter">{item.unit}</span>
                                     </div>
