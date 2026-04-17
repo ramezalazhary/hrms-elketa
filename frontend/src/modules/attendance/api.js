@@ -75,6 +75,15 @@ export const updateAttendanceDeductionSourceApi = async (
   return handleApiResponse(response);
 };
 
+export const updateAttendanceRestDayWorkApi = async (id, { approved }) => {
+  const response = await fetchWithAuth(`${API_URL}/attendance/${id}/rest-day-work`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ approved }),
+  });
+  return handleApiResponse(response);
+};
+
 export const deleteAttendanceApi = async (id) => {
   const response = await fetchWithAuth(`${API_URL}/attendance/${id}`, {
     method: "DELETE",

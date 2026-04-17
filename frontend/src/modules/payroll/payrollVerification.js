@@ -1,5 +1,5 @@
 /**
- * Mirrors backend `payrollComputationService.js` rounding and documents formulas
+ * Mirrors backend `payrollPipeline/payrollMath.js` rounding and documents formulas
  * for UI + client-side consistency checks.
  */
 
@@ -35,7 +35,7 @@ export function round2(v) {
   return roundAtDecimalPlaces(v, 2);
 }
 
-/** Same defaults as backend `DEFAULT_PAYROLL_CONFIG` (payrollComputationService.js). */
+/** Same defaults as backend `DEFAULT_PAYROLL_CONFIG` (payrollPipeline/payrollMath.js). */
 export const DEFAULT_MODULE_PAYROLL_CONFIG = {
   decimalPlaces: 2,
   workingDaysPerMonth: 22,

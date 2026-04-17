@@ -100,19 +100,23 @@ export function LeaveApprovalsPage() {
   const canTakeActions = canApproveLeaves(currentUser);
   // Allow manager-history workflow for canonical manager/team-leader roles and
   // for override-based non-HR approvers who can act on queue items.
+  /** Canonical management roles: MANAGER or TEAM_LEADER. These users see team/dept history. */
   const hasManagementRole = roleKey === "TEAM_LEADER" || roleKey === "MANAGER";
-  /** Department head or team leader (not HR) — can see team/department leave history. */
+  /** HR users who are also managing a team/dept via a page override get approver access. */
+  /** Non-HR department head or team leader who can see team/department leave history. */
   const isMgmtApprover =
     currentUser &&
     !isHr &&
     (hasManagementRole || canTakeActions);
-  const preferredTab = canTakeActions ? "queue" : (isHr ? "all" : (isMgmtApprover ? "history" : "all"));
+  /** HR user who is ALSO a department head / team leader — sees both All-Requests & History tabs. */
+  const isHrAlsoMgmt = isHr && (hasManagementRole || canTakeActions);
+  const preferredTab = canTakeActions ? "queue" : (isHr ? "all" : (isMgmtApprover ? "history" : "queue"));
 
   const [tab, setTab] = useState(() => {
     if (canTakeActions) return "queue";
     if (isHr) return "all";
     if (isMgmtApprover) return "history";
-    return "all";
+    return "queue";
   });
   const [loading, setLoading] = useState(true);
   const [list, setList] = useState([]);
@@ -153,8 +157,13 @@ export function LeaveApprovalsPage() {
         const data = await listLeaveRequestsApi(params);
         setList(data.requests || []);
         setBalanceByEmployeeId({});
-      } else if (tab === "history" && isMgmtApprover) {
-        const params = { managed: "1", limit: "100" };
+      } else if (tab === "history" && (isMgmtApprover || isHrAlsoMgmt)) {
+        // For pure managers: sends managed=1 → backend scopes to their dept/team.
+        // For HR who is also a dept head/TL: sends managed_hr=1 → backend uses their real dept/team scope
+        // instead of returning all company requests.
+        const params = isHrAlsoMgmt
+          ? { managed_hr: "1", limit: "100" }
+          : { managed: "1", limit: "100" };
         if (allFilter.status) params.status = allFilter.status;
         if (allFilter.kind) params.kind = allFilter.kind;
         const data = await listLeaveRequestsApi(params);
@@ -169,14 +178,15 @@ export function LeaveApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [showToast, tab, allFilter.status, allFilter.kind, isHr, isMgmtApprover, canTakeActions, currentUser]);
+  }, [showToast, tab, allFilter.status, allFilter.kind, isHr, isHrAlsoMgmt, isMgmtApprover, canTakeActions, currentUser]);
+
 
   useEffect(() => {
     if (!currentUser) return;
     const validTabs = new Set();
     if (canTakeActions) validTabs.add("queue");
     if (isHr) validTabs.add("all");
-    if (isMgmtApprover) validTabs.add("history");
+    if (isMgmtApprover || isHrAlsoMgmt) validTabs.add("history");
     if (!validTabs.size) validTabs.add("all");
 
     // Auto-recover only if current tab is invalid for this user state.
@@ -185,7 +195,7 @@ export function LeaveApprovalsPage() {
     if (!validTabs.has(tab) && tab !== preferredTab) {
       setTab(preferredTab);
     }
-  }, [tab, preferredTab, currentUser, canTakeActions, isHr, isMgmtApprover]);
+  }, [tab, preferredTab, currentUser, canTakeActions, isHr, isMgmtApprover, isHrAlsoMgmt]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
@@ -394,35 +404,29 @@ export function LeaveApprovalsPage() {
             : isMgmtApprover
               ? " Approve after HR on the pending queue. Use \"Team & department history\" to see all leave and excuses for people you manage (same scope as your approval step)."
               : " You will see requests from your direct reports waiting for your approval step."}
+          {isHrAlsoMgmt && " You also manage a team or department — use the \"Team & department history\" tab to see their leave history."}
         </div>
 
-        {isHr && (
-          <div className="inline-flex w-full max-w-md gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 sm:w-auto">
+        {(isHr || isMgmtApprover) && (
+          <div className="inline-flex w-full max-w-2xl gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 sm:w-auto overflow-x-auto hidden-scrollbar">
             {canTakeActions && (
               <button type="button" onClick={() => setTab("queue")}
-                className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "queue" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
+                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "queue" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
                 Pending queue
               </button>
             )}
-            <button type="button" onClick={() => setTab("all")}
-              className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "all" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
-              All requests
-            </button>
-          </div>
-        )}
-
-        {isMgmtApprover && (
-          <div className="inline-flex w-full max-w-lg gap-0.5 rounded-2xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 sm:w-auto">
-            {canTakeActions && (
-              <button type="button" onClick={() => setTab("queue")}
-                className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "queue" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
-                Pending queue
+            {(isMgmtApprover || isHrAlsoMgmt) && (
+              <button type="button" onClick={() => setTab("history")}
+                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "history" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
+                Team &amp; department history
               </button>
             )}
-            <button type="button" onClick={() => setTab("history")}
-              className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "history" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
-              Team &amp; department history
-            </button>
+            {isHr && (
+              <button type="button" onClick={() => setTab("all")}
+                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition sm:flex-none ${tab === "all" ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/60" : "text-zinc-600 hover:text-zinc-900"}`}>
+                All requests
+              </button>
+            )}
           </div>
         )}
 

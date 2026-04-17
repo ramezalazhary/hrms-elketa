@@ -114,7 +114,10 @@ export async function resolveEmployeeScopeIds(user) {
 
   // Direct reports scope (hybrid manager scope component)
   const directRows = await Employee.find({
-    managerId: actor._id,
+    $or: [
+      { managerId: actor._id },
+      { teamLeaderId: actor._id }
+    ]
   })
     .select("_id")
     .lean();
@@ -147,16 +150,37 @@ export async function resolveEmployeeScopeIds(user) {
     }
   }
 
-  const teamRows = await Employee.find({
-    $or: [
-      ...(teamIds.size ? [{ teamId: { $in: [...teamIds] } }] : []),
-      ...(teamNames.size ? [{ team: { $in: [...teamNames] } }] : []),
-      ...(memberEmails.size ? [{ email: { $in: [...memberEmails] } }] : []),
-    ],
-  })
-    .select("_id")
-    .lean();
-  for (const r of teamRows) addId(ids, r._id);
+  // Collect from legacy nested teams in Department collection
+  if (actorEmail) {
+    const legacyMatchedDepts = await Department.find({
+      "teams.leaderEmail": new RegExp(`^${actorEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")
+    }).select("teams").lean();
+    for (const d of legacyMatchedDepts) {
+      if (!d.teams) continue;
+      for (const t of d.teams) {
+        if (normEmail(t.leaderEmail) === actorEmail) {
+          if (t.name) teamNames.add(t.name.trim());
+          for (const m of (t.members || [])) {
+            const key = normEmail(m);
+            if (key) memberEmails.add(key);
+          }
+        }
+      }
+    }
+  }
+
+  if (teamIds.size || teamNames.size || memberEmails.size) {
+    const teamRows = await Employee.find({
+      $or: [
+        ...(teamIds.size ? [{ teamId: { $in: [...teamIds] } }] : []),
+        ...(teamNames.size ? [{ team: { $in: [...teamNames] } }] : []),
+        ...(memberEmails.size ? [{ email: { $in: [...memberEmails] } }] : []),
+      ],
+    })
+      .select("_id")
+      .lean();
+    for (const r of teamRows) addId(ids, r._id);
+  }
 
   return { scope: "scoped", employeeIds: [...ids] };
 }

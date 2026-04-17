@@ -44,7 +44,6 @@ function recordToForm(r) {
     daysPresent: s(r.daysPresent),
     daysAbsent: s(r.daysAbsent),
     overtimeHours: s(r.overtimeHours),
-    extraDaysWorked: s(r.extraDaysWorked),
     fixedBonus: s(r.fixedBonus),
     assessmentBonus: s(r.assessmentBonus),
     attendanceDeduction: s(r.attendanceDeduction),
@@ -493,7 +492,6 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
         daysPresent: numIn(form.daysPresent),
         daysAbsent: numIn(form.daysAbsent),
         overtimeHours: numIn(form.overtimeHours),
-        extraDaysWorked: numIn(form.extraDaysWorked),
         fixedBonus: numIn(form.fixedBonus),
         assessmentBonus: numIn(form.assessmentBonus),
         attendanceDeduction: numIn(form.attendanceDeduction),
@@ -531,6 +529,19 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
   return (
     <Modal open title={title} onClose={onClose} maxWidth="max-w-2xl" closeDisabled={saving}>
       <div className="space-y-4">
+        {record.payrollInclusionReason ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
+              <div>
+                <p className="font-semibold">
+                  {record.employeeStatus || "Separated employee"} included in payroll
+                </p>
+                <p className="mt-0.5">{record.payrollInclusionReason}</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {canEdit && (
           <div className="flex flex-wrap items-center justify-end gap-2 border-b border-zinc-100 pb-3">
             {!editing ? (
@@ -574,6 +585,9 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
             <p className="text-xs text-zinc-600">
               Adjust inputs below. Net pay, tax, and insurance are recalculated using the same rules as Compute.
             </p>
+            <p className="text-xs text-amber-700">
+              Extra rest-day days are derived from approved attendance rows and cannot be edited from payroll.
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {[
                 ["baseSalary", "Base salary (EGP)"],
@@ -582,7 +596,6 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
                 ["daysPresent", "Days present"],
                 ["daysAbsent", "Days absent"],
                 ["overtimeHours", "Overtime hours"],
-                ["extraDaysWorked", "Extra rest-day days"],
                 ["fixedBonus", "Fixed bonus (EGP)"],
                 ["assessmentBonus", "Assessment bonus (EGP)"],
                 ["attendanceDeduction", "Attendance deduction (EGP)"],
@@ -663,6 +676,12 @@ export function EmployeePayrollCalculationModal({ record, periodLabel, runId, ru
               <Row label="Overtime hours" value={fmtInt(record.overtimeHours)} />
               <Row label="Overtime pay" value={`EGP ${fmt(record.overtimePay)}`} valueClass="text-emerald-700" />
               <Row label="Extra rest-day days worked" value={fmtInt(record.extraDaysWorked)} />
+              <div className="rounded-md border border-emerald-100 bg-emerald-50/60 px-2.5 py-1.5 text-[10px] text-emerald-800">
+                Source: approved attendance rows on configured weekly rest days.
+                {Number(record.extraDaysWorked) > 0
+                  ? ` Counted for payroll: ${fmtInt(record.extraDaysWorked)} day(s).`
+                  : " No approved rest-day attendance counted in this payroll run."}
+              </div>
               <Row label="Extra days pay" value={`EGP ${fmt(record.extraDaysPay)}`} valueClass="text-emerald-700" />
               <Row label="Fixed bonus" value={`EGP ${fmt(record.fixedBonus)}`} valueClass="text-emerald-700" />
               <Row label="Assessment net" value={`EGP ${fmt(record.assessmentBonus)}`} valueClass="text-emerald-700" />

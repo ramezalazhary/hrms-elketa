@@ -81,6 +81,13 @@ const AttendanceSchema = new mongoose.Schema(
     /** Audit trail for deduction source decision. */
     deductionDecisionBy: { type: mongoose.Schema.Types.ObjectId, ref: "Employee" },
     deductionDecisionAt: { type: Date },
+    /**
+     * Weekly rest-day work approval (HR-controlled).
+     * Payroll will only count "extra rest-day days worked" when this is true.
+     */
+    restDayWorkApproved: { type: Boolean, default: false },
+    restDayWorkDecisionBy: { type: mongoose.Schema.Types.ObjectId, ref: "Employee" },
+    restDayWorkDecisionAt: { type: Date },
     /** Number of source rows merged during import (Phase 0b). 1 = normal, >1 = merged. */
     rawPunches: { type: Number, default: 1 },
     remarks: {

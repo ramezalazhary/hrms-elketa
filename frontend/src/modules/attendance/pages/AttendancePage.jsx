@@ -11,6 +11,7 @@ import {
   deleteAttendanceThunk,
   fetchMonthlyReportThunk,
   updateAttendanceDeductionSourceThunk,
+  updateAttendanceRestDayWorkThunk,
 } from "../store";
 import { Pagination } from "@/shared/components/Pagination";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
@@ -140,6 +141,18 @@ export function AttendancePage() {
   const canDeleteAttendance = attendanceAccessLevel === ACCESS_LEVEL.ADMIN;
   const canResolveDeductionSource =
     isHrRole(currentUser) || attendanceAccessLevel === ACCESS_LEVEL.ADMIN;
+  const handleRestDayApprovalToggle = async (row) => {
+    const id = row?._id;
+    if (!id) return;
+    const next = !Boolean(row?.restDayWorkApproved);
+    try {
+      await dispatch(updateAttendanceRestDayWorkThunk({ id, approved: next })).unwrap();
+      showToast(next ? "Rest-day work approved" : "Rest-day work approval removed", "success");
+      void dispatch(fetchAttendanceThunk(listQuery));
+    } catch (e) {
+      showToast(e?.message || "Failed to update rest-day approval", "error");
+    }
+  };
 
   // Tab state
   const [activeTab, setActiveTab] = useState("daily"); // "daily" | "monthly"
@@ -762,6 +775,34 @@ export function AttendancePage() {
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+            {canManageAttendanceActions && row?.isWeeklyRestDay && (
+              <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-3 py-3 sm:col-span-2 lg:col-span-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">
+                  Weekly rest-day work (HR approval)
+                </p>
+                <p className="mt-1 text-xs text-emerald-900">
+                  Payroll will only pay extra rest-day work when HR marks it approved here.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleRestDayApprovalToggle(row)}
+                    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                      row?.restDayWorkApproved
+                        ? "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                        : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                    }`}
+                  >
+                    {row?.restDayWorkApproved ? "Approved (paid in payroll)" : "Not approved (excluded from payroll)"}
+                  </button>
+                  {row?.restDayWorkDecisionAt && (
+                    <span className="text-[11px] font-medium text-emerald-800/80">
+                      Last decision: {formatWorkDateTime(row.restDayWorkDecisionAt)}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>

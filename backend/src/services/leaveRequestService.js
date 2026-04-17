@@ -1568,7 +1568,7 @@ export async function createLeaveRequest(user, body) {
     userAgent: user._ua,
   });
 
-  return doc;
+  return sanitizeLeaveRequest(doc, user);
 }
 
 /**
@@ -1592,7 +1592,7 @@ export async function listLeaveRequests(user, query) {
       .skip(skip)
       .limit(limit);
     return {
-      requests: list,
+      requests: list.map((r) => sanitizeLeaveRequest(r, user)),
       pagination: {
         page,
         limit,
@@ -1664,10 +1664,53 @@ export async function listLeaveRequests(user, query) {
       }
     }
     return {
-      requests: list,
+      requests: list.map((r) => sanitizeLeaveRequest(r, user)),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       balanceByEmployeeId,
     };
+  }
+
+  // managed_hr=1 is used by HR users who are ALSO department heads / team leaders.
+  // We resolve their actual department/team scope (like a MANAGER would get),
+  // instead of the default HR "company-wide" access.
+  if (query.managed_hr === "true" || query.managed_hr === "1") {
+    if (hasRole(HR_ROLES, user.role)) {
+      // Temporarily resolve their real employee scope (bypass HR shortcut in scopeService).
+      const actor = await Employee.findById(user.id)
+        .select("_id email departmentId")
+        .lean();
+      if (!actor) {
+        return {
+          requests: [],
+          pagination: { page, limit, total: 0, totalPages: 1 },
+        };
+      }
+      // Build a fake non-HR user object to call resolveEmployeeScopeIds without HR bypass.
+      const fakeUser = { ...user, role: "MANAGER" };
+      const scoped = await resolveEmployeeScopeIds(fakeUser);
+      const managedIds =
+        scoped.scope === "all"
+          ? []
+          : Array.isArray(scoped.employeeIds)
+          ? scoped.employeeIds
+          : [];
+      if (managedIds.length === 0) {
+        return {
+          requests: [],
+          pagination: { page, limit, total: 0, totalPages: 1 },
+        };
+      }
+      filter.employeeId = { $in: managedIds };
+      const total = await LeaveRequest.countDocuments(filter);
+      const list = await LeaveRequest.find(filter)
+        .sort({ submittedAt: -1 })
+        .skip(skip)
+        .limit(limit);
+      return {
+        requests: list.map((r) => sanitizeLeaveRequest(r, user)),
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
+      };
+    }
   }
 
   if (
@@ -1697,7 +1740,7 @@ export async function listLeaveRequests(user, query) {
       .skip(skip)
       .limit(limit);
     return {
-      requests: list,
+      requests: list.map((r) => sanitizeLeaveRequest(r, user)),
       pagination: {
         page,
         limit,
@@ -1716,7 +1759,7 @@ export async function listLeaveRequests(user, query) {
       .skip(skip)
       .limit(limit);
     return {
-      requests: list,
+      requests: list.map((r) => sanitizeLeaveRequest(r, user)),
       pagination: {
         page,
         limit,
@@ -1733,7 +1776,7 @@ export async function listLeaveRequests(user, query) {
       .skip(skip)
       .limit(limit);
     return {
-      requests: list,
+      requests: list.map((r) => sanitizeLeaveRequest(r, user)),
       pagination: {
         page,
         limit,
@@ -1751,7 +1794,7 @@ export async function listLeaveRequests(user, query) {
     .limit(limit);
 
   return {
-    requests: list,
+    requests: list.map((r) => sanitizeLeaveRequest(r, user)),
     pagination: {
       page,
       limit,
@@ -2022,7 +2065,7 @@ export async function applyLeaveRequestAction(requestId, user, action, comment, 
       await syncApprovedExcuseToAttendance(doc);
     }
   }
-  return doc;
+  return sanitizeLeaveRequest(doc, user);
 }
 
 /**
@@ -2115,7 +2158,7 @@ export async function recordLeaveRequestDirect(requestId, user, comment, extras 
     userAgent: user._ua,
   });
 
-  return doc;
+  return sanitizeLeaveRequest(doc, user);
 }
 
 /**
@@ -2183,7 +2226,7 @@ export async function cancelLeaveRequest(requestId, user, reason) {
     userAgent: user._ua,
   });
 
-  return doc;
+  return sanitizeLeaveRequest(doc, user);
 }
 
 export async function getLeaveRequestById(requestId, user) {
@@ -2191,14 +2234,32 @@ export async function getLeaveRequestById(requestId, user) {
   if (!doc) {
     throw new ApiError(404, "Leave request not found");
   }
-  if (String(doc.employeeId) === String(user.id)) return doc;
-  if (hasRole(HR_ROLES, user.role)) return doc;
+  if (String(doc.employeeId) === String(user.id)) return sanitizeLeaveRequest(doc, user);
+  if (hasRole(HR_ROLES, user.role)) return sanitizeLeaveRequest(doc, user);
   const scoped = await resolveEmployeeScopeIds(user);
-  if (scoped.scope === "all") return doc;
+  if (scoped.scope === "all") return sanitizeLeaveRequest(doc, user);
   if (Array.isArray(scoped.employeeIds)) {
     const allowed = scoped.employeeIds.some((id) => String(id) === String(doc.employeeId));
-    if (allowed) return doc;
+    if (allowed) return sanitizeLeaveRequest(doc, user);
   }
 
   throw new ApiError(403, "Forbidden");
+}
+
+export function sanitizeLeaveRequest(doc, user) {
+  if (!doc) return doc;
+  if (!user || hasRole(HR_ROLES, user.role)) {
+    return doc; // HR and Admins see everything
+  }
+
+  const obj = typeof doc.toObject === "function" ? doc.toObject() : { ...doc };
+
+  delete obj.policySnapshot;
+  delete obj.excessDeductionMethod;
+  delete obj.excessDeductionAmount;
+  delete obj.directRecordedBy;
+  delete obj.unpaidReason;
+  delete obj.quotaExceeded;
+
+  return obj;
 }

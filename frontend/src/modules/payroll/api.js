@@ -39,8 +39,21 @@ export const finalizePayrollRunApi = async (id) => {
   return handleApiResponse(response);
 };
 
+export const getPayrollRunDiffApi = async (id) => {
+  const response = await fetchWithAuth(`${API_URL}/payroll/runs/${id}/diff`);
+  return handleApiResponse(response);
+};
+
 export const repairPayrollRunTotalsApi = async (id) => {
   const response = await fetchWithAuth(`${API_URL}/payroll/runs/${id}/repair-totals`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  return handleApiResponse(response);
+};
+
+export const resetPayrollRunProcessingApi = async (id) => {
+  const response = await fetchWithAuth(`${API_URL}/payroll/runs/${id}/reset-processing`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });

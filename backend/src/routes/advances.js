@@ -43,11 +43,10 @@ router.get(
   }
 });
 
-// Personal endpoint: last-month advances only.
+// Personal endpoint: last-month advances only (no payroll-view permission required).
 router.get(
   "/mine",
   requireAuth,
-  enforcePolicy("view", "payroll", () => ({ pageId: "advances" })),
   async (req, res) => {
   try {
     const lastMonthCutoff = new Date();

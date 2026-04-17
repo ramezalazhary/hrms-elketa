@@ -6,6 +6,7 @@ import {
   createAttendanceApi, 
   updateAttendanceApi, 
   updateAttendanceDeductionSourceApi,
+  updateAttendanceRestDayWorkApi,
   deleteAttendanceApi,
   deleteAttendanceBulkApi,
   getMonthlyReportApi,
@@ -66,6 +67,17 @@ export const updateAttendanceDeductionSourceThunk = createAsyncThunk(
       });
     } catch (err) {
       return rejectWithValue(getErrorMessage(err, "Failed to update deduction source"));
+    }
+  },
+);
+
+export const updateAttendanceRestDayWorkThunk = createAsyncThunk(
+  "attendance/updateRestDayWork",
+  async ({ id, approved }, { rejectWithValue }) => {
+    try {
+      return await updateAttendanceRestDayWorkApi(id, { approved });
+    } catch (err) {
+      return rejectWithValue(getErrorMessage(err, "Failed to update rest-day work approval"));
     }
   },
 );
@@ -155,6 +167,13 @@ const attendanceSlice = createSlice({
         state.isLoading = false;
       })
       .addCase(updateAttendanceDeductionSourceThunk.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload || action.error.message;
+      })
+      .addCase(updateAttendanceRestDayWorkThunk.fulfilled, (state) => {
+        state.isLoading = false;
+      })
+      .addCase(updateAttendanceRestDayWorkThunk.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload || action.error.message;
       })

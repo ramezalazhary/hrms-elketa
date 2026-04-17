@@ -18,7 +18,7 @@ import {
 } from "../utils/excuseAttendance.js";
 import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
 import { CompanyHoliday } from "../models/CompanyHoliday.js";
-import { computeMonthlyAnalysis } from "../services/attendanceAnalysisService.js";
+import { computeMonthlyAnalysis } from "../services/payrollPipeline/index.js";
 import { mapSummaryForMonthlyReportApi } from "../utils/monthlyReportPublicDto.js";
 import { parseAttendanceClock } from "../utils/attendanceClockParse.js";
 import {
@@ -513,6 +513,10 @@ async function withAuthoritativeAttendanceFields(doc, policy, leavePrefetch = nu
 
   const nd = new Date(plain.date);
   nd.setUTCHours(0, 0, 0, 0);
+  const restDays = Array.isArray(policy?.weeklyRestDays) && policy.weeklyRestDays.length > 0
+    ? policy.weeklyRestDays
+    : [5, 6];
+  const isWeeklyRestDay = restDays.includes(nd.getUTCDay());
   const fin = await finalizeAttendanceTimingStatus({
     employeeId,
     normalizedDate: nd,
@@ -530,6 +534,7 @@ async function withAuthoritativeAttendanceFields(doc, policy, leavePrefetch = nu
 
   return {
     ...plain,
+    isWeeklyRestDay,
     checkIn: fin.calc.checkInStr,
     checkOut: fin.calc.checkOutStr,
     totalHours: fin.calc.totalHours,
@@ -549,6 +554,9 @@ async function withAuthoritativeAttendanceFields(doc, policy, leavePrefetch = nu
     deductionValue: fin.deductionValue,
     deductionDecisionBy: plain.deductionDecisionBy ?? undefined,
     deductionDecisionAt: plain.deductionDecisionAt ?? undefined,
+    restDayWorkApproved: Boolean(plain.restDayWorkApproved),
+    restDayWorkDecisionBy: plain.restDayWorkDecisionBy ?? undefined,
+    restDayWorkDecisionAt: plain.restDayWorkDecisionAt ?? undefined,
   };
 }
 
@@ -1121,6 +1129,54 @@ router.patch(
     } catch (error) {
       console.error("PATCH /attendance/:id/deduction-source error:", error.message);
       return res.status(500).json({ error: "Failed to update deduction source" });
+    }
+  },
+);
+
+router.patch(
+  "/:id/rest-day-work",
+  requireAuth,
+  enforcePolicy("manage", "attendance"),
+  enforceScope(resolveAttendanceTargetEmployee),
+  async (req, res) => {
+    try {
+      const { approved } = req.body || {};
+      if (approved !== true && approved !== false) {
+        return res.status(400).json({ error: "approved must be boolean" });
+      }
+
+      const existing = await Attendance.findById(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Record not found" });
+
+      const policy = await resolveAttendancePolicy();
+      const nd = new Date(existing.date);
+      nd.setUTCHours(0, 0, 0, 0);
+      const restDays =
+        Array.isArray(policy?.weeklyRestDays) && policy.weeklyRestDays.length > 0
+          ? policy.weeklyRestDays
+          : [5, 6];
+      const isWeeklyRestDay = restDays.includes(nd.getUTCDay());
+      if (!isWeeklyRestDay) {
+        return res.status(409).json({ error: "This attendance row is not on a weekly rest day" });
+      }
+
+      const normalizedStatus = String(existing.status || "").toUpperCase();
+      if (!["PRESENT", "LATE", "EXCUSED"].includes(normalizedStatus)) {
+        return res.status(409).json({
+          error: "Rest-day work approval can only be set for PRESENT/LATE/EXCUSED rows",
+        });
+      }
+
+      existing.restDayWorkApproved = approved;
+      existing.restDayWorkDecisionBy = req.user.id;
+      existing.restDayWorkDecisionAt = new Date();
+      await existing.save();
+
+      const out = await withAuthoritativeAttendanceFields(existing, policy);
+      return res.json(out);
+    } catch (error) {
+      console.error("PATCH /attendance/:id/rest-day-work error:", error.message);
+      return res.status(500).json({ error: "Failed to update rest-day work approval" });
     }
   },
 );

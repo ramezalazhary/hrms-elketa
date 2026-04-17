@@ -6,12 +6,15 @@ import { PayrollRecord } from "../models/PayrollRecord.js";
 import { EmployeeAdvance } from "../models/EmployeeAdvance.js";
 import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
 import {
-  computePayrollRun,
+  runPayrollPipeline,
   finalizePayrollRun,
+  getPayrollRunDiff,
+  resetPayrollRunProcessing,
   updatePayrollRecordManually,
   repairPayrollRunTotals,
-} from "../services/payrollComputationService.js";
+} from "../services/payrollPipeline/index.js";
 import { createAuditLog } from "../services/auditService.js";
+import { isAdminRole } from "../utils/roles.js";
 import xlsx from "xlsx";
 
 const router = Router();
@@ -88,7 +91,7 @@ router.get("/runs/:id", enforcePolicy("view", "payroll"), async (req, res) => {
 
 router.post("/runs/:id/compute", enforcePolicy("manage", "payroll"), async (req, res) => {
   try {
-    const result = await computePayrollRun(req.params.id, req.user.email);
+    const result = await runPayrollPipeline(req.params.id, req.user.email);
     res.json(result);
   } catch (err) {
     console.error("POST /payroll/runs/:id/compute error:", err);
@@ -103,6 +106,36 @@ router.post("/runs/:id/finalize", enforcePolicy("manage", "payroll"), async (req
   } catch (err) {
     console.error("POST /payroll/runs/:id/finalize error:", err);
     res.status(400).json({ error: err.message || "Finalization failed" });
+  }
+});
+
+router.post("/runs/:id/reset-processing", enforcePolicy("manage", "payroll"), async (req, res) => {
+  try {
+    if (!isAdminRole(req.user?.role)) {
+      return res.status(403).json({ error: "Forbidden: Admin only" });
+    }
+    const run = await resetPayrollRunProcessing(req.params.id, req.user.email);
+    res.json(run);
+  } catch (err) {
+    console.error("POST /payroll/runs/:id/reset-processing error:", err);
+    const msg = err.message || "Reset processing failed";
+    const status =
+      msg.includes("not found") ? 404
+        : msg.includes("finalized") || msg.includes("not in a processing state") ? 400
+          : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
+router.get("/runs/:id/diff", enforcePolicy("manage", "payroll"), async (req, res) => {
+  try {
+    const diff = await getPayrollRunDiff(req.params.id);
+    res.json(diff);
+  } catch (err) {
+    console.error("GET /payroll/runs/:id/diff error:", err);
+    const msg = err.message || "Failed to fetch payroll diff";
+    const status = msg.includes("not found") ? 404 : 400;
+    res.status(status).json({ error: msg });
   }
 });
 
@@ -121,6 +154,9 @@ router.post("/runs/:id/repair-totals", enforcePolicy("manage", "payroll"), async
 
 router.delete("/runs/:id", enforcePolicy("manage", "payroll"), async (req, res) => {
   try {
+    if (!isAdminRole(req.user?.role)) {
+      return res.status(403).json({ error: "Forbidden: Admin only" });
+    }
     const run = await PayrollRun.findById(req.params.id);
     if (!run) return res.status(404).json({ error: "Run not found" });
     if (run.status === "FINALIZED") return res.status(400).json({ error: "Cannot delete a finalized run" });
@@ -174,7 +210,7 @@ router.patch("/runs/:runId/records/:recordId", enforcePolicy("manage", "payroll"
   }
 });
 
-router.get("/me/history", enforcePolicy("view", "payroll"), async (req, res) => {
+router.get("/me/history", async (req, res) => {
   try {
     const lastMonthCutoff = new Date();
     lastMonthCutoff.setDate(lastMonthCutoff.getDate() - 30);

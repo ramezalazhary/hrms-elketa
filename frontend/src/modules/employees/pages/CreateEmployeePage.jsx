@@ -24,7 +24,6 @@ export function CreateEmployeePage() {
   const { showToast } = useToast();
   const departments = useAppSelector((state) => state.departments.items);
   const [provisionedData, setProvisionedData] = useState(null);
-  const role = useAppSelector((state) => state.identity.currentUser?.role);
   const [selectedGovernorate, setSelectedGovernorate] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
   const [socialInsuranceStatus, setSocialInsuranceStatus] = useState("NOT_INSURED");
@@ -377,26 +376,6 @@ export function CreateEmployeePage() {
           },
           { name: "subLocation", label: "Sub-Location (Floor / Wing)", type: "text" },
           { name: "onlineStorageLink", label: "Online Storage Link", type: "text" },
-          {
-            name: "role",
-            label: "Privilege Level",
-            type: "select",
-            required: true,
-            options: role === "ADMIN" || role === "HR_STAFF" || role === "HR_MANAGER"
-              ? [
-                  { label: "Employee", value: "EMPLOYEE" },
-                  { label: "Team Leader", value: "TEAM_LEADER" },
-                  { label: "Manager", value: "MANAGER" },
-                  { label: "HR Staff", value: "HR_STAFF" },
-                  { label: "HR Manager", value: "HR_MANAGER" },
-                  { label: "Admin", value: "ADMIN" },
-                ]
-              : [
-                  { label: "Employee", value: "EMPLOYEE" },
-                  { label: "Team Leader", value: "TEAM_LEADER" },
-                  { label: "Manager", value: "MANAGER" },
-                ]
-          },
           { name: "dateOfHire", label: "Date of Hire", type: "date" },
           {
             name: "employmentType",

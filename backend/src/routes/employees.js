@@ -559,13 +559,6 @@ router.post("/", requireAuth, enforcePolicy("manage", "employees"), async (req, 
     return res.status(400).json({ error: "Required fields are missing" });
   }
 
-  const newRole = req.body.role || "EMPLOYEE";
-  if (!editorCanModifyTargetRole(req.user.role, newRole)) {
-    return res.status(403).json({
-      error: "Forbidden: You cannot create an employee with an equal or higher role than yours.",
-    });
-  }
-
   if (access.scope === "department") {
     const isAllowedDept = await checkScopeDepartment(
       req.user.email,
@@ -603,20 +596,7 @@ router.post("/", requireAuth, enforcePolicy("manage", "employees"), async (req, 
       req.body.employeeCode = `#${deptDoc.code}-${serial}`;
     }
 
-    const { role: requestedRole } = req.body;
-    let finalRole = "EMPLOYEE";
-    if (requestedRole) {
-      if (access.scope === "all") {
-        finalRole = requestedRole;
-      } else if (access.scope === "department") {
-        const allowed = ["EMPLOYEE", "TEAM_LEADER", "MANAGER"];
-        finalRole = allowed.includes(requestedRole)
-          ? requestedRole
-          : "EMPLOYEE";
-      }
-    } else {
-      finalRole = department === "HR" ? "HR_STAFF" : "EMPLOYEE";
-    }
+    const finalRole = "EMPLOYEE";
     const normalizedFinalRole = normalizeRole(finalRole);
     const isHrFinalRole =
       normalizedFinalRole === ROLE.HR_STAFF ||
@@ -703,14 +683,6 @@ router.post("/", requireAuth, enforcePolicy("manage", "employees"), async (req, 
         typeof useDefaultReporting === "boolean" ? useDefaultReporting : true,
     });
 
-    if (newEmployee.role === "MANAGER") {
-      const chiefExecutiveId = await getChiefExecutiveId();
-      newEmployee.managerId =
-        chiefExecutiveId &&
-        String(chiefExecutiveId) !== String(newEmployee._id)
-          ? chiefExecutiveId
-          : null;
-    }
     await newEmployee.save();
 
     // Create audit log for employee creation

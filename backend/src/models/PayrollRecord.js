@@ -13,6 +13,8 @@ const PayrollRecordSchema = new Schema(
     paymentMethod: { type: String },
     bankAccount: { type: String },
     isInsured: { type: Boolean, default: false },
+    employeeStatus: { type: String, default: "ACTIVE" },
+    payrollInclusionReason: { type: String, default: "" },
 
     baseSalary: { type: Number, default: 0 },
     allowances: { type: Number, default: 0 },

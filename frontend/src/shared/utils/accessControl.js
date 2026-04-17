@@ -151,14 +151,11 @@ export function getLeaveApprovalsAccessLevel(user) {
   if (override) return override;
   const role = normaliseRoleKey(user?.role);
   if (role === "ADMIN") return ACCESS_LEVEL.ADMIN;
-  if (role === "HR_MANAGER") {
+  if (role === "HR_MANAGER" || role === "HR" || role === "HR_STAFF") {
     return ACCESS_LEVEL.EDIT;
   }
-  // HR and HR staff do not get baseline leave-approvals access in frontend;
-  // they must have explicit page override.
-  if (role === "HR_STAFF" || role === "HR") return ACCESS_LEVEL.NONE;
-  // Baseline operational exception: managers and team leaders must access approvals
-  // for their own reporting scope even when no explicit override row is configured.
+  // Team leaders and managers get baseline EDIT access so they can see
+  // history, and approve requests in their queue (matching backend policy).
   if (role === "MANAGER" || role === "TEAM_LEADER") return ACCESS_LEVEL.EDIT;
   return ACCESS_LEVEL.NONE;
 }

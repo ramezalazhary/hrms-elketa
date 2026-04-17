@@ -35,7 +35,6 @@ const emptyModuleForm = () => ({
   allowances: "",
   fixedBonus: "",
   fixedDeduction: "",
-  overtimeHours: "",
   extraDaysWorked: "",
   assessmentNet: "",
   absentDays: "",
@@ -111,7 +110,9 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
       allowances: form.allowances,
       fixedBonus: form.fixedBonus,
       fixedDeduction: form.fixedDeduction,
-      overtimeHours: form.overtimeHours,
+      // Payroll compute path is assessment-only for overtime money.
+      // Attendance overtime hours are intentionally excluded from compute.
+      overtimeHours: 0,
       extraDaysWorked: form.extraDaysWorked,
       assessmentNet: form.assessmentNet,
       absentDays: form.absentDays,
@@ -229,9 +230,9 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
                   </span>
                 </div>
                 <p className="max-w-prose text-xs text-zinc-500">
-                  Same steps as the server: gross from profile, rates from payroll config (defaults 26 days, 8 h, OT 1.5),
+                  Same steps as the server payroll compute path: gross from profile, rates from payroll config (defaults 22 days, 8 h, OT 1.5),
                   EGP rounding from organization policy ({effectiveDecimalPlaces} decimal
-                  {effectiveDecimalPlaces === 1 ? "" : "s"}), additions from overtime / weekly rest days / bonuses / assessment
+                  {effectiveDecimalPlaces === 1 ? "" : "s"}), additions from approved weekly rest days / bonuses / assessment
                   net, deductions from absence × salary/day, non-absence attendance money, fixed deduction, advances — then
                   insurance and tax if insured. Enter values from attendance analysis or other systems manually to validate.
                 </p>
@@ -262,12 +263,7 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
                 </legend>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   <NumberField
-                    label="Overtime hours (period)"
-                    value={form.overtimeHours}
-                    onChange={(v) => setField("overtimeHours", v)}
-                  />
-                  <NumberField
-                    label="Extra rest-day days worked"
+                    label="Approved extra rest-day days worked"
                     value={form.extraDaysWorked}
                     onChange={(v) => setField("extraDaysWorked", v)}
                   />
@@ -282,6 +278,14 @@ export function PayrollHelpPanel({ records = null, totals = null, defaultOpen = 
                     value={form.advanceAmount}
                     onChange={(v) => setField("advanceAmount", v)}
                   />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[11px] text-zinc-500">
+                    Overtime in payroll compute is assessment-only. Attendance checkout overtime does not add payroll money here.
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    For extra rest-day days, enter only the count coming from HR-approved attendance on configured weekly rest days.
+                  </p>
                 </div>
                 <p className="text-[11px] text-zinc-500">
                   Non-absence attendance deductions: enter one amount below, or fill analysis totals so we apply{" "}

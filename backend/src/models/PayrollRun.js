@@ -9,8 +9,19 @@ const PayrollRunSchema = new Schema(
     departmentId: { type: Schema.Types.ObjectId, ref: "Department", default: null },
     status: {
       type: String,
-      enum: ["DRAFT", "COMPUTED", "FINALIZED"],
+      enum: ["DRAFT", "COMPUTING", "COMPUTED", "FINALIZING", "FINALIZED"],
       default: "DRAFT",
+    },
+    computeVersion: { type: Number, default: 0 },
+    currentSnapshotId: {
+      type: Schema.Types.ObjectId,
+      ref: "PayrollComputeSnapshot",
+      default: null,
+    },
+    previousSnapshotId: {
+      type: Schema.Types.ObjectId,
+      ref: "PayrollComputeSnapshot",
+      default: null,
     },
     computedAt: { type: Date },
     finalizedAt: { type: Date },

@@ -3,13 +3,16 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Layout } from "@/shared/components/Layout";
 import { useToast } from "@/shared/components/ToastProvider";
 import { useAppSelector } from "@/shared/hooks/reduxHooks";
-import { canManagePayroll } from "@/shared/utils/accessControl";
+import { ACCESS_LEVEL, canManagePayroll, getPayrollAccessLevel } from "@/shared/utils/accessControl";
 import {
   getPayrollRunApi,
   getPayrollRecordsApi,
   computePayrollRunApi,
   finalizePayrollRunApi,
+  getPayrollRunDiffApi,
   repairPayrollRunTotalsApi,
+  resetPayrollRunProcessingApi,
+  deletePayrollRunApi,
   getPaymentListApi,
   getInsuranceReportApi,
   getTaxReportApi,
@@ -27,6 +30,9 @@ import {
   Receipt,
   Banknote,
   Wrench,
+  AlertTriangle,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 import { PayrollHelpPanel } from "../components/PayrollHelpPanel";
 import { EmployeePayrollCalculationModal } from "../components/EmployeePayrollCalculationModal";
@@ -46,6 +52,7 @@ export function PayrollRunDetailPage() {
   const { showToast } = useToast();
   const currentUser = useAppSelector((s) => s.identity.currentUser);
   const canManageRunActions = canManagePayroll(currentUser);
+  const canDeleteRun = getPayrollAccessLevel(currentUser) === ACCESS_LEVEL.ADMIN;
   const payrollDp = usePayrollDecimalPlaces();
   const fmt = (n) => formatPayrollEgp(n, payrollDp);
 
@@ -60,6 +67,11 @@ export function PayrollRunDetailPage() {
   const [insuranceReport, setInsuranceReport] = useState(null);
   const [taxReport, setTaxReport] = useState(null);
   const [selectedRecord, setSelectedRecord] = useState(null);
+  const [diffData, setDiffData] = useState(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffAcknowledged, setDiffAcknowledged] = useState(false);
+  const [diffError, setDiffError] = useState("");
+  const [resettingProcessing, setResettingProcessing] = useState(false);
 
   const fetchData = useCallback(async (opts = {}) => {
     const silent = opts.silent === true;
@@ -71,6 +83,10 @@ export function PayrollRunDetailPage() {
       ]);
       setRun(runData);
       setRecords(recData || []);
+      if (runData?.status !== "COMPUTED") {
+        setDiffData(null);
+        setDiffAcknowledged(false);
+      }
     } catch (e) {
       showToast(e.message || "Failed to load", "error");
     } finally {
@@ -112,6 +128,7 @@ export function PayrollRunDetailPage() {
     try {
       await computePayrollRunApi(id);
       showToast("Payroll computed successfully", "success");
+      setDiffAcknowledged(false);
       invalidateReportCaches();
       await fetchData({ silent: true });
       await refetchActiveReportIfNeeded();
@@ -145,6 +162,10 @@ export function PayrollRunDetailPage() {
   };
 
   const handleFinalize = async () => {
+    if (diffData?.hasBaseline && !diffAcknowledged) {
+      showToast("Review and acknowledge payroll diff before finalizing", "error");
+      return;
+    }
     if (!window.confirm("Finalize this payroll run? This action cannot be undone. Advances will be marked as deducted.")) return;
     setFinalizing(true);
     try {
@@ -157,6 +178,34 @@ export function PayrollRunDetailPage() {
       showToast(e.message || "Finalization failed", "error");
     } finally {
       setFinalizing(false);
+    }
+  };
+
+  const handleDeleteRun = async () => {
+    if (!window.confirm("Delete this payroll run? This action cannot be undone.")) return;
+    try {
+      await deletePayrollRunApi(id);
+      showToast("Payroll run deleted", "success");
+      navigate("/payroll");
+    } catch (e) {
+      showToast(e.message || "Failed to delete run", "error");
+    }
+  };
+
+  const handleResetProcessing = async () => {
+    if (!window.confirm("Reset this stuck payroll run back to a safe status? Use this only if compute/finalize was interrupted.")) {
+      return;
+    }
+    setResettingProcessing(true);
+    try {
+      const runData = await resetPayrollRunProcessingApi(id);
+      setRun(runData);
+      showToast("Payroll run processing state reset", "success");
+      await fetchData({ silent: true });
+    } catch (e) {
+      showToast(e.message || "Failed to reset processing state", "error");
+    } finally {
+      setResettingProcessing(false);
     }
   };
 
@@ -193,6 +242,30 @@ export function PayrollRunDetailPage() {
     if (activeTab === "tax") loadTax();
   }, [activeTab]);
 
+  useEffect(() => {
+    const loadDiff = async () => {
+      if (!run || run.status !== "COMPUTED" || !canManageRunActions) return;
+      setDiffLoading(true);
+      setDiffError("");
+      try {
+        const data = await getPayrollRunDiffApi(id);
+        setDiffData(data);
+      } catch (e) {
+        setDiffData(null);
+        const msg = e.message || "Failed to load payroll diff";
+        setDiffError(msg);
+        showToast(msg, "error");
+      } finally {
+        setDiffLoading(false);
+      }
+    };
+    loadDiff();
+  }, [id, run?.status, canManageRunActions, showToast]);
+
+  useEffect(() => {
+    setDiffAcknowledged(false);
+  }, [diffData?.computeVersion]);
+
   if (loading) {
     return (
       <Layout>
@@ -215,6 +288,9 @@ export function PayrollRunDetailPage() {
   const period = `${MONTHS[(run.period?.month || 1) - 1]} ${run.period?.year}`;
   const canCompute = canManageRunActions && run.status !== "FINALIZED";
   const canFinalize = canManageRunActions && run.status === "COMPUTED";
+  const canResetProcessing = canDeleteRun && (run.status === "COMPUTING" || run.status === "FINALIZING");
+  const diffReadyForFinalize = Boolean(diffData) && (!diffData.hasBaseline || diffAcknowledged);
+  const finalizeBlockedByDiff = canFinalize && !diffReadyForFinalize;
   const hasRecords = records.length > 0;
 
   return (
@@ -252,7 +328,7 @@ export function PayrollRunDetailPage() {
             {canFinalize && (
               <button
                 onClick={handleFinalize}
-                disabled={finalizing}
+                disabled={finalizing || diffLoading || finalizeBlockedByDiff}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
               >
                 {finalizing ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
@@ -285,10 +361,109 @@ export function PayrollRunDetailPage() {
                 </div>
               </div>
             )}
+            {canDeleteRun && run.status !== "FINALIZED" && (
+              <button
+                type="button"
+                onClick={handleDeleteRun}
+                disabled={computing || finalizing || repairing || resettingProcessing}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50"
+              >
+                <Trash2 size={14} />
+                Delete run
+              </button>
+            )}
+            {canResetProcessing && (
+              <button
+                type="button"
+                onClick={handleResetProcessing}
+                disabled={resettingProcessing || computing || finalizing || repairing}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-amber-700 shadow-sm hover:bg-amber-50 disabled:opacity-50"
+              >
+                {resettingProcessing ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                {resettingProcessing ? "Resetting..." : "Reset stuck run"}
+              </button>
+            )}
           </div>
         </div>
 
         {/* Summary cards */}
+        {canManageRunActions && run.status === "COMPUTED" && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 text-amber-600" size={16} />
+              <div className="w-full">
+                <p className="text-sm font-semibold text-amber-900">Pre-finalize diff review</p>
+                <p className="mt-0.5 text-xs text-amber-800">
+                  Compare this compute against the previous compute snapshot for this same run before finalizing.
+                </p>
+                {diffLoading && <p className="mt-2 text-xs text-amber-700">Loading diff...</p>}
+                {!diffLoading && diffData && (
+                  <div className="mt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+                      <div className="rounded-md bg-white px-2 py-1"><span className="text-zinc-500">Changed</span><p className="font-semibold text-zinc-800">{fmtInt(diffData.summary?.changed)}</p></div>
+                      <div className="rounded-md bg-white px-2 py-1"><span className="text-zinc-500">Added</span><p className="font-semibold text-zinc-800">{fmtInt(diffData.summary?.added)}</p></div>
+                      <div className="rounded-md bg-white px-2 py-1"><span className="text-zinc-500">Removed</span><p className="font-semibold text-zinc-800">{fmtInt(diffData.summary?.removed)}</p></div>
+                      <div className="rounded-md bg-white px-2 py-1"><span className="text-zinc-500">Unchanged</span><p className="font-semibold text-zinc-800">{fmtInt(diffData.summary?.unchanged)}</p></div>
+                      <div className="rounded-md bg-white px-2 py-1"><span className="text-zinc-500">Net Delta</span><p className="font-semibold text-zinc-800">{fmt(diffData.summary?.netDelta || 0)}</p></div>
+                    </div>
+                    {diffData.hasBaseline && (diffData.changes || []).length > 0 && (
+                      <div className="max-h-48 overflow-auto rounded-md border border-amber-200 bg-white">
+                        <table className="min-w-full text-xs">
+                          <thead className="sticky top-0 bg-amber-50 text-left text-[10px] uppercase tracking-wide text-amber-700">
+                            <tr>
+                              <th className="px-2 py-1">Employee</th>
+                              <th className="px-2 py-1">Type</th>
+                              <th className="px-2 py-1 text-right">Net Before</th>
+                              <th className="px-2 py-1 text-right">Net After</th>
+                              <th className="px-2 py-1 text-right">Delta</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(diffData.changes || []).slice(0, 25).map((change) => {
+                              const beforeNet = change.before?.netSalary || 0;
+                              const afterNet = change.after?.netSalary || 0;
+                              return (
+                                <tr key={`${change.employeeId}-${change.type}`} className="border-t border-amber-100">
+                                  <td className="px-2 py-1">{change.fullName}</td>
+                                  <td className="px-2 py-1">{change.type}</td>
+                                  <td className="px-2 py-1 text-right">{change.before ? fmt(beforeNet) : "—"}</td>
+                                  <td className="px-2 py-1 text-right">{change.after ? fmt(afterNet) : "—"}</td>
+                                  <td className="px-2 py-1 text-right font-medium">{fmt(afterNet - beforeNet)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {diffData.hasBaseline && (
+                      <label className="flex items-center gap-2 text-xs text-zinc-700">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-zinc-300"
+                          checked={diffAcknowledged}
+                          onChange={(e) => setDiffAcknowledged(e.target.checked)}
+                        />
+                        I reviewed the payroll diff and confirm finalization.
+                      </label>
+                    )}
+                    {!diffData.hasBaseline && (
+                      <p className="text-xs text-zinc-700">
+                        This is the first compute snapshot for this run. Future recomputes will be diffed against this baseline.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {!diffLoading && !diffData && (
+                  <p className="mt-2 text-xs text-red-700">
+                    {diffError || "Payroll diff is required before finalization. Refresh this page to retry."}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {hasRecords && (
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
             {[
@@ -401,7 +576,16 @@ export function PayrollRunDetailPage() {
                       <td className="px-3 py-2.5">
                         <span className="rounded-md border border-teal-200 bg-teal-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-teal-800">{r.employeeCode}</span>
                       </td>
-                      <td className="px-3 py-2.5 font-medium text-zinc-900">{r.fullName}</td>
+                      <td className="px-3 py-2.5 font-medium text-zinc-900">
+                        <div className="space-y-1">
+                          <div>{r.fullName}</div>
+                          {r.payrollInclusionReason ? (
+                            <div className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                              {r.employeeStatus || "Separated"} included by monthly attendance
+                            </div>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className="px-3 py-2.5 text-zinc-500">{r.department || "—"}</td>
                       <td className="px-3 py-2.5 text-center">
                         {r.isInsured ? <span className="text-emerald-600 font-semibold">Yes</span> : <span className="text-zinc-400">No</span>}

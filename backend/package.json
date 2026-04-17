@@ -16,6 +16,7 @@
     "test:api": "node scripts/full-api-smoke.mjs",
     "test:org-invariants": "node scripts/org-invariants-smoke.mjs",
     "test:attendance-tiers": "node scripts/attendance-tiers-smoke.mjs",
+    "test:payroll-integrity": "node scripts/payroll-integrity-smoke.mjs",
     "test:authz-matrix": "node scripts/authz-matrix-smoke.mjs",
     "test:leave-visibility": "node scripts/leave-visibility-smoke.mjs",
     "test:access-scope-matrix": "node scripts/access-scope-matrix-smoke.mjs",

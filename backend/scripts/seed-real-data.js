@@ -31,7 +31,7 @@ import { EmployeeAdvance } from "../src/models/EmployeeAdvance.js";
 import { Assessment } from "../src/models/Assessment.js";
 import { LeaveRequest } from "../src/models/LeaveRequest.js";
 import { buildPolicySnapshot } from "../src/services/leavePolicyService.js";
-import { computePayrollRun } from "../src/services/payrollComputationService.js";
+import { runPayrollPipeline as computePayrollRun } from "../src/services/payrollPipeline/index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, "..", ".env") });

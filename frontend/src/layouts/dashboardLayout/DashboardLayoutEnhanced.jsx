@@ -53,6 +53,7 @@ import {
   CalendarOff,
   Sparkles,
   Shield,
+  ArrowRightLeft,
 } from "lucide-react";
 
 /**
@@ -329,7 +330,7 @@ export function DashboardLayout() {
   const roleLabel = (currentRole || "EMPLOYEE").replaceAll("_", " ");
 
   return (
-    <div className="min-h-screen flex overflow-hidden bg-slate-50 text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
+    <div className="min-h-screen flex overflow-hidden bg-[#f5f5f7] text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
       {sidebarOpen && (
         <button
           type="button"
@@ -341,7 +342,7 @@ export function DashboardLayout() {
 
       {/* Enhanced Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[70] border-r border-zinc-200/80 bg-zinc-50/95 backdrop-blur transition-[width] duration-200 ease-out md:translate-x-0 md:static md:inset-0
+        className={`fixed inset-y-0 left-0 z-[70] border-r border-white/70 bg-white/78 backdrop-blur-xl transition-[width] duration-200 ease-out md:translate-x-0 md:static md:inset-0
           ${
             isCollapsed
               ? "w-[4.5rem]"
@@ -353,7 +354,7 @@ export function DashboardLayout() {
           <button
             type="button"
             onClick={toggleSidebarSize}
-            className="absolute -right-2.5 top-16 z-10 hidden h-5 w-5 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-400 hover:text-zinc-700 md:flex"
+            className="absolute -right-2.5 top-16 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-zinc-200/80 bg-white/95 text-zinc-400 shadow-sm hover:text-zinc-700 md:flex"
           >
             {isCollapsed ? (
               <ChevronRight size={12} />
@@ -362,75 +363,35 @@ export function DashboardLayout() {
             )}
           </button>
 
-          <div className="mb-5 flex h-9 items-center justify-between px-2">
-            {!isCollapsed ? (
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-900 text-white shadow-sm">
+          <div className="mb-5 rounded-[24px] border border-zinc-200/70 bg-white/90 px-3 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+            <div className="flex h-9 items-center justify-between">
+              {!isCollapsed ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-950 text-white shadow-sm">
+                    <span className="text-white font-bold text-sm">H</span>
+                  </div>
+                  <div>
+                    <span className="block text-[15px] font-semibold tracking-tight text-zinc-950">
+                      HRMS
+                    </span>
+                    <span className="block text-[11px] text-zinc-400">Focused workspace</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-950 text-white shadow-sm">
                   <span className="text-white font-bold text-sm">H</span>
                 </div>
-                <span className="text-lg font-semibold text-zinc-900">
-                  HRMS
-                </span>
-              </div>
-            ) : (
-              <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-900 text-white shadow-sm">
-                <span className="text-white font-bold text-sm">H</span>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(false)}
-              className="md:hidden text-zinc-400 hover:text-zinc-600"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          {!isCollapsed && (
-            <div className="mb-4 space-y-3">
-              <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 py-2">
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
-                  {isManagementMode ? <Shield className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  {isManagementMode ? "Management mode" : "Personal mode"}
-                </div>
-                <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-zinc-600">
-                  {roleLabel}
-                </span>
-              </div>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                <input
-                  type="text"
-                  placeholder="Quick find pages..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-10 pr-4 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-200"
-                />
-              </div>
-            </div>
-          )}
-          {!isCollapsed && hasManagementCapabilities && (
-            <div className="mb-3 px-1">
+              )}
               <button
                 type="button"
-                onClick={() =>
-                  dispatch(
-                    setViewMode(isManagementMode ? "personal" : "management"),
-                  )
-                }
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
-                title={
-                  isManagementMode
-                    ? "Switch to Personal Mode"
-                    : "Switch to Management Mode"
-                }
+                onClick={() => setSidebarOpen(false)}
+                className="md:hidden text-zinc-400 hover:text-zinc-600"
               >
-                {isManagementMode
-                  ? "Switch to Personal Mode"
-                  : "Switch to Management Mode"}
+                <X size={18} />
               </button>
             </div>
-          )}
+          </div>
+          {/* Workspace mode الآن مدمج في الكارت العلوي */}
 
           <nav className="flex-1 space-y-1 overflow-y-auto pr-1">
             {filteredNavStructure.map((item) => (
@@ -441,7 +402,7 @@ export function DashboardLayout() {
                       <button
                         type="button"
                         onClick={() => toggleGroup(item.label)}
-                        className="mt-3 flex w-full items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-600"
+                        className="mt-3 flex w-full items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400 hover:text-zinc-600"
                       >
                         {item.label}
                         <ChevronRight
@@ -514,7 +475,7 @@ export function DashboardLayout() {
 
           <div className={`mt-auto border-t border-zinc-200/80 pt-4 ${isCollapsed ? "items-center" : ""}`}>
             <div
-              className={`mb-3 flex items-center gap-3 ${isCollapsed ? "justify-center" : "px-2"}`}
+              className={`mb-3 flex rounded-[24px] border border-zinc-200/70 bg-white/90 py-3 ${isCollapsed ? "justify-center px-2" : "items-center gap-3 px-3"} shadow-[0_10px_24px_rgba(15,23,42,0.04)]`}
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-white font-medium shadow-sm">
                 {currentUser?.email?.[0].toUpperCase()}
@@ -552,7 +513,7 @@ export function DashboardLayout() {
       {/* Enhanced Main Content */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-50">
         {/* Enhanced Header */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 md:hidden">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 bg-white/95 backdrop-blur-md px-4 md:hidden">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
@@ -560,7 +521,31 @@ export function DashboardLayout() {
           >
             <Menu size={20} />
           </button>
-          <span className="text-lg font-semibold text-zinc-900">HRMS</span>
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-lg font-semibold text-zinc-900">HRMS</span>
+            {hasManagementCapabilities && (
+              <div className="flex items-center gap-1 rounded-full bg-zinc-100/90 px-1.5 py-0.5">
+                <button
+                  type="button"
+                  onClick={() => dispatch(setViewMode("personal"))}
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    !isManagementMode ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+                  }`}
+                >
+                  شخصي
+                </button>
+                <button
+                  type="button"
+                  onClick={() => dispatch(setViewMode("management"))}
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    isManagementMode ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+                  }`}
+                >
+                  إدارة
+                </button>
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
@@ -575,10 +560,41 @@ export function DashboardLayout() {
           </div>
         </header>
 
-        {/* Desktop Header with Breadcrumb */}
-        <header className="hidden md:block shrink-0 bg-white border-b border-zinc-200">
-          <div className="px-4 py-3 lg:px-8 lg:py-4">
+        {/* Desktop Header with Breadcrumb + Workspace mode */}
+        <header className="hidden md:block shrink-0 bg-white/95 backdrop-blur-md border-b border-zinc-200">
+          <div className="flex items-center justify-between px-4 py-3 lg:px-8 lg:py-4 gap-4">
             <Breadcrumb />
+            {hasManagementCapabilities && (
+              <div className="rounded-2xl border border-zinc-200/70 bg-zinc-50/90 px-2.5 py-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                    Workspace
+                  </span>
+                  <div className="flex items-center gap-1 rounded-2xl bg-zinc-100/80 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => dispatch(setViewMode("personal"))}
+                      className={`rounded-2xl px-2.5 py-1 text-[11px] font-semibold ${
+                        !isManagementMode ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500"
+                      }`}
+                      title="Switch to Personal Mode"
+                    >
+                      Personal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => dispatch(setViewMode("management"))}
+                      className={`rounded-2xl px-2.5 py-1 text-[11px] font-semibold ${
+                        isManagementMode ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500"
+                      }`}
+                      title="Switch to Management Mode"
+                    >
+                      Management
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </header>
 
@@ -601,11 +617,13 @@ const SidebarLink = memo(function SidebarLink({ to, label, icon: Icon, isCollaps
       onClick={closeMobile}
       title={isCollapsed ? label : ""}
       className={({ isActive }) =>
-        `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200
+        `group flex ${
+          isCollapsed ? "justify-center" : "items-center gap-3"
+        } rounded-2xl border border-transparent px-3 py-2.5 text-sm font-semibold transition-all duration-200
         ${
           isActive
-            ? "bg-zinc-900 text-white shadow-sm"
-            : "text-slate-600 hover:bg-white hover:text-zinc-900"
+            ? "border-zinc-900/90 bg-zinc-900 text-white shadow-[0_10px_24px_rgba(15,23,42,0.16)]"
+            : "text-slate-600 hover:border-zinc-200/80 hover:bg-white/95 hover:text-zinc-900 hover:shadow-sm"
         }`
       }
     >
