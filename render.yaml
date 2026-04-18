@@ -1,0 +1,17 @@
+# Render Blueprint: Dashboard → New → Blueprint → select this repo/file.
+# Add secrets in the dashboard: MONGO_URI (or MONGODB_URI), JWT_SECRET, JWT_REFRESH_SECRET, FRONTEND_URL (your static host URL).
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: hrms-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production

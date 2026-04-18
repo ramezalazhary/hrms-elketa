@@ -64,6 +64,11 @@ const corsOptions =
 
 app.use(cors(corsOptions));
 
+/** Liveness for load balancers / PaaS (no DB check). */
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({ ok: true });
+});
+
 app.use("/api/", apiLimiter);
 
 app.use("/api/auth", authRouter);

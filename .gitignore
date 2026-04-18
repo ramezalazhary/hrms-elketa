@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Secrets and local env (never commit)
+.env
+backend/.env
+frontend/.env
+
+# Runtime uploads from bulk import
+uploads/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
