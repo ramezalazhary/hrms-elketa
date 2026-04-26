@@ -147,12 +147,9 @@ export function OnboardingApprovalsPage() {
       description="Manage access links and review employee data submissions."
     >
       {/* Quick link generation */}
-      <div className="relative mb-10 overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 p-6 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 md:p-8">
-        <div className="pointer-events-none absolute right-4 top-4 text-zinc-200">
-          <LinkIcon className="h-24 w-24 rotate-12" />
-        </div>
-        <div className="relative z-10 flex flex-col justify-between gap-8 lg:flex-row lg:items-center">
-          <div className="space-y-2">
+      <div className="relative mb-10 overflow-hidden flex flex-col rounded-[20px] bg-white dark:bg-zinc-900 p-6 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800 md:p-8">
+        <div className="relative z-10 flex flex-col justify-between gap-8  lg:items-center">
+          <div className="space-y-0 flex flex-col gap-2">
             <h3 className="flex items-center gap-3 text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 md:text-2xl">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
                 <Plus className="h-5 w-5" />
