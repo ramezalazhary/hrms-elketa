@@ -19,6 +19,7 @@ export function fmtDateTime(d) {
 }
 
 export function fmtDays(n) {
+
   const x = Number(n);
   if (Number.isNaN(x)) return "—";
   return Math.abs(x % 1) < 1e-9 ? String(x) : x.toFixed(1);

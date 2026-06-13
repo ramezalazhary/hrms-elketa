@@ -1,5 +1,5 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useState, useMemo, memo } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useState, useMemo, memo, useEffect, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { logoutThunk, setViewMode } from "@/modules/identity/store";
 import { normaliseRoleKey } from "@/shared/components/EntityBadges";
@@ -28,6 +28,7 @@ import { getOrganizationsAccessLevel } from "@/shared/utils/accessControl";
 import { getPayrollAccessLevel } from "@/shared/utils/accessControl";
 import { getPermissionsAccessLevel } from "@/shared/utils/accessControl";
 import { getReportsAccessLevel } from "@/shared/utils/accessControl";
+import { hasManagementCapabilities } from "@/shared/utils/accessControl";
 import { Breadcrumb } from "@/shared/components/Breadcrumb";
 import {
   Home,
@@ -106,17 +107,8 @@ export function DashboardLayout() {
   const canOpenLeaveOperations = canOpenLeaveOpsPage;
 
   const hasHrOpsAccess = canOpenAttendance;
-  const hasManagementCapabilities =
-    isAdmin ||
-    isHrManager ||
-    currentRole === "HR_STAFF" ||
-    currentRole === "MANAGER" ||
-    currentRole === "TEAM_LEADER" ||
-    currentRole === "HR" ||
-    (Array.isArray(currentUser?.hrTemplates) &&
-      currentUser.hrTemplates.length > 0) ||
-    (Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0);
-  const isManagementMode = hasManagementCapabilities && viewMode === "management";
+  const userHasManagementCapabilities = hasManagementCapabilities(currentUser);
+  const isManagementMode = userHasManagementCapabilities && viewMode === "management";
   const canOpenPermissionsPage = canManagePermissions(currentUser);
   const canOpenEmployeesPages = canReadEmployees(currentUser);
   const attendanceLevelLabel = getAccessLevelLabel(getAttendanceAccessLevel(currentUser));
@@ -328,7 +320,32 @@ export function DashboardLayout() {
     return hits;
   }, [navStructure, searchQuery]);
 
+  const employees = useAppSelector((state) => state.employees.items);
   const roleLabel = (currentRole || "EMPLOYEE").replaceAll("_", " ");
+  const displayName = useMemo(() => {
+    const matched = employees.find(
+      (emp) =>
+        (currentUser?.id != null &&
+          String(emp.id ?? emp._id ?? "") === String(currentUser.id)) ||
+        (!!currentUser?.email &&
+          !!emp.email &&
+          String(emp.email).trim().toLowerCase() ===
+            String(currentUser.email).trim().toLowerCase()),
+    );
+    return (
+      matched?.fullName ||
+      currentUser?.fullName ||
+      currentUser?.email?.split("@")[0] ||
+      "User"
+    );
+  }, [employees, currentUser?.id, currentUser?.email, currentUser?.fullName]);
+
+  const pageTitle = usePageTitle();
+
+  const handleLogout = async () => {
+    await dispatch(logoutThunk());
+    navigate("/login");
+  };
 
   const handleModeSwitch = (mode) => {
     dispatch(setViewMode(mode));
@@ -340,7 +357,10 @@ export function DashboardLayout() {
   };
 
   return (
-    <div className="min-h-screen flex overflow-hidden bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 transition-colors duration-300 selection:bg-indigo-100 selection:text-indigo-900">
+    <div
+      className="flex h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 transition-colors duration-300 selection:bg-indigo-100 selection:text-indigo-900"
+      style={{ "--sidebar-width": isCollapsed ? "4.5rem" : "16rem" }}
+    >
       {sidebarOpen && (
         <button
           type="button"
@@ -352,7 +372,7 @@ export function DashboardLayout() {
 
       {/* Enhanced Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[70] border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 dark:bg-zinc-900/80 backdrop-blur-xl transition-[width] duration-200 ease-out md:translate-x-0 md:static md:inset-0
+        className={`fixed inset-y-0 left-0 z-[70] flex h-screen shrink-0 flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 backdrop-blur-xl transition-[width] duration-200 ease-out md:sticky md:top-0 md:translate-x-0
           ${
             isCollapsed
               ? "w-[4.5rem]"
@@ -360,7 +380,7 @@ export function DashboardLayout() {
           }
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="relative flex h-full flex-col p-4">
+        <div className="relative flex h-full min-h-0 flex-col p-4">
           <button
             type="button"
             onClick={toggleSidebarSize}
@@ -482,137 +502,26 @@ export function DashboardLayout() {
               />
             )}
           </nav>
-
-          <div className={`mt-auto border-t border-zinc-200/80 dark:border-zinc-800/80 pt-4 ${isCollapsed ? "items-center" : ""}`}>
-            <div
-              className={`mb-3 flex rounded-[24px] border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 dark:bg-zinc-800/50 py-3 ${isCollapsed ? "justify-center px-2" : "items-center gap-3 px-3"} shadow-[0_10px_24px_rgba(15,23,42,0.04)] dark:shadow-none`}
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 dark:bg-indigo-600 text-white font-medium shadow-sm">
-                {currentUser?.email?.[0].toUpperCase()}
-              </div>
-              {!isCollapsed && (
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                    {currentUser?.email?.split("@")[0]}
-                  </p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 font-normal capitalize">
-                    {currentRole?.replace("_", " ")}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={async () => {
-                await dispatch(logoutThunk());
-                navigate("/login");
-              }}
-              className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 transition-all duration-200 hover:bg-rose-50/70 hover:text-rose-600 ${
-                isCollapsed ? "justify-center" : ""
-              }`}
-              title="Sign out"
-            >
-              <LogOut size={18} className="shrink-0 transition-transform group-hover:-translate-x-1" />
-              {!isCollapsed && <span>Sign out</span>}
-            </button>
-          </div>
         </div>
       </aside>
 
       {/* Enhanced Main Content */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-950 transition-colors duration-300">
-        {/* Enhanced Header */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 dark:bg-zinc-900/95 backdrop-blur-md px-4 md:hidden">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg"
-          >
-            <Menu size={20} />
-          </button>
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">HRMS</span>
-            {hasManagementCapabilities && (
-              <div className="flex items-center gap-1 rounded-full bg-zinc-100/90 dark:bg-zinc-800/80 px-1.5 py-0.5">
-                <button
-                  type="button"
-                  onClick={() => handleModeSwitch("personal")}
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                    !isManagementMode ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm" : "text-zinc-500 dark:text-zinc-400"
-                  }`}
-                >
-                  شخصي
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleModeSwitch("management")}
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                    isManagementMode ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm" : "text-zinc-500 dark:text-zinc-400"
-                  }`}
-                >
-                  إدارة
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg"
-            >
-              <Bell size={18} />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-medium text-sm">
-              {currentUser?.email?.[0].toUpperCase()}
-            </div>
-          </div>
-        </header>
-
-        {/* Desktop Header with Breadcrumb + Workspace mode */}
-        <header className="hidden md:block shrink-0 bg-white dark:bg-zinc-900/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800">
-          <div className="flex items-center justify-between px-4 py-3 lg:px-8 lg:py-4 gap-4">
-            <Breadcrumb />
-            <div className="flex items-center gap-4">
-              <ThemeToggle />
-              {hasManagementCapabilities && (
-                <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-zinc-50/90 dark:bg-zinc-800/50 px-2.5 py-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
-                      Workspace
-                    </span>
-                    <div className="flex items-center gap-1 rounded-2xl bg-zinc-100/80 dark:bg-zinc-900/50 p-0.5">
-                      <button
-                        type="button"
-                        onClick={() => handleModeSwitch("personal")}
-                        className={`rounded-2xl px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                          !isManagementMode ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-white shadow-sm" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                        }`}
-                        title="Switch to Personal Mode"
-                      >
-                        Personal
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleModeSwitch("management")}
-                        className={`rounded-2xl px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                          isManagementMode ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-white shadow-sm" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                        }`}
-                        title="Switch to Management Mode"
-                      >
-                        Management
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950 transition-colors duration-300">
+        <DashboardHeader
+          pageTitle={pageTitle}
+          displayName={displayName}
+          roleLabel={roleLabel}
+          emailInitial={currentUser?.email?.[0]?.toUpperCase() || "?"}
+          hasManagementCapabilities={userHasManagementCapabilities}
+          isManagementMode={isManagementMode}
+          onOpenSidebar={() => setSidebarOpen(true)}
+          onModeSwitch={handleModeSwitch}
+          onLogout={handleLogout}
+          onToggleNotifications={() => setShowNotifications((v) => !v)}
+        />
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="min-h-0 flex-1 overflow-y-auto">
           <div className="p-3 sm:p-4 md:p-6 lg:p-8">
             <Outlet />
           </div>
@@ -621,6 +530,250 @@ export function DashboardLayout() {
     </div>
   );
 }
+
+function usePageTitle() {
+  const { pathname } = useLocation();
+  return useMemo(() => {
+    const segments = pathname.split("/").filter(Boolean);
+    const last = segments[segments.length - 1] || "home";
+    return last
+      .split("-")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }, [pathname]);
+}
+
+const WorkspaceModeSwitch = memo(function WorkspaceModeSwitch({
+  isManagementMode,
+  onModeSwitch,
+  showLabel = true,
+  fullWidth = false,
+}) {
+  return (
+    <div
+      className={`flex items-center gap-2 rounded-2xl border border-zinc-200/70 bg-zinc-50/90 px-2 py-1.5 dark:border-zinc-800 dark:bg-zinc-800/50 ${
+        fullWidth ? "w-full justify-between" : ""
+      }`}
+    >
+      {showLabel && (
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400 sm:text-[11px]">
+          Workspace
+        </span>
+      )}
+      <div
+        className={`flex items-center gap-0.5 rounded-2xl bg-zinc-100/80 p-0.5 dark:bg-zinc-900/50 ${
+          fullWidth ? "ml-auto flex-1 justify-end sm:flex-none" : ""
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => onModeSwitch("personal")}
+          className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition-all sm:px-3 sm:py-1 sm:text-xs ${
+            !isManagementMode
+              ? "bg-white text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-white"
+              : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-300"
+          }`}
+        >
+          Personal
+        </button>
+        <button
+          type="button"
+          onClick={() => onModeSwitch("management")}
+          className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition-all sm:px-3 sm:py-1 sm:text-xs ${
+            isManagementMode
+              ? "bg-white text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-white"
+              : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-300"
+          }`}
+        >
+          Management
+        </button>
+      </div>
+    </div>
+  );
+});
+
+const DashboardHeader = memo(function DashboardHeader({
+  pageTitle,
+  displayName,
+  roleLabel,
+  emailInitial,
+  hasManagementCapabilities,
+  isManagementMode,
+  onOpenSidebar,
+  onModeSwitch,
+  onLogout,
+  onToggleNotifications,
+}) {
+  return (
+    <header className="shrink-0 border-b border-zinc-200 bg-white/95 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/95">
+      <div className="flex items-center gap-2 px-3 py-2.5 sm:gap-2.5 sm:px-4 sm:py-3 lg:px-5 min-[1395px]:gap-3 min-[1395px]:px-8 min-[1395px]:py-3.5">
+        <button
+          type="button"
+          onClick={onOpenSidebar}
+          aria-label="Open menu"
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 md:hidden"
+        >
+          <Menu size={20} />
+        </button>
+
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100 md:hidden">
+            {pageTitle}
+          </p>
+          <div className="hidden min-w-0 md:block">
+            <Breadcrumb className="max-w-full overflow-x-auto text-xs lg:text-sm [&_ol]:flex-nowrap [&_ol]:overflow-x-auto [&_ol]:pb-0.5 [&_ol]:scrollbar-none" />
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5 min-[1395px]:gap-3">
+          <div className="hidden sm:block [&_button]:h-9 [&_button]:w-9">
+            <ThemeToggle />
+          </div>
+
+          {hasManagementCapabilities && (
+            <div className="hidden min-[1395px]:block">
+              <WorkspaceModeSwitch
+                isManagementMode={isManagementMode}
+                onModeSwitch={onModeSwitch}
+                showLabel={false}
+              />
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={onToggleNotifications}
+            aria-label="Notifications"
+            className="relative hidden h-10 w-10 items-center justify-center rounded-xl text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 lg:inline-flex"
+          >
+            <Bell size={18} />
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />
+          </button>
+
+          <div className="min-[1395px]:hidden">
+            <HeaderUserMenu
+              displayName={displayName}
+              roleLabel={roleLabel}
+              emailInitial={emailInitial}
+              onLogout={onLogout}
+              variant="dropdown"
+            />
+          </div>
+          <div className="hidden min-[1395px]:block">
+            <HeaderUserMenu
+              displayName={displayName}
+              roleLabel={roleLabel}
+              emailInitial={emailInitial}
+              onLogout={onLogout}
+              variant="inline"
+            />
+          </div>
+        </div>
+      </div>
+
+      {hasManagementCapabilities && (
+        <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800/80 sm:px-4 lg:px-5 min-[1395px]:hidden">
+          <WorkspaceModeSwitch
+            isManagementMode={isManagementMode}
+            onModeSwitch={onModeSwitch}
+            showLabel={false}
+            fullWidth
+          />
+        </div>
+      )}
+    </header>
+  );
+});
+
+const HeaderUserMenu = memo(function HeaderUserMenu({
+  displayName,
+  roleLabel,
+  emailInitial,
+  onLogout,
+  variant = "inline",
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  if (variant === "dropdown") {
+    return (
+      <div ref={rootRef} className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-sm font-medium text-white shadow-sm transition hover:ring-2 hover:ring-zinc-300 dark:bg-indigo-600 dark:hover:ring-indigo-500/40"
+        >
+          {emailInitial}
+        </button>
+        {open && (
+          <div
+            role="menu"
+            className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 animate-in fade-in zoom-in-95 rounded-2xl border border-zinc-200/90 bg-white p-2 shadow-xl ring-1 ring-zinc-950/[0.06] duration-150 dark:border-zinc-800 dark:bg-zinc-900 dark:ring-zinc-800"
+          >
+            <div className="border-b border-zinc-100 px-3 py-2.5 dark:border-zinc-800">
+              <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{displayName}</p>
+              <p className="truncate text-xs capitalize text-zinc-500 dark:text-zinc-400">{roleLabel}</p>
+            </div>
+            <div className="mt-1 flex items-center justify-between gap-3 rounded-xl px-3 py-2 sm:hidden">
+              <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Theme</span>
+              <ThemeToggle />
+            </div>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onLogout();
+              }}
+              className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
+            >
+              <LogOut size={16} />
+              Sign out
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 items-center gap-2 min-[1536px]:gap-3">
+      <div className="flex min-w-0 items-center gap-2 min-[1536px]:gap-2.5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-sm font-medium text-white shadow-sm dark:bg-indigo-600">
+          {emailInitial}
+        </div>
+        <div className="hidden min-w-0 min-[1536px]:block">
+          <p className="max-w-[9rem] truncate text-sm font-medium text-zinc-900 dark:text-zinc-100 2xl:max-w-[12rem]">
+            {displayName}
+          </p>
+          <p className="truncate text-xs capitalize text-zinc-500 dark:text-zinc-400">{roleLabel}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onLogout}
+        className="group inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200/90 text-zinc-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-rose-500/30 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 min-[1536px]:h-auto min-[1536px]:w-auto min-[1536px]:gap-1.5 min-[1536px]:px-3 min-[1536px]:py-2 min-[1536px]:text-sm min-[1536px]:font-semibold"
+        title="Sign out"
+      >
+        <LogOut size={16} className="shrink-0 transition-transform group-hover:-translate-x-0.5" />
+        <span className="hidden min-[1536px]:inline">Sign out</span>
+      </button>
+    </div>
+  );
+});
 
 const SidebarLink = memo(function SidebarLink({ to, label, icon: Icon, isCollapsed, closeMobile }) {
   return (

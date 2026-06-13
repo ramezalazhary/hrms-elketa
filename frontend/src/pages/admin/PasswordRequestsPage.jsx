@@ -5,7 +5,7 @@ import { Modal } from "@/shared/components/Modal";
 import { useToast } from "@/shared/components/ToastProvider";
 import { getPasswordRequestsApi, forceResetPasswordApi } from "@/modules/users/api";
 import { generateCompliantTemporaryPassword } from "@/shared/utils/password";
-import { Inbox, KeyRound, RefreshCw, ArrowRight } from "lucide-react";
+import { Inbox, KeyRound, RefreshCw, ArrowRight, CloudCog } from "lucide-react";
 
 export function PasswordRequestsPage() {
   const { showToast } = useToast();
@@ -50,7 +50,7 @@ export function PasswordRequestsPage() {
       );
       setActiveRequest(null);
     } catch (err) {
-      console.error(err);
+      alert(err?.error || "Failed to reset password❤️");
       showToast(err?.error || "Failed to reset password", "error");
     } finally {
       setSubmitting(false);
@@ -69,8 +69,7 @@ export function PasswordRequestsPage() {
             User opens <Link className="text-zinc-900 dark:text-zinc-100 underline font-medium" to="/forgot-password">Forgot password</Link>{" "}
             and enters their work email.
           </li>
-          <li>Their request appears below (same message is shown even if the email is unknown — for privacy).</li>
-          <li>
+          Your account is using a temporary password. Enter it below, then set a strong password you’ll use from now on.          <li>
             You set a temporary password here. They sign in at <Link className="text-zinc-900 dark:text-zinc-100 underline font-medium" to="/login">Sign in</Link>, then
             are required to replace it with their own password.
           </li>

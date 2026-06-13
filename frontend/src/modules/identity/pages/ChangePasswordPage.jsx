@@ -65,6 +65,7 @@ export function ChangePasswordPage() {
                 setError(
                   err?.error ||
                     err?.message ||
+                    (typeof err === "string" ? err : null) ||
                     "Could not update password. Check your temporary password.",
                 );
               } finally {

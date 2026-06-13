@@ -347,7 +347,7 @@ export function CreateEmployeePage() {
           { name: "additionalSkype", label: "Skype", type: "text", placeholder: "Optional" },
 
           { type: "section", label: "3. Job & Administrative" },
-          { name: "employeeCode", label: "Employee Code", type: "text" },
+          { name: "employeeCode", label: "Employee Code", type: "text" ,  },
           { name: "position", label: "Job Title", type: "text", required: true },
           {
             name: "department",

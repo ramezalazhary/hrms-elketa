@@ -14,6 +14,7 @@ import { Attendance } from "../models/Attendance.js";
 import { Alert } from "../models/Alert.js";
 import { ManagementRequest } from "../models/ManagementRequest.js";
 import { LeaveRequest } from "../models/LeaveRequest.js";
+import { OrganizationPolicy } from "../models/OrganizationPolicy.js";
 import { requireAuth } from "../middleware/auth.js";
 import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { enforceScope } from "../middleware/enforceScope.js";
@@ -968,7 +969,7 @@ router.put(
           ? teamLeaderId.id || teamLeaderId._id
           : teamLeaderId || null;
     }
-    if (employeeCode !== undefined && employeeCode !== employee.employeeCode) {
+    if (employeeCode == undefined || employeeCode === "") {
       return res.status(400).json({
         error:
           "Direct employee code updates are blocked in this endpoint. Use transfer/lifecycle actions.",
@@ -1063,6 +1064,8 @@ router.put(
     if (medicalCondition !== undefined)
       employee.medicalCondition = medicalCondition;
     if (socialInsurance !== undefined) employee.socialInsurance = socialInsurance;
+    if (employeeCode !== undefined) employee.employeeCode = employeeCode;
+
     if (terminationDate !== undefined) {
       employee.terminationDate =
         terminationDate === null ? null : optionalDate(terminationDate);
@@ -1670,7 +1673,7 @@ router.post(
     await logEmployeePolicyParity(req, "process_increase");
 
     // Use org policy as default increase %, allow manual override per request
-    const policy = await OrganizationPolicy.findOne({ name: "default" });
+    const policy = await OrganizationPolicy?.findOne({ name: "default" });
 
     let { increasePercentage, increaseAmount, reason, effectiveDate } =
       req.body;

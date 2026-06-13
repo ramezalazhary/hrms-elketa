@@ -8,7 +8,7 @@ import { useToast } from "@/shared/components/ToastProvider";
 import { useAppDispatch, useAppSelector } from "@/shared/hooks/reduxHooks";
 import { fetchDepartmentsThunk, deleteDepartmentThunk } from "../store";
 import { DepartmentBadge } from "@/shared/components/EntityBadges";
-import { Trash2, Edit, Building2, LayoutDashboard, Layers } from "lucide-react";
+import { Trash2, Edit, Building2, LayoutDashboard, Layers, Users, Briefcase, Search } from "lucide-react";
 import { canManageDepartments } from "@/shared/utils/accessControl";
 
 export function DepartmentsListPage() {
@@ -36,53 +36,107 @@ export function DepartmentsListPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
+  /* ── Aggregate stats ── */
+  const totalTeams = useMemo(() => departments.reduce((sum, d) => sum + (d.teams?.length || 0), 0), [departments]);
+  const totalPositions = useMemo(() => departments.reduce((sum, d) => sum + (d.positions?.length || 0), 0), [departments]);
+  const totalStaff = useMemo(() => departments.reduce((sum, d) => {
+    const posMembers = (d.positions || []).reduce((s, p) => s + (p.members?.length || 0), 0);
+    return sum + posMembers;
+  }, 0), [departments]);
+
   return (
     <Layout
       title="Departments"
       description="Org units, leaders, teams, and roles—in one directory."
-      actions={
-        isAdmin ? (
-          <Link
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/25 transition hover:from-violet-500 hover:to-teal-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2"
-            to="/departments/create"
-          >
-            <Layers className="h-4 w-4 opacity-90" />
-            New department
-          </Link>
-        ) : null
-      }
+      className="max-w-6xl"
+      hideHeader
     >
-      <div className="relative overflow-hidden rounded-2xl border border-violet-100/80 bg-gradient-to-br from-violet-50/90 via-white to-teal-50/70 p-5 shadow-sm ring-1 ring-violet-500/10 md:p-6">
-        <div className="pointer-events-none absolute -left-6 top-0 h-28 w-28 rounded-full bg-teal-300/20 blur-2xl" />
-        <div className="pointer-events-none absolute bottom-0 right-0 h-24 w-24 rounded-full bg-violet-400/20 blur-2xl" />
-        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-teal-600 text-white shadow-md">
-              <Building2 className="h-5 w-5" strokeWidth={1.75} />
+      {/* ═══════════ Unified Hero Header ═══════════ */}
+      <section className="relative overflow-hidden rounded-[20px] bg-white p-6 shadow-sm ring-1 ring-zinc-950/[0.06] dark:bg-zinc-900 dark:ring-zinc-800 md:p-8">
+        {/* Decorative blurs */}
+        <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-violet-100/60 blur-3xl dark:bg-violet-900/20" />
+        <div className="pointer-events-none absolute -left-8 bottom-0 h-32 w-32 rounded-full bg-teal-100/50 blur-3xl dark:bg-teal-900/15" />
+
+        <div className="relative space-y-6">
+          {/* ── Row 1: Identity + Action ── */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            {/* Left: Icon + Title block */}
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-zinc-700 to-zinc-900 text-white shadow-md dark:from-zinc-600 dark:to-zinc-800">
+                <Building2 className="h-6 w-6" strokeWidth={1.75} />
+              </div>
+              <div className="min-w-0">
+                <div className="mb-1 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200/80 bg-zinc-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
+                    <Layers className="h-3 w-3" />
+                    Directory
+                  </span>
+                </div>
+                <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                  Departments
+                </h1>
+                <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+                  Org units, leaders, teams, and roles — in one directory.
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-slate-800">Organization structure</p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                <span className="font-semibold text-violet-700">{departments.length}</span> departments
-                {search ? (
-                  <>
-                    {" · "}
-                    <span className="font-semibold text-teal-700">{filtered.length}</span> visible
-                  </>
-                ) : null}
+
+            {/* Right: CTA button */}
+            {isAdmin && (
+              <Link
+                className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition-all hover:bg-zinc-800 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2 dark:bg-indigo-600 dark:hover:bg-indigo-500 dark:focus-visible:ring-indigo-400"
+                to="/departments/create"
+              >
+                <Layers className="h-4 w-4 opacity-80" />
+                New department
+              </Link>
+            )}
+          </div>
+
+          {/* ── Row 2: Stat pills ── */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { icon: Building2, label: "Departments", value: departments.length, accent: "text-zinc-900 dark:text-zinc-100" },
+              { icon: Users, label: "Teams", value: totalTeams, accent: "text-zinc-900 dark:text-zinc-100" },
+              { icon: Briefcase, label: "Roles", value: totalPositions, accent: "text-zinc-900 dark:text-zinc-100" },
+              { icon: LayoutDashboard, label: "Staff assigned", value: totalStaff, accent: "text-zinc-900 dark:text-zinc-100" },
+            ].map(({ icon: Icon, label, value, accent }) => (
+              <div
+                key={label}
+                className="flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/80 p-3 transition-colors hover:bg-zinc-100/60 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:bg-zinc-800/60"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-zinc-500 shadow-sm ring-1 ring-zinc-200/80 dark:bg-zinc-900 dark:text-zinc-400 dark:ring-zinc-700">
+                  <Icon size={16} strokeWidth={1.75} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{label}</p>
+                  <p className={`text-lg font-semibold tabular-nums leading-tight ${accent}`}>{value}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Row 3: Integrated search + result count ── */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex-1 sm:max-w-sm">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search departments…"
+                className="w-full rounded-xl border border-zinc-200/80 bg-zinc-50/80 py-2.5 pl-10 pr-4 text-sm text-zinc-900 placeholder-zinc-400 outline-none transition-all focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-100 dark:placeholder-zinc-500 dark:focus:border-zinc-600 dark:focus:bg-zinc-800 dark:focus:ring-zinc-700"
+              />
+            </div>
+            {search && (
+              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                Showing <span className="font-bold text-zinc-900 dark:text-zinc-100">{filtered.length}</span> of{" "}
+                <span className="font-bold text-zinc-900 dark:text-zinc-100">{departments.length}</span> departments
               </p>
-            </div>
+            )}
           </div>
         </div>
-      </div>
-
-      <div className="rounded-xl border border-slate-200/80 bg-white dark:bg-zinc-900/90 p-4 shadow-sm backdrop-blur-sm">
-        <Filters
-          placeholder="Search departments by name…"
-          search={search}
-          onSearchChange={setSearch}
-        />
-      </div>
+      </section>
 
       <DataTable
         columns={[

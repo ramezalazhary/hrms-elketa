@@ -158,6 +158,7 @@ export function DashboardLayout() {
     });
   }
 
+
   return (
     <div className="min-h-screen flex overflow-hidden bg-zinc-50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100">
       {sidebarOpen && (

@@ -2038,7 +2038,7 @@ export function OrganizationRulesPage() {
 
       {/* Sticky save bar */}
       {!loading && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-md shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-md shadow-[0_-4px_20px_rgba(0,0,0,0.06)] transition-[left] duration-200 ease-out md:left-[var(--sidebar-width,16rem)]">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
             <div className="flex items-center gap-4">
               <div className="hidden sm:flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">

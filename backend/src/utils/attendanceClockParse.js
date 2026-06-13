@@ -8,9 +8,9 @@ export function parseAttendanceClock(timeStr) {
   if (timeStr === undefined || timeStr === null || timeStr === "") return null;
   if (timeStr instanceof Date) {
     return {
-      h: timeStr.getHours(),
-      m: timeStr.getMinutes(),
-      s: timeStr.getSeconds(),
+      h: timeStr.getUTCHours(),
+      m: timeStr.getUTCMinutes(),
+      s: timeStr.getUTCSeconds(),
     };
   }
 

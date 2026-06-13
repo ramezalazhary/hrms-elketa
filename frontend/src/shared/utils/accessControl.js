@@ -70,6 +70,12 @@ export function canManagePermissions(user) {
   return hasAccessLevel(getPermissionsAccessLevel(user), ACCESS_LEVEL.EDIT);
 }
 
+/** Login accounts list/API — system Admin or HR Manager role only. */
+export function canManageUsers(user) {
+  const role = normaliseRoleKey(user?.role);
+  return role === "ADMIN" || role === "HR_MANAGER";
+}
+
 export function getPermissionsAccessLevel(user) {
   return getPageLevelFromOverrides(user, "permissions_admin");
 }
@@ -263,4 +269,48 @@ export function canManagePartners(user, chiefExecutiveEmployeeId) {
 
 export function canAccessPasswordRequests(user) {
   return hasAccessLevel(getPageLevelFromOverrides(user, "password_requests"), ACCESS_LEVEL.VIEW);
+}
+
+/** True when page-level overrides grant any management workspace page. */
+export function hasManagementWorkspaceAccess(user) {
+  if (!user) return false;
+  return (
+    canAccessDashboardPage(user) ||
+    canReadEmployees(user) ||
+    canAccessOrganizations(user) ||
+    canAccessDepartments(user) ||
+    canAccessLeaveOperations(user) ||
+    canViewReports(user) ||
+    canViewPayroll(user) ||
+    canAccessAdvances(user) ||
+    canManageOrganizationRules(user) ||
+    canManagePermissions(user) ||
+    canAccessPasswordRequests(user) ||
+    canAccessLeaveApprovals(user) ||
+    canManageBonusApprovals(user) ||
+    canAccessAttendance(user) ||
+    canAccessOnboardingApprovals(user)
+  );
+}
+
+/**
+ * Whether the user may use management mode (sidebar + workspace toggle).
+ * Includes leadership/HR roles, legacy grants, and page-level overrides.
+ */
+export function hasManagementCapabilities(user) {
+  if (!user) return false;
+  const role = normaliseRoleKey(user?.role);
+  if (
+    role === "ADMIN" ||
+    role === "HR_STAFF" ||
+    role === "HR_MANAGER" ||
+    role === "MANAGER" ||
+    role === "TEAM_LEADER" ||
+    role === "HR"
+  ) {
+    return true;
+  }
+  if (Array.isArray(user.hrTemplates) && user.hrTemplates.length > 0) return true;
+  if (Array.isArray(user.permissions) && user.permissions.length > 0) return true;
+  return hasManagementWorkspaceAccess(user);
 }

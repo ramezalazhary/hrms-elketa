@@ -505,7 +505,14 @@ export async function can(user, action, resource, context = {}) {
     }
   }
 
-  if (resource === "users" || resource === "permissions") {
+  if (resource === "users") {
+    const allow = role === ROLE.ADMIN || role === ROLE.HR_MANAGER;
+    return allow
+      ? { allow: true, reason: "users_role_allow", scope: "all" }
+      : { allow: false, reason: "role_forbidden", scope: "none" };
+  }
+
+  if (resource === "permissions") {
     const inHrDepartment = await isHrDepartmentMember(user);
     const hasPolicyAssignment = canManagePolicyByAssignment(user, role);
     const allow = inHrDepartment && hasPolicyAssignment;

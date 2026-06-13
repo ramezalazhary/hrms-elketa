@@ -22,6 +22,7 @@ import { WelcomePage } from "@/modules/identity/pages/WelcomePage";
 import { RequireOrganizationRulesManage } from "@/shared/routing/RequireOrganizationRulesManage";
 import { RequireOrganizationsAccess } from "@/shared/routing/RequireOrganizationsAccess";
 import { RequireLeaveOperationsAccess } from "@/shared/routing/RequireLeaveOperationsAccess";
+import { RequireGuest } from "@/shared/routing/RequireGuest";
 
 import { AssessmentTemplatesPage } from "@/modules/organization/pages/AssessmentTemplatesPage";
 
@@ -29,8 +30,22 @@ export const appRoutes = [
   {
     element: <AuthLayout />,
     children: [
-      { path: "/login", element: <LoginPage /> },
-      { path: "/forgot-password", element: <ForgotPasswordPage /> },
+      {
+        path: "/login",
+        element: (
+          <RequireGuest>
+            <LoginPage />
+          </RequireGuest>
+        ),
+      },
+      {
+        path: "/forgot-password",
+        element: (
+          <RequireGuest>
+            <ForgotPasswordPage />
+          </RequireGuest>
+        ),
+      },
       { path: "/change-password", element: <ChangePasswordPage /> },
       {
         path: "/welcome/:token",

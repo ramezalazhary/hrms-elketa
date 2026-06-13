@@ -1,5 +1,5 @@
 /**
- * @file Admin UI for login accounts (`/admin/users`): loads users when actor is Admin or Head of HR,
+ * @file Admin UI for login accounts (`/admin/users`): loads users when actor is Admin or HR Manager,
  * employee directory for broader roles, permission matrix modal, and HR-only onboarding actions.
  * Data flow: Redux `identity` → parallel REST (`getUsersApi`, `getDepartmentsApi`, `getEmployeesApi`) →
  * local React state for filters, tabs, selected user, and policy preview inputs.
@@ -33,6 +33,7 @@ import {
 } from "@/shared/components/EntityBadges";
 import {
   canManagePermissions,
+  canManageUsers,
   getAccessLevelLabel,
   isHrDepartmentMember,
   getPermissionsAccessLevel,
@@ -58,10 +59,10 @@ function Avatar({ email }) {
   );
 }
 
-const ROLE_OPTIONS = ["EMPLOYEE", "TEAM_LEADER", "MANAGER", "HR", "HR_STAFF", "HR_MANAGER", "ADMIN"];
-const POLICY_ASSIGNABLE_ROLE_KEYS = new Set(["ADMIN", "HR", "HR_STAFF", "HR_MANAGER"]);
+const ROLE_OPTIONS = ["EMPLOYEE", "TEAM_LEADER", "MANAGER", "HR_STAFF", "HR_MANAGER", "ADMIN"];
+const POLICY_ASSIGNABLE_ROLE_KEYS = new Set(["ADMIN",  "HR_STAFF", "HR_MANAGER"]);
 const HR_MANAGER_ONLY_TEMPLATES = new Set(["PERMISSIONS_MANAGER"]);
-const HR_ROLE_KEYS = new Set(["HR", "HR_STAFF", "HR_MANAGER"]);
+const HR_ROLE_KEYS = new Set([ "HR_STAFF", "HR_MANAGER"]);
 const ACCESS_LEVEL_OPTIONS = [
   { value: "NONE", label: "No access" },
   { value: "VIEW", label: "Viewer" },
@@ -158,6 +159,8 @@ export function UsersAdminPage() {
   const [pageLevelOverrides, setPageLevelOverrides] = useState({});
   const [overrideSearch, setOverrideSearch] = useState("");
   const [overrideLevelFilter, setOverrideLevelFilter] = useState("ALL");
+  const [selectedOverridePageIds, setSelectedOverridePageIds] = useState([]);
+  const [bulkAccessLevel, setBulkAccessLevel] = useState("VIEW");
 
   const [departments, setDepartments] = useState([]);
   const [employees,   setEmployees]   = useState([]);
@@ -172,7 +175,7 @@ export function UsersAdminPage() {
   /* ── tabs ── */
   const [tab, setTab] = useState("users"); // "users" | "directory"
 
-  const canLoadUsers = canManagePermissionsPage;
+  const canLoadUsers = canManageUsers(currentUser);
   const showAccountsTab = canLoadUsers;
   const showAdminNav =
     showAccountsTab || ["MANAGER", "HR_STAFF", "HR_MANAGER"].includes(roleKey);
@@ -287,6 +290,9 @@ export function UsersAdminPage() {
     setShowGuide(false);
     setResolvedPagePreview([]);
     setPageLevelOverrides({});
+    clearOverridePageSelection();
+    setOverrideSearch("");
+    setOverrideLevelFilter("ALL");
     try {
       const targetEmp = employees.find((e) => e.email === targetUser?.email);
       const initialTemplates = Array.isArray(targetEmp?.hrTemplates) ? targetEmp.hrTemplates : [];
@@ -315,10 +321,10 @@ export function UsersAdminPage() {
       setPageLevelOverrides(next);
       const response = await resolvePagePreviewApi({
         role: targetRole,
-        hrLevel: targetRole === "HR_MANAGER" || targetRole === "HR_STAFF" || targetRole === "HR"
+        hrLevel: targetRole === "HR_MANAGER" || targetRole === "HR_STAFF" 
           ? initialLevel
           : "STAFF",
-        hrTemplates: targetRole === "HR_MANAGER" || targetRole === "HR_STAFF" || targetRole === "HR"
+        hrTemplates: targetRole === "HR_MANAGER" || targetRole === "HR_STAFF"
           ? initialTemplates
           : [],
         pageAccessOverrides: Object.entries(next).map(([pageId, level]) => ({ pageId, level })),
@@ -382,7 +388,6 @@ export function UsersAdminPage() {
     users.find((u) => u.id === selectedUserId)?.role || "EMPLOYEE",
   );
   const selectedIsHr =
-    selectedUserRole === "HR" ||
     selectedUserRole === "HR_STAFF" ||
     selectedUserRole === "HR_MANAGER";
 
@@ -464,6 +469,57 @@ export function UsersAdminPage() {
     return counts;
   }, [managementPages, pageLevelOverrides]);
 
+  const selectedOverrideSet = useMemo(
+    () => new Set(selectedOverridePageIds),
+    [selectedOverridePageIds],
+  );
+  const allFilteredPagesSelected =
+    filteredManagementPages.length > 0 &&
+    filteredManagementPages.every((page) => selectedOverrideSet.has(page.pageId));
+  const someFilteredPagesSelected =
+    filteredManagementPages.some((page) => selectedOverrideSet.has(page.pageId)) &&
+    !allFilteredPagesSelected;
+
+  function clearOverridePageSelection() {
+    setSelectedOverridePageIds([]);
+  }
+
+  function toggleOverridePageSelection(pageId) {
+    setSelectedOverridePageIds((prev) =>
+      prev.includes(pageId) ? prev.filter((id) => id !== pageId) : [...prev, pageId],
+    );
+  }
+
+  function toggleSelectAllFilteredPages() {
+    if (allFilteredPagesSelected) {
+      const visibleIds = new Set(filteredManagementPages.map((page) => page.pageId));
+      setSelectedOverridePageIds((prev) => prev.filter((id) => !visibleIds.has(id)));
+      return;
+    }
+    const merged = new Set([
+      ...selectedOverridePageIds,
+      ...filteredManagementPages.map((page) => page.pageId),
+    ]);
+    setSelectedOverridePageIds([...merged]);
+  }
+
+  function applyBulkAccessLevel() {
+    if (selectedOverridePageIds.length === 0) return;
+    const level = String(bulkAccessLevel || "NONE").toUpperCase();
+    setPageLevelOverrides((prev) => {
+      const next = { ...prev };
+      for (const pageId of selectedOverridePageIds) {
+        next[pageId] = level;
+      }
+      return next;
+    });
+    showToast(
+      `Access updated to ${getAccessLevelLabel(level)} for ${selectedOverridePageIds.length} page(s)`,
+      "success",
+    );
+    clearOverridePageSelection();
+  }
+
   async function handleSavePageOverrides() {
     if (!selectedUserId) return;
     try {
@@ -518,17 +574,17 @@ export function UsersAdminPage() {
               ["directory", "Directory"],
             ].map(([id, label]) => (
               <button
-                key={id}
-                type="button"
-                onClick={() => setTab(id)}
-                className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-                  tab === id
-                    ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200 dark:border-zinc-800"
-                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                }`}
-              >
-                {label}
-              </button>
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                tab === id
+                  ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200 dark:border-zinc-800"
+                  : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+              }`}
+            >
+              {label}
+            </button>
             ))}
           </div>
 
@@ -815,6 +871,7 @@ export function UsersAdminPage() {
         onClose={() => {
           setSelectedUserId(null);
           setShowGuide(false);
+          clearOverridePageSelection();
         }}
       >
         <div className="flex flex-col gap-5">
@@ -884,9 +941,64 @@ export function UsersAdminPage() {
                 <option value="ADMIN">Admin</option>
               </select>
             </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-800/40">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={allFilteredPagesSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someFilteredPagesSelected;
+                  }}
+                  onChange={toggleSelectAllFilteredPages}
+                  className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-900"
+                />
+                Select all visible
+              </label>
+              {selectedOverridePageIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearOverridePageSelection}
+                  className="text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                >
+                  Clear selection ({selectedOverridePageIds.length})
+                </button>
+              )}
+            </div>
+
+            {selectedOverridePageIds.length > 0 && (
+              <div className="mt-3 flex flex-col gap-2 rounded-xl border border-zinc-900/10 bg-zinc-900 px-3 py-3 text-white dark:border-indigo-500/30 dark:bg-indigo-600/90 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs font-semibold sm:text-sm">
+                  {selectedOverridePageIds.length} page{selectedOverridePageIds.length !== 1 ? "s" : ""} selected
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-[11px] font-medium text-zinc-200">Set access to</label>
+                  <select
+                    value={bulkAccessLevel}
+                    onChange={(e) => setBulkAccessLevel(e.target.value)}
+                    className="rounded-lg border border-white/20 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-white/40"
+                  >
+                    {ACCESS_LEVEL_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={applyBulkAccessLevel}
+                    className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-100"
+                  >
+                    Apply to selected
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {filteredManagementPages.map((page) => {
                 const current = String(pageLevelOverrides?.[page.pageId] || "NONE").toUpperCase();
+                const isSelected = selectedOverrideSet.has(page.pageId);
                 const levelTone =
                   current === "ADMIN"
                     ? "border-violet-200 bg-violet-50/40"
@@ -898,9 +1010,18 @@ export function UsersAdminPage() {
                 return (
                   <div
                     key={page.pageId}
-                    className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${levelTone}`}
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition ${levelTone} ${
+                      isSelected ? "ring-2 ring-zinc-900/20 dark:ring-indigo-400/40" : ""
+                    }`}
                   >
-                    <div className="min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleOverridePageSelection(page.pageId)}
+                      aria-label={`Select ${page.label}`}
+                      className="h-4 w-4 shrink-0 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-900"
+                    />
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-semibold text-zinc-800 dark:text-zinc-200">{page.label}</p>
                       <p className="truncate text-[10px] text-zinc-500 dark:text-zinc-400">{page.path}</p>
                     </div>
@@ -912,7 +1033,7 @@ export function UsersAdminPage() {
                           [page.pageId]: String(e.target.value || "NONE").toUpperCase(),
                         }))
                       }
-                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                      className="shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300"
                     >
                       {ACCESS_LEVEL_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>

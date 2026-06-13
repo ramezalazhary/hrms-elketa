@@ -930,6 +930,8 @@ router.get(
       "Unpaid Leave Deduction (Days)": s.deductions.unpaidLeaveDays,
       "Early Dept Deduction (Days)": s.deductions.earlyDepartureDays,
       "Incomplete Deduction (Days)": s.deductions.incompleteDays,
+      "Excuse Deduction (Days)": s.deductions.excessExcuseDays || 0,
+      "Excuse Deduction (Amount)": s.deductions.excessExcuseAmount || 0,
       "Total Deduction (Days)": s.deductions.totalDeductionDays,
       "Net Effective Days": s.netEffectiveDays,
       "Approved overtime (units)": s.assessmentApprovedOvertimeUnits ?? 0,
@@ -1303,6 +1305,15 @@ router.post(
 
     console.log(`[IMPORT] Sheet: ${sheetName}, Total rows: ${data.length}`);
     console.log(`[IMPORT] Headers: ${Object.keys(data[0] || {}).join(", ")}`);
+    // Log first row cell types for debugging
+    if (data[0]) {
+      const firstRowDiag = {};
+      for (const [k, v] of Object.entries(data[0])) {
+        firstRowDiag[k] = { type: typeof v, isDate: v instanceof Date, value: v instanceof Date ? v.toISOString() : String(v).slice(0, 50) };
+      }
+      console.log(`[IMPORT] First row cell diagnostics:`, JSON.stringify(firstRowDiag, null, 2));
+    }
+
     if (data.length === 0)
       return res.status(400).json({ error: "Excel file is empty" });
 
@@ -1396,23 +1407,106 @@ router.post(
     // --- Phase 0b: pre-group rows by (code + date) to merge multiple punches ---
     const parseCode = (raw) => {
       let code = (raw ?? "").toString().trim();
-      if (code && code.includes("-")) {
-        const m = code.match(/^(#[A-Z0-9]+)/i);
+      if (!code) return "";
+      // Format: "#EC01-Mahmoud Saad" or "#Marketing031-yasmine Mo" → extract code before dash
+      if (code.includes("-")) {
+        const m = code.match(/^(#[A-Za-z0-9_]+)/i);
         if (m) code = m[1];
-      } else if (code && code.startsWith("#")) {
+      } else if (code.startsWith("#")) {
         code = code.split(" ")[0];
       }
       return code;
     };
 
+    /**
+     * Normalize a time cell value from Excel into a string that parseAttendanceClock can handle.
+     * When XLSX reads with cellDates:true, time-formatted cells become Date objects on
+     * the epoch day (Dec 30, 1899). We must extract just the HH:MM:SS from them using UTC
+     * to avoid server-timezone offsets corrupting the hours.
+     */
+    const normalizeTimeCellValue = (val) => {
+      if (val == null || val === "") return "";
+      // Date object from cellDates:true — extract UTC time to avoid timezone shift
+      if (val instanceof Date && !isNaN(val.getTime())) {
+        const h = val.getUTCHours();
+        const m = val.getUTCMinutes();
+        const s = val.getUTCSeconds();
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      }
+      // Excel fractional day number (0.0 – 1.0) for time-only cells
+      if (typeof val === "number" && val >= 0 && val < 1) {
+        const totalSec = Math.round(val * 86400);
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      }
+      // Already a string like "11:17:12 AM" or "8:15:00 PM" — keep as-is
+      return val.toString().trim();
+    };
+
     const parseExcelDate = (rawDate) => {
       if (rawDate == null || rawDate === "") return null;
-      let d;
-      if (typeof rawDate === "number") {
-        d = new Date((rawDate - 25569) * 86400 * 1000);
-      } else {
-        d = new Date(rawDate);
+
+      // 1) Date objects (cellDates:true already converted it)
+      if (rawDate instanceof Date) {
+        if (isNaN(rawDate.getTime())) return null;
+        const d = new Date(rawDate);
+        d.setUTCHours(0, 0, 0, 0);
+        return d;
       }
+
+      // 2) Excel serial date number
+      if (typeof rawDate === "number") {
+        const d = new Date((rawDate - 25569) * 86400 * 1000);
+        if (isNaN(d.getTime())) return null;
+        d.setUTCHours(0, 0, 0, 0);
+        return d;
+      }
+
+      // 3) String date — try common formats
+      const str = rawDate.toString().trim();
+
+      // DD/MM/YYYY or DD-MM-YYYY (common in Egyptian / European sheets)
+      const slashMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (slashMatch) {
+        let [, p1, p2, yr] = slashMatch;
+        p1 = parseInt(p1, 10);
+        p2 = parseInt(p2, 10);
+        yr = parseInt(yr, 10);
+        // Heuristic: if first part > 12 it must be DD/MM/YYYY
+        // If second part > 12 it must be MM/DD/YYYY
+        // If both ≤ 12, assume DD/MM/YYYY (locale-default for this app)
+        let day, month;
+        if (p1 > 12) {
+          day = p1; month = p2;  // DD/MM/YYYY
+        } else if (p2 > 12) {
+          month = p1; day = p2;  // MM/DD/YYYY
+        } else {
+          day = p1; month = p2;  // Default: DD/MM/YYYY
+        }
+        if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+        const d = new Date(Date.UTC(yr, month - 1, day));
+        if (isNaN(d.getTime())) return null;
+        d.setUTCHours(0, 0, 0, 0);
+        return d;
+      }
+
+      // YYYY-MM-DD (ISO)
+      const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (isoMatch) {
+        const d = new Date(Date.UTC(
+          parseInt(isoMatch[1], 10),
+          parseInt(isoMatch[2], 10) - 1,
+          parseInt(isoMatch[3], 10),
+        ));
+        if (isNaN(d.getTime())) return null;
+        d.setUTCHours(0, 0, 0, 0);
+        return d;
+      }
+
+      // Fallback: let JS try to parse
+      const d = new Date(str);
       if (isNaN(d.getTime())) return null;
       d.setUTCHours(0, 0, 0, 0);
       return d;
@@ -1428,10 +1522,11 @@ router.post(
     const grouped = new Map();
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
+      const rawCode = row[codeHeader] ? row[codeHeader].toString().trim() : "";
       const code = parseCode(row[codeHeader]);
       const rawDate = row[dateHeader];
-      const cin = row[checkInHeader];
-      const cout = row[checkOutHeader];
+      const cin = normalizeTimeCellValue(row[checkInHeader]);
+      const cout = normalizeTimeCellValue(row[checkOutHeader]);
 
       if (!code) { errors.push(`Row ${i + 2}: Employee Code is empty`); skipped++; continue; }
       if (!rawDate) { errors.push(`Row ${i + 2}: Date is empty for ${code}`); skipped++; continue; }
@@ -1451,37 +1546,75 @@ router.post(
 
       const key = `${code}|${date.toISOString()}`;
       if (!grouped.has(key)) {
-        grouped.set(key, { code, date, punches: [] });
+        grouped.set(key, { code, rawCode, date, punches: [] });
       }
       grouped.get(key).punches.push({ cin, cout, rowNum: i + 2 });
     }
 
     // Employee cache to avoid repeated DB lookups
     const empCache = new Map();
-    async function resolveEmployee(code) {
-      if (empCache.has(code)) return empCache.get(code);
-      let emp = await Employee.findOne({
-        $or: [{ employeeCode: code }, { email: code }],
-      }).populate("departmentId");
-      // Phase 0d: fallback to transfer history if current code not found
-      if (!emp) {
-        emp = await Employee.findOne({
-          "transferHistory.previousEmployeeCode": code,
-        }).populate("departmentId");
-        if (emp) {
-          console.log(`[IMPORT] Resolved old code ${code} -> current ${emp.employeeCode}`);
-        }
+    async function resolveEmployee(code, rawCode) {
+      const cacheKey = `${code}|${rawCode || ""}`;
+      if (empCache.has(cacheKey)) return empCache.get(cacheKey);
+
+      // Clean/normalized code (without '#' and trimmed) for regex matching
+      const cleanCode = code.startsWith("#") ? code.slice(1) : code;
+      const escapedClean = cleanCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Matches ^#?cleanCode followed by word boundary, dash, space, or end of string
+      const codeRegex = new RegExp(`^#?${escapedClean}(\\b|[-_\\s]|$)`, "i");
+
+      const orClauses = [
+        // Current employee code
+        { employeeCode: code },
+        { employeeCode: rawCode },
+        { employeeCode: codeRegex },
+
+        // Email / workEmail
+        { email: code },
+        { email: rawCode },
+        { workEmail: code },
+        { workEmail: rawCode },
+
+        // Code history
+        { "employeeCodeHistory.code": code },
+        { "employeeCodeHistory.code": rawCode },
+        { "employeeCodeHistory.code": codeRegex },
+
+        // Transfer history
+        { "transferHistory.previousEmployeeCode": code },
+        { "transferHistory.previousEmployeeCode": rawCode },
+        { "transferHistory.previousEmployeeCode": codeRegex }
+      ];
+
+      // Remove undefined or empty objects from orClauses
+      const cleanOrClauses = orClauses.filter(clause => {
+        const key = Object.keys(clause)[0];
+        const val = clause[key];
+        return val !== undefined && val !== null && val !== "" && !(val instanceof RegExp && val.source === "^#?(\\b|[-_\\s]|$)");
+      });
+
+      let emp = null;
+      if (cleanOrClauses.length > 0) {
+        emp = await Employee.findOne({ $or: cleanOrClauses }).populate("departmentId");
       }
-      empCache.set(code, emp || null);
+
+      if (emp) {
+        console.log(`[IMPORT] Resolved code search (code: "${code}", rawCode: "${rawCode}") -> found employee: "${emp.fullName}" (current code: "${emp.employeeCode}")`);
+      } else {
+        console.log(`[IMPORT] Resolved code search (code: "${code}", rawCode: "${rawCode}") -> NOT FOUND`);
+      }
+
+      empCache.set(cacheKey, emp || null);
       return emp || null;
     }
+
 
     const importPolicy = await resolveAttendancePolicy();
 
     for (const [, group] of grouped) {
-      const { code, date, punches } = group;
+      const { code, rawCode, date, punches } = group;
 
-      const employee = await resolveEmployee(code);
+      const employee = await resolveEmployee(code, rawCode);
       if (!employee) {
         errors.push(`${code}: Employee not found in database`);
         skipped += punches.length;

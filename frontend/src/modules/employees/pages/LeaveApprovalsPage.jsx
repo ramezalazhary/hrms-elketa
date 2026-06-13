@@ -150,8 +150,8 @@ export function LeaveApprovalsPage() {
         const data = await listLeaveRequestsApi({ queue: "1", limit: "100" });
         const queueItems = Array.isArray(data?.requests)
           ? data.requests.filter(
-              (r) => r?.status === "PENDING" || r?.status === "ESCALATED",
-            )
+            (r) => r?.status === "PENDING" || r?.status === "ESCALATED",
+          )
           : [];
         setList(queueItems);
         setBalanceByEmployeeId(data.balanceByEmployeeId || {});
@@ -307,7 +307,7 @@ export function LeaveApprovalsPage() {
     if (r.kind === "VACATION") {
       const v = b.vacation;
       const rem = Number(v.remainingDays);
-      const ifCancelled = r.status === "PENDING" && days > 0 ? rem + days : null;
+      const ifCancelled = r.status === "PENDING" && days > 0 ? rem : null;
       const insufficientBalance = r.status === "PENDING" && (rem <= 0 || rem < days);
       return (
         <div className="mt-2 rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400 space-y-0.5">
@@ -376,11 +376,10 @@ export function LeaveApprovalsPage() {
         key={r._id}
         type="button"
         onClick={() => setSelectedId(r._id)}
-        className={`w-full rounded-xl border px-3 py-3 text-left transition-all ${
-          active 
-            ? "border-zinc-900 dark:border-indigo-500 bg-zinc-50 dark:bg-indigo-500/10" 
+        className={`w-full rounded-xl border px-3 py-3 text-left transition-all ${active
+            ? "border-zinc-900 dark:border-indigo-500 bg-zinc-50 dark:bg-indigo-500/10"
             : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 hover:border-zinc-300 dark:hover:border-zinc-700"
-        }`}
+          }`}
       >
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{r.employeeEmail}</p>

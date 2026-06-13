@@ -31,6 +31,8 @@ export function mapSummaryForMonthlyReportApi(row) {
       unpaidLeaveDays: d.unpaidLeaveDays,
       earlyDepartureDays: d.earlyDepartureDays,
       incompleteDays: d.incompleteDays,
+      excessExcuseDays: d.excessExcuseDays || 0,
+      excessExcuseAmount: d.excessExcuseAmount || 0,
       totalDeductionDays: d.totalDeductionDays,
     },
     netEffectiveDays: row.netEffectiveDays,

@@ -1,41 +1,28 @@
 /**
  * @file `/api/users` — login accounts. Since User and Employee are merged,
  * this now manages auth fields on the Employee model.
- * Access: `requireAdminOrHrHead`; HR Head sees HR department employees only.
+ * Access: ADMIN or HR_MANAGER via policy; HR Manager may create HR-department logins only.
  */
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { enforcePolicy } from "../middleware/enforcePolicy.js";
 import { Employee } from "../models/Employee.js";
 import bcrypt from "bcryptjs";
-import { CANONICAL_ROLES, isAdminRole, parseRoleInput } from "../utils/roles.js";
+import { CANONICAL_ROLES, isAdminRole, normalizeRole, parseRoleInput, ROLE } from "../utils/roles.js";
 import { bumpAuthzVersion } from "../services/authzVersionService.js";
-import { isHrDepartmentMember } from "../services/authorizationPolicyService.js";
 import { deprovisionEmployeeAccess, isHrDepartmentName } from "../services/employeeLifecycleService.js";
 
 const router = Router();
 
 const HR_DEPARTMENT_NAME = process.env.HR_DEPARTMENT_NAME || "HR";
 
-// List users (admin gets all; HR department members get HR accounts only).
+// List users (ADMIN and HR_MANAGER only — enforced by policy + handler).
 router.get("/", requireAuth, enforcePolicy("manage", "users"), async (_req, res) => {
-  const actorIsAdmin = isAdminRole(_req.user?.role);
-  const actorIsHrMember = actorIsAdmin ? false : await isHrDepartmentMember(_req.user);
+  const actorRole = normalizeRole(_req.user?.role);
+  const canListAllUsers =
+    actorRole === ROLE.ADMIN || actorRole === ROLE.HR_MANAGER;
 
-  if (!actorIsAdmin && actorIsHrMember) {
-    const hrEmployees = await Employee.find({
-      department: HR_DEPARTMENT_NAME,
-    }).select("_id email role");
-    return res.json(
-      hrEmployees.map((e) => ({
-        id: e._id.toString(),
-        email: e.email,
-        role: e.role,
-      })),
-    );
-  }
-
-  if (!actorIsAdmin) {
+  if (!canListAllUsers) {
     return res.status(403).json({ error: "Forbidden" });
   }
 
@@ -93,10 +80,11 @@ router.put("/:id/role", requireAuth, enforcePolicy("manage", "users"), async (re
   });
 });
 
-// Create login account (admin can create all; HR members can create HR employee logins only)
+// Create login account (admin can create all; HR Manager can create HR employee logins only)
 router.post("/", requireAuth, enforcePolicy("manage", "users"), async (req, res) => {
   const actorIsAdmin = isAdminRole(req.user?.role);
-  const actorIsHrMember = actorIsAdmin ? false : await isHrDepartmentMember(req.user);
+  const actorIsHrManager = normalizeRole(req.user?.role) === ROLE.HR_MANAGER;
+  const actorIsHrMember = actorIsHrManager;
 
   const { email, password, role } = req.body ?? {};
   if (!email || !password) {

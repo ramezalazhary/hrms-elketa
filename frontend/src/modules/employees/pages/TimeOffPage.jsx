@@ -185,7 +185,7 @@ export function PersonalTimeOffSection() {
           <div className="text-right">
             <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 mb-1">Duration</p>
             <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">
-              {r.kind === "VACATION" ? `${fmtDays(r.days)} Days` : `${fmtMins(r.mins)} Mins`}
+              {r.kind === "VACATION" ? `${fmtDays(r.computed?.days || r.days)} Day(s)` : `${fmtMins(r.mins)} Minute(s)`}
             </p>
           </div>
           <div className="text-right">
@@ -363,49 +363,48 @@ export function PersonalTimeOffSection() {
 
       <div className="space-y-4">
         <div className="flex border-b border-zinc-200 dark:border-zinc-800">
-           <button
-             onClick={() => setLeaveTab("pending")}
-             className={`px-4 py-2 text-sm font-bold transition-colors ${
-               leaveTab === "pending"
-                 ? "border-b-2 border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
-                 : "text-zinc-500 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
-             }`}
-           >
-             Pending ({pendingList.length})
-           </button>
-           <button
-             onClick={() => setLeaveTab("approved")}
-             className={`px-4 py-2 text-sm font-bold transition-colors ${
-               leaveTab === "approved"
-                 ? "border-b-2 border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
-                 : "text-zinc-500 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
-             }`}
-           >
-             Approved ({approvedHistory.length})
-           </button>
-           <button
-             onClick={() => setLeaveTab("closed")}
-             className={`px-4 py-2 text-sm font-bold transition-colors ${
-               leaveTab === "closed"
-                 ? "border-b-2 border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
-                 : "text-zinc-500 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
-             }`}
-           >
-             Closed
-           </button>
+          <button
+            onClick={() => setLeaveTab("pending")}
+            className={`px-4 py-2 text-sm font-bold transition-colors ${leaveTab === "pending"
+              ? "border-b-2 border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
+              : "text-zinc-500 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
+              }`}
+          >
+            Pending ({pendingList.length})
+          </button>
+          <button
+            onClick={() => setLeaveTab("approved")}
+            className={`px-4 py-2 text-sm font-bold transition-colors ${leaveTab === "approved"
+              ? "border-b-2 border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
+              : "text-zinc-500 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
+              }`}
+          >
+            Approved ({approvedHistory.length})
+          </button>
+          <button
+            onClick={() => setLeaveTab("closed")}
+            className={`px-4 py-2 text-sm font-bold transition-colors ${leaveTab === "closed"
+              ? "border-b-2 border-zinc-900 dark:border-indigo-500 text-zinc-900 dark:text-zinc-50"
+              : "text-zinc-500 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300"
+              }`}
+          >
+            Closed
+          </button>
         </div>
 
         <div>
           {leaveTab === "pending" && (
             <LeaveSurface>
-               <LeaveSectionHeader title="Pending requests" subtitle="Currently in review." />
-               {loading ? (
-                 <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600 dark:text-zinc-400" /></div>
-               ) : pendingList.length === 0 ? (
-                 <p className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 italic">No pending requests.</p>
-               ) : (
-                 <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">{pendingList.map((r) => requestRow(r, { showCancel: true }))}</ul>
-               )}
+              <LeaveSectionHeader title="Pending requests" subtitle="Currently in review." />
+              {loading ? (
+                <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600 dark:text-zinc-400" /></div>
+              ) : pendingList.length === 0 ? (
+                <p className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 italic">No pending requests.</p>
+              ) : (
+                <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">{pendingList.map((r) => {
+                  return requestRow(r, { showCancel: true })
+                })}</ul>
+              )}
             </LeaveSurface>
           )}
 
@@ -416,7 +415,7 @@ export function PersonalTimeOffSection() {
                   {/* Background Glow */}
                   <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-indigo-500/5 blur-[100px]" />
                   <div className="absolute -bottom-24 -right-24 h-64 w-64 rounded-full bg-purple-500/5 blur-[100px]" />
-                  
+
                   <div className="relative z-10">
                     <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-[24px] bg-zinc-50 dark:bg-zinc-800 text-indigo-500 dark:text-indigo-400 shadow-inner ring-1 ring-zinc-200/50 dark:ring-zinc-700/50">
                       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-200/50 dark:ring-zinc-700/50">
@@ -439,26 +438,26 @@ export function PersonalTimeOffSection() {
                 </article>
               ) : (
                 <LeaveSurface>
-                   <LeaveSectionHeader 
-                     title="Approved history" 
-                     subtitle="Your valid upcoming and past records."
-                     actions={
-                       <button
-                         onClick={() => setShowApproved(false)}
-                         className="flex items-center gap-2 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400 dark:hover:text-zinc-300"
-                       >
-                         <Eye size={12} />
-                         Hide
-                       </button>
-                     }
-                   />
-                   {loading ? (
-                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600 dark:text-zinc-400" /></div>
-                   ) : approvedHistory.length === 0 ? (
-                     <p className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 italic">No approved records.</p>
-                   ) : (
-                     <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">{approvedHistory.map((r) => requestRow(r, { showCancel: canCancelApproved }))}</ul>
-                   )}
+                  <LeaveSectionHeader
+                    title="Approved history"
+                    subtitle="Your valid upcoming and past records."
+                    actions={
+                      <button
+                        onClick={() => setShowApproved(false)}
+                        className="flex items-center gap-2 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400 dark:hover:text-zinc-300"
+                      >
+                        <Eye size={12} />
+                        Hide
+                      </button>
+                    }
+                  />
+                  {loading ? (
+                    <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600 dark:text-zinc-400" /></div>
+                  ) : approvedHistory.length === 0 ? (
+                    <p className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 italic">No approved records.</p>
+                  ) : (
+                    <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">{approvedHistory.map((r) => requestRow(r, { showCancel: canCancelApproved }))}</ul>
+                  )}
                 </LeaveSurface>
               )}
             </div>
@@ -466,14 +465,14 @@ export function PersonalTimeOffSection() {
 
           {leaveTab === "closed" && (
             <LeaveSurface>
-               <LeaveSectionHeader title="Closed history" subtitle="Rejected and cancelled records." />
-               {loading ? (
-                 <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600 dark:text-zinc-400" /></div>
-               ) : otherList.length === 0 ? (
-                 <p className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 italic">No closed records.</p>
-               ) : (
-                 <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">{otherList.map((r) => requestRow(r, { showCancel: false }))}</ul>
-               )}
+              <LeaveSectionHeader title="Closed history" subtitle="Rejected and cancelled records." />
+              {loading ? (
+                <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zinc-400 dark:text-zinc-600 dark:text-zinc-400" /></div>
+              ) : otherList.length === 0 ? (
+                <p className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 italic">No closed records.</p>
+              ) : (
+                <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">{otherList.map((r) => requestRow(r, { showCancel: false }))}</ul>
+              )}
             </LeaveSurface>
           )}
         </div>

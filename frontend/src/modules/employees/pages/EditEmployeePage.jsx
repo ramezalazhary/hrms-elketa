@@ -146,6 +146,7 @@ export function EditEmployeePage() {
   }, [selectedGovernorate]);
 
   useEffect(() => {
+    console.log("employee", employee);
     if (!selectedDepartment) {
       setStandaloneTeams([]);
       return;
@@ -601,7 +602,7 @@ export function EditEmployeePage() {
                     },
                   ]
                 : []),
-              { name: "employeeCode", label: "Employee Code", type: "text", disabled: true },
+              { name: "employeeCode", label: "Employee Code", type: "text" , defaultValue: employee.employeeCode },
               { name: "position", label: "Job Title", type: "text", disabled: true },
               {
                 name: "department",
@@ -622,12 +623,14 @@ export function EditEmployeePage() {
                 label: "Work Location",
                 type: "select",
                 options: workLocationOptions,
+                defaultValue: employee.workLocation,
               },
               {
                 name: "branchId",
                 label: "Branch",
                 type: "select",
                 options: branchOptions,
+                defaultValue: employee.branchId,
               },
               { name: "subLocation", label: "Sub-Location (Floor / Wing)", type: "text" },
               { name: "onlineStorageLink", label: "Online Storage Link", type: "text" },
@@ -998,11 +1001,13 @@ export function EditEmployeePage() {
                 } else {
                   payload.nextReviewDate = employee.nextReviewDate;
                 }
+                console.log(payload);
+
                 await dispatch(updateEmployeeThunk({ id: employee.id, ...payload })).unwrap();
                 showToast("Employee updated successfully", "success");
                 navigate("/employees");
               } catch (error) {
-                console.error(error);
+                console.error(error , payload , "From catch block");
                 showToast(error?.message || "Failed to update employee", "error");
               }
             }}

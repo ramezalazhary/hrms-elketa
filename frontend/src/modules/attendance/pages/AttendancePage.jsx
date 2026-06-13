@@ -9,12 +9,14 @@ import {
   createAttendanceThunk,
   updateAttendanceThunk,
   deleteAttendanceThunk,
+  bulkDeleteAttendanceThunk,
   fetchMonthlyReportThunk,
   updateAttendanceDeductionSourceThunk,
   updateAttendanceRestDayWorkThunk,
 } from "../store";
 import { Pagination } from "@/shared/components/Pagination";
 import { fetchEmployeesThunk } from "@/modules/employees/store";
+import { fetchDepartmentsThunk } from "@/modules/departments/store";
 import { StatusBadge } from "@/shared/components/EntityBadges";
 import { FileUp, Trash2, Edit2, Plus, ShieldCheck, AlertTriangle, Download, Info, Search, Clock, CalendarRange, BarChart3, ChevronDown, ChevronRight, AlertCircle } from "lucide-react";
 import { downloadAttendanceTemplateApi, downloadMonthlyReportExcelApi } from "../api";
@@ -112,6 +114,10 @@ export function AttendancePage() {
   const [linkedLeaveById, setLinkedLeaveById] = useState({});
   const [linkedLeaveLoadingId, setLinkedLeaveLoadingId] = useState(null);
 
+  // Bulk Selection & Deletion State
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+
 
   // Manual Entry State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -159,8 +165,10 @@ export function AttendancePage() {
 
   // Monthly report state
   const { monthlyReport, monthlyReportLoading, monthlyReportError } = useAppSelector((state) => state.attendance);
+  const departments = useAppSelector((state) => state.departments?.items || []);
   const [reportYear, setReportYear] = useState(now.getUTCFullYear());
   const [reportMonth, setReportMonth] = useState(now.getUTCMonth() + 1);
+  const [reportDepartmentId, setReportDepartmentId] = useState("");
   const [expandedEmpId, setExpandedEmpId] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -176,7 +184,18 @@ export function AttendancePage() {
     void dispatch(fetchAttendanceThunk(listQuery));
     if (canManageAttendanceActions) void dispatch(fetchEmployeesThunk());
     setPage(1); // Reset page on filter change
+    setSelectedIds(new Set()); // Reset selection on filter change
   }, [dispatch, listQuery, canManageAttendanceActions, canUseAttendancePage]);
+
+  useEffect(() => {
+    setSelectedIds(new Set()); // Reset selection on page change
+  }, [page]);
+
+  useEffect(() => {
+    if (activeTab === "monthly" && canViewMonthlyReport) {
+      void dispatch(fetchDepartmentsThunk());
+    }
+  }, [dispatch, activeTab, canViewMonthlyReport]);
 
   const pagedItems = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -274,6 +293,19 @@ export function AttendancePage() {
       void dispatch(fetchAttendanceThunk(listQuery));
     } catch {
       showToast("Delete failed", "error");
+    }
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    try {
+      const result = await dispatch(bulkDeleteAttendanceThunk(Array.from(selectedIds))).unwrap();
+      showToast(result?.message || `Successfully deleted ${selectedIds.size} records`, "success");
+      setIsBulkDeleteModalOpen(false);
+      setSelectedIds(new Set());
+      void dispatch(fetchAttendanceThunk(listQuery));
+    } catch (e) {
+      showToast(e?.message || "Failed to delete records", "error");
     }
   };
 
@@ -378,14 +410,23 @@ export function AttendancePage() {
   };
 
   const handleLoadMonthlyReport = () => {
-    dispatch(fetchMonthlyReportThunk({ year: reportYear, month: reportMonth, detail: true }));
+    dispatch(fetchMonthlyReportThunk({
+      year: reportYear,
+      month: reportMonth,
+      departmentId: reportDepartmentId || undefined,
+      detail: true
+    }));
     setExpandedEmpId(null);
   };
 
   const handleExportExcel = async () => {
     setIsExporting(true);
     try {
-      await downloadMonthlyReportExcelApi({ year: reportYear, month: reportMonth });
+      await downloadMonthlyReportExcelApi({
+        year: reportYear,
+        month: reportMonth,
+        departmentId: reportDepartmentId || undefined
+      });
       showToast("Report exported successfully", "success");
     } catch {
       showToast("Failed to export report", "error");
@@ -609,6 +650,25 @@ export function AttendancePage() {
         )}
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="mb-4 flex items-center justify-between rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 font-medium">
+            <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 font-bold text-zinc-900 dark:text-zinc-100">
+              {selectedIds.size}
+            </span>
+            records selected
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsBulkDeleteModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-700 active:scale-[0.98]"
+          >
+            <Trash2 size={14} />
+            Delete Selected
+          </button>
+        </div>
+      )}
+
       <DataTable
         className="overflow-hidden rounded-[24px] border border-zinc-200/70 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/95 shadow-sm ring-1 ring-zinc-950/[0.04] backdrop-blur"
         onRowClick={(row) => {
@@ -809,6 +869,61 @@ export function AttendancePage() {
           );
         }}
         columns={[
+          ...(canDeleteAttendance
+            ? [
+                {
+                  key: "checkbox",
+                  header: (
+                    <input
+                      type="checkbox"
+                      checked={
+                        pagedItems.length > 0 &&
+                        pagedItems.every((item) => selectedIds.has(item._id))
+                      }
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          pagedItems.forEach((item) => {
+                            if (checked) {
+                              next.add(item._id);
+                            } else {
+                              next.delete(item._id);
+                            }
+                          });
+                          return next;
+                        });
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-950 dark:border-zinc-700 dark:bg-zinc-800"
+                    />
+                  ),
+                  headerClassName: "w-[40px] px-2 text-center",
+                  cellClassName: "w-[40px] px-2 text-center",
+                  sortable: false,
+                  render: (row) => (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(row._id)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (checked) {
+                            next.add(row._id);
+                          } else {
+                            next.delete(row._id);
+                          }
+                          return next;
+                        });
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-950 dark:border-zinc-700 dark:bg-zinc-800"
+                    />
+                  ),
+                },
+              ]
+            : []),
           {
             key: "employee",
             header: "Employee",
@@ -970,6 +1085,37 @@ export function AttendancePage() {
         </div>
       )}
 
+      {/* Bulk Delete Confirmation Modal */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-[400px] max-w-[calc(100vw-2rem)] rounded-[20px] bg-white dark:bg-zinc-900 p-8 shadow-xl ring-1 ring-zinc-950/[0.08] animate-in zoom-in-95 duration-200">
+            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600 ring-1 ring-red-100/80">
+              <AlertTriangle size={26} />
+            </div>
+            <h3 className="text-[17px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Confirm bulk deletion</h3>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+              Are you sure you want to delete the <strong>{selectedIds.size}</strong> selected attendance records? This action is permanent and cannot be undone.
+            </p>
+            <div className="mt-8 flex items-center gap-3">
+              <button 
+                type="button"
+                onClick={() => setIsBulkDeleteModalOpen(false)}
+                className="flex-1 rounded-full px-4 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={handleConfirmBulkDelete}
+                className="flex-1 rounded-full bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 active:scale-[0.98] motion-reduce:active:scale-100"
+              >
+                Delete Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Deduction Decision Modal */}
       {deductionDecisionModal.open && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/35 backdrop-blur-xl animate-in fade-in duration-200">
@@ -1101,6 +1247,21 @@ export function AttendancePage() {
                   {[...Array(12)].map((_, i) => (
                     <option key={i + 1} value={i + 1}>
                       {new Date(2000, i).toLocaleString(undefined, { month: "long" })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">Department</label>
+                <select
+                  className="w-44 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 outline-none transition focus:border-zinc-400 focus:bg-white dark:focus:bg-zinc-900 focus:ring-2 focus:ring-zinc-200/80 dark:focus:ring-zinc-700"
+                  value={reportDepartmentId}
+                  onChange={(e) => setReportDepartmentId(e.target.value)}
+                >
+                  <option value="">All Departments</option>
+                  {departments?.map((dept) => (
+                    <option key={dept._id || dept.id} value={dept._id || dept.id}>
+                      {dept.name}
                     </option>
                   ))}
                 </select>
@@ -1255,6 +1416,7 @@ export function AttendancePage() {
                       <th className="px-3 py-3 text-center">Late</th>
                       <th className="px-3 py-3 text-center">Absent</th>
                       <th className="px-3 py-3 text-center">Leave</th>
+                      <th className="px-3 py-3 text-center">Excused</th>
                       <th className="px-3 py-3 text-center">Holiday</th>
                       <th className="px-3 py-3 text-center">Early</th>
                       <th className="px-3 py-3 text-center">Incomplete</th>
@@ -1296,6 +1458,7 @@ export function AttendancePage() {
                             <td className="px-3 py-2.5 text-center font-semibold text-amber-800">{s.lateDays || "—"}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-red-700">{s.absentDays || "—"}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-zinc-700 dark:text-zinc-300">{s.onLeaveDays || "—"}</td>
+                            <td className="px-3 py-2.5 text-center font-semibold text-violet-700">{s.excusedDays || "—"}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-zinc-700 dark:text-zinc-300">{s.holidayDays || "—"}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-orange-700">{s.earlyDepartureDays || "—"}</td>
                             <td className="px-3 py-2.5 text-center font-semibold text-yellow-700">{s.incompleteDays || "—"}</td>
@@ -1312,7 +1475,36 @@ export function AttendancePage() {
                           </tr>
                           {isExpanded && empDetail && (
                             <tr>
-                              <td colSpan={15} className="bg-zinc-50/50 dark:bg-zinc-800/50 px-4 py-3">
+                              <td colSpan={16} className="bg-zinc-50/50 dark:bg-zinc-800/50 px-4 py-4">
+                                <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 p-4 shadow-sm">
+                                  <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/50 p-2.5 text-center">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Late Deduction</p>
+                                    <p className="mt-1 text-sm font-bold text-zinc-800 dark:text-zinc-200">{s.deductions?.lateDays || 0} d</p>
+                                  </div>
+                                  <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/50 p-2.5 text-center">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Absence Deduction</p>
+                                    <p className="mt-1 text-sm font-bold text-zinc-800 dark:text-zinc-200">{s.deductions?.absenceDays || 0} d</p>
+                                  </div>
+                                  <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/50 p-2.5 text-center">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Unpaid Leave</p>
+                                    <p className="mt-1 text-sm font-bold text-zinc-800 dark:text-zinc-200">{s.deductions?.unpaidLeaveDays || 0} d</p>
+                                  </div>
+                                  <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/50 p-2.5 text-center">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Early Dept</p>
+                                    <p className="mt-1 text-sm font-bold text-zinc-800 dark:text-zinc-200">{s.deductions?.earlyDepartureDays || 0} d</p>
+                                  </div>
+                                  <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/50 p-2.5 text-center">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Incomplete</p>
+                                    <p className="mt-1 text-sm font-bold text-zinc-800 dark:text-zinc-200">{s.deductions?.incompleteDays || 0} d</p>
+                                  </div>
+                                  <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/50 p-2.5 text-center">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Excuse Over Quota</p>
+                                    <p className="mt-1 text-sm font-bold text-zinc-800 dark:text-zinc-200">
+                                      {s.deductions?.excessExcuseDays || 0} d
+                                      {s.deductions?.excessExcuseAmount > 0 && ` + ${s.deductions.excessExcuseAmount} EGP`}
+                                    </p>
+                                  </div>
+                                </div>
                                 <div className="overflow-x-auto rounded-2xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-200/80 dark:ring-zinc-700">
                                   <table className="min-w-full divide-y divide-zinc-200 text-xs">
                                     <thead className="bg-zinc-100 dark:bg-zinc-800 text-left text-[10px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">

@@ -4,6 +4,7 @@ import {
   canAccessLeaveApprovals,
   canApproveLeaves,
   getLeaveApprovalsAccessLevel,
+  hasManagementCapabilities,
 } from "./accessControl";
 import fixture from "../../../../docs/policy-parity.fixture.json";
 
@@ -22,6 +23,14 @@ describe("access control parity fixture", () => {
       const user = { role: row.role };
       expect(canAccessDashboardPage(user)).toBe(Boolean(row.canAccess));
     }
+  });
+
+  it("enables management mode when page overrides grant workspace access", () => {
+    const user = {
+      role: "EMPLOYEE",
+      pageAccessOverrides: [{ pageId: "employees", level: "ADMIN" }],
+    };
+    expect(hasManagementCapabilities(user)).toBe(true);
   });
 });
 

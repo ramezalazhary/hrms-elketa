@@ -510,7 +510,7 @@ export function EmployeesListPage() {
       )}
 
       {!isLoading && paged.length > 0 && (
-        <div className="mt-6 overflow-hidden rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
+        <div className="mt-6 overflow-visible rounded-[20px] bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/[0.06] dark:ring-zinc-800">
           {/* Table header */}
           <div className="hidden items-center gap-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/50 px-6 py-4 text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400 md:grid md:grid-cols-12">
             <div className="col-span-4">Employee</div>
@@ -542,9 +542,13 @@ export function EmployeesListPage() {
             const isIdExpired = idExpiryDate && idExpiryDate.getTime() < Date.now();
             const isIdExpiringSoon = idExpiryDate && !isIdExpired && idExpiryDate.getTime() < Date.now() + 60 * 86400000;
 
+            const rowId = emp._id || emp.id;
+            const isActionsOpen = openActions === rowId;
+            const openActionsUpward = idx >= paged.length - 2;
+
             return (
-              <div key={emp._id || emp.id || idx}
-                className={`group grid grid-cols-1 items-center gap-3 px-6 py-4 transition hover:bg-zinc-50/70 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-800/50 md:grid-cols-12 md:gap-4 ${!isLast ? "border-b border-zinc-100 dark:border-zinc-800/80" : ""}`}>
+              <div key={rowId || idx}
+                className={`group grid grid-cols-1 items-center gap-3 overflow-visible px-6 py-4 transition hover:bg-zinc-50/70 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-800/50 md:grid-cols-12 md:gap-4 ${isActionsOpen ? "relative z-20" : ""} ${!isLast ? "border-b border-zinc-100 dark:border-zinc-800/80" : ""}`}>
 
                 {/* Employee */}
                 <div className="col-span-4 flex items-center gap-4 min-w-0">
@@ -628,14 +632,16 @@ export function EmployeesListPage() {
                         <Eye className="h-3 w-3" /> View
                       </Link>
                       {canModify && (
-                        <div className="relative">
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenActions(openActions === (emp._id || emp.id) ? null : (emp._id || emp.id)); }}
+                        <div className="relative overflow-visible">
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenActions(isActionsOpen ? null : rowId); }}
                             className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200/90 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 dark:text-zinc-400 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300 dark:hover:text-zinc-300">
                             <MoreHorizontal className="h-4 w-4" />
                           </button>
-                          {openActions === (emp._id || emp.id) && (
-                            <div className="absolute right-0 top-full z-50 mt-1 w-44 animate-in fade-in zoom-in-95 rounded-2xl bg-white dark:bg-zinc-800 p-1 shadow-xl ring-1 ring-zinc-950/[0.08] dark:ring-white/10 duration-150"
-                              onClick={(e) => e.stopPropagation()}>
+                          {isActionsOpen && (
+                            <div
+                              className={`absolute right-0 z-50 w-44 animate-in fade-in zoom-in-95 rounded-2xl bg-white dark:bg-zinc-800 p-1 shadow-xl ring-1 ring-zinc-950/[0.08] dark:ring-white/10 duration-150 ${openActionsUpward ? "bottom-full mb-1" : "top-full mt-1"}`}
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <Link to={`/employees/${emp._id || emp.id}/edit`}
                                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 dark:hover:bg-zinc-700">
                                 <Pencil className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" /> Edit profile

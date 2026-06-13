@@ -1,6 +1,3 @@
-## Project Documentation
-
-This document is the code-derived master reference for `my-react-app`. It replaces the older narrative documentation with a repo-wide architectural inventory, feature map, API contract map, data model catalog, component tree, and an explicit list of known gaps.
 
 ## 1. Project Overview
 

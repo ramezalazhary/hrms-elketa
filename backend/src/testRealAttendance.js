@@ -32,18 +32,36 @@ async function testRealImport() {
     
     // Extract code
     let code = '';
-    const match = nameValue?.toString().match(/^(#[A-Z0-9]+)/i);
+    const match = nameValue?.toString().match(/^(#[A-Za-z0-9_]+)/i);
     if (match) code = match[1];
 
     console.log(`- Testing Row: ${nameValue} -> Extracted Code: ${code}`);
 
-    const employee = await Employee.findOne({ employeeCode: code });
+    const cleanCode = code.startsWith("#") ? code.slice(1) : code;
+    const escapedClean = cleanCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const codeRegex = new RegExp(`^#?${escapedClean}(\\b|[-_\\s]|$)`, "i");
+
+    const employee = await Employee.findOne({
+      $or: [
+        { employeeCode: code },
+        { employeeCode: nameValue },
+        { employeeCode: codeRegex },
+        { email: code },
+        { email: nameValue },
+        { "employeeCodeHistory.code": code },
+        { "employeeCodeHistory.code": nameValue },
+        { "employeeCodeHistory.code": codeRegex },
+        { "transferHistory.previousEmployeeCode": code },
+        { "transferHistory.previousEmployeeCode": nameValue },
+        { "transferHistory.previousEmployeeCode": codeRegex }
+      ]
+    });
     if (!employee) {
-      console.log(`  ⚠ Employee ${code} not found in DB. Skipping verification.`);
+      console.log(`  ⚠ Employee ${code} / ${nameValue} not found in DB. Skipping verification.`);
       continue;
     }
 
-    console.log(`  ✓ Employee ${employee.fullName} found.`);
+    console.log(`  ✓ Employee ${employee.fullName} (current code: ${employee.employeeCode}) found.`);
 
     // Mock the logic from the route
     const policy = { standardStartTime: '09:00', gracePeriod: 15 };

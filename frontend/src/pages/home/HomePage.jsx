@@ -30,6 +30,8 @@ export function HomePage() {
 
   const userName = currentUser?.email?.split("@")[0] || "Member";
 
+
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {

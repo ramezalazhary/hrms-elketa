@@ -107,6 +107,7 @@ const employeesSlice = createSlice({
       );
     });
     builder.addCase(updateEmployeeThunk.rejected, (state, action) => {
+      state.isLoading = false;
       state.error = action.payload || action.error.message;
     });
     builder.addCase(processSalaryIncreaseThunk.fulfilled, (state, action) => {

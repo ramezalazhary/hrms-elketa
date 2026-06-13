@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { getErrorMessage } from "@/shared/api/handleApiResponse";
 import { loginApi, refreshTokenApi, logoutApi, changePasswordApi } from "./api";
+import { hasManagementCapabilities } from "@/shared/utils/accessControl";
 
 
 // function self invoice to check if the user is already sigin or not
@@ -22,16 +23,6 @@ const storedViewMode = (() => {
     return "personal";
   }
 })();
-
-function hasManagementCapabilities(user) {
-  if (!user) return false;
-  const role = String(user.role || "").toUpperCase();
-  if (["ADMIN", "HR_STAFF", "HR_MANAGER", "MANAGER", "TEAM_LEADER", "HR"].includes(role)) {
-    return true;
-  }
-  if (Array.isArray(user.hrTemplates) && user.hrTemplates.length > 0) return true;
-  return Array.isArray(user.permissions) && user.permissions.length > 0;
-}
 
 const initialState = {
   currentUser: storedAuth?.user ?? null,
@@ -92,6 +83,7 @@ export const changePasswordThunk = createAsyncThunk(
     try {
       return await changePasswordApi(payload.currentPassword, payload.newPassword);
     } catch (err) {
+      console.log("Failed to change password", err);
       return rejectWithValue(getErrorMessage(err, "Failed to change password"));
     }
   },
@@ -177,8 +169,19 @@ const identitySlice = createSlice({
       .addCase(refreshTokenThunk.fulfilled, (state, action) => {
         state.accessToken = action.payload.accessToken;
         state.refreshToken = action.payload.refreshToken;
+        if (action.payload.user) {
+          state.currentUser = action.payload.user;
+          const canManage = hasManagementCapabilities(action.payload.user);
+          if (canManage && state.viewMode !== "management") {
+            state.viewMode = "management";
+            try {
+              localStorage.setItem("viewMode", state.viewMode);
+            } catch {
+              // ignore
+            }
+          }
+        }
         state.isRefreshing = false;
-        // Update localStorage
         const authData = {
           user: state.currentUser,
           accessToken: state.accessToken,

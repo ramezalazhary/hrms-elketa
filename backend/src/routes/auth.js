@@ -35,6 +35,37 @@ const router = Router();
 
 router.use(authLimiter);
 
+async function buildAuthUserPayload(employee) {
+  const [permissions, pageOverrides] = await Promise.all([
+    UserPermission.find({ userId: employee._id }),
+    PageAccessOverride.find({ userId: employee._id }).select("pageId level").lean(),
+  ]);
+
+  return {
+    id: employee._id.toString(),
+    email: employee.email,
+    role: employee.role,
+    authzVersion: Number(employee.authzVersion || 0),
+    isHrDepartmentMember:
+      String(employee.department || "").trim().toUpperCase() ===
+      String(process.env.HR_DEPARTMENT_NAME || "HR").toUpperCase(),
+    departmentId: employee.departmentId || null,
+    teamId: employee.teamId || null,
+    hrTemplates: Array.isArray(employee.hrTemplates) ? employee.hrTemplates : [],
+    hrLevel: employee.hrLevel || "STAFF",
+    requirePasswordChange: employee.requirePasswordChange,
+    permissions: permissions.map((p) => ({
+      module: p.module,
+      actions: p.actions,
+      scope: p.scope,
+    })),
+    pageAccessOverrides: pageOverrides.map((row) => ({
+      pageId: String(row.pageId),
+      level: String(row.level || "NONE").toUpperCase(),
+    })),
+  };
+}
+
 /**
  * POST /login — Body: `{ email, password }` (validated).
  * @flow Body → `Employee.findOne` → bcrypt verify → issue access + refresh JWTs → JSON `{ accessToken, refreshToken, user }`.
@@ -69,30 +100,7 @@ router.post("/login", validateLogin, async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const [permissions, pageOverrides] = await Promise.all([
-      UserPermission.find({ userId: employee._id }),
-      PageAccessOverride.find({ userId: employee._id }).select("pageId level").lean(),
-    ]);
-
-    const authUser = {
-      id: employee._id.toString(),
-      email: employee.email,
-      role: employee.role,
-      authzVersion: Number(employee.authzVersion || 0),
-      isHrDepartmentMember:
-        String(employee.department || "").trim().toUpperCase() ===
-        String(process.env.HR_DEPARTMENT_NAME || "HR").toUpperCase(),
-      departmentId: employee.departmentId || null,
-      teamId: employee.teamId || null,
-      hrTemplates: Array.isArray(employee.hrTemplates) ? employee.hrTemplates : [],
-      hrLevel: employee.hrLevel || "STAFF",
-      requirePasswordChange: employee.requirePasswordChange,
-      permissions: permissions.map(p => ({ module: p.module, actions: p.actions, scope: p.scope })),
-      pageAccessOverrides: pageOverrides.map((row) => ({
-        pageId: String(row.pageId),
-        level: String(row.level || "NONE").toUpperCase(),
-      })),
-    };
+    const authUser = await buildAuthUserPayload(employee);
 
     const accessToken = generateAccessToken(authUser);
     const refreshToken = generateRefreshToken(authUser);
@@ -120,19 +128,28 @@ router.post("/refresh", async (req, res) => {
       return res.status(400).json({ error: "Refresh token is required" });
     }
 
-    const user = await verifyRefreshToken(refreshToken);
-    if (!user) {
+    const verified = await verifyRefreshToken(refreshToken);
+    if (!verified) {
       return res
         .status(401)
         .json({ error: "Invalid or expired refresh token" });
     }
 
-    const newAccessToken = generateAccessToken(user);
-    const newRefreshToken = generateRefreshToken(user);
+    const employee = await Employee.findById(verified.id).select(
+      "email role isActive department departmentId teamId authzVersion hrTemplates hrLevel requirePasswordChange",
+    );
+    if (!employee || employee.isActive === false) {
+      return res.status(401).json({ error: "Invalid or expired refresh token" });
+    }
+
+    const authUser = await buildAuthUserPayload(employee);
+    const newAccessToken = generateAccessToken(authUser);
+    const newRefreshToken = generateRefreshToken(authUser);
 
     return res.json({
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
+      user: authUser,
     });
   } catch (error) {
     console.error("Token refresh error:", error);
